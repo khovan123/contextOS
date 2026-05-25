@@ -4,7 +4,7 @@
   "description": "Task-aware AGENTS.md context injection and compliance reporting for Codex.",
   "type": "module",
   "bin": {
-    "ctx": "./bin/ctx.js"
+    "ctx": "bin/ctx.js"
   },
   "files": [
     "bin/",
