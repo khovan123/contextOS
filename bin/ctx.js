@@ -35,6 +35,15 @@ Usage:
 `;
 }
 
+function packageVersion() {
+  try {
+    const packageJson = JSON.parse(fs.readFileSync(path.join(rootDir, "package.json"), "utf8"));
+    return packageJson.version || "0.0.0";
+  } catch {
+    return "0.0.0";
+  }
+}
+
 function codexHome() {
   return process.env.CODEX_HOME || path.join(process.env.HOME || process.cwd(), ".codex");
 }
@@ -230,7 +239,7 @@ try {
   if (!command || command === "--help" || command === "-h") {
     console.log(usage());
   } else if (command === "--version" || command === "-v") {
-    console.log("0.1.0");
+    console.log(packageVersion());
   } else if (command === "install") {
     await install({ copy: args.includes("--copy"), inject: !args.includes("--quiet") });
   } else if (command === "debug") {
