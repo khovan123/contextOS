@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
 const DEFAULT_MODEL = "Xenova/all-MiniLM-L6-v2";
@@ -13,6 +14,7 @@ let sqlPromise = null;
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..", "..");
+const require = createRequire(import.meta.url);
 
 export async function enhanceRuleScoresWithEmbeddings(
   rules,
@@ -189,11 +191,19 @@ async function getSql() {
     sqlPromise = (async () => {
       const initSqlJs = (await import("sql.js")).default;
       return initSqlJs({
-        locateFile: (file) => path.join(repoRoot, "node_modules", "sql.js", "dist", file)
+        locateFile: locateSqlJsFile
       });
     })();
   }
   return sqlPromise;
+}
+
+function locateSqlJsFile(file) {
+  try {
+    return require.resolve(`sql.js/dist/${file}`);
+  } catch {
+    return path.join(repoRoot, "node_modules", "sql.js", "dist", file);
+  }
 }
 
 function cacheKey(text, sources) {

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.1
+
+- Fixes `sql.js` WASM resolution when ContextOS is executed from the published npm package through `npm exec` or `npx`.
+
 ## 0.1.0
 
 Initial public release.
