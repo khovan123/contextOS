@@ -1,0 +1,8 @@
+node_modules/
+coverage/
+.contextos/
+*.log
+*.ctx-mcp**
+.code-review-graph
+~
+.sock-test**

@@ -1,0 +1,84 @@
+import { describe, expect, it } from "vitest";
+import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
+import { checkCompliance, parseGitDiff, readGitSnapshot } from "../plugins/ctx/lib/measure.js";
+
+describe("measure", () => {
+  it("parses changed files and added lines from git diff", () => {
+    const snapshot = parseGitDiff(`diff --git a/src/user.ts b/src/user.ts
+--- a/src/user.ts
++++ b/src/user.ts
+@@ -1 +1,2 @@
++import { z } from "zod";
++console.log("debug");
+`);
+
+    expect(snapshot.changedFiles).toEqual(["src/user.ts"]);
+    expect(snapshot.addedLines.map((line) => line.content)).toContain('import { z } from "zod";');
+    expect(snapshot.addedLines[0]).toMatchObject({ file: "src/user.ts", line: 1 });
+  });
+
+  it("marks positive and negative compliance with simple keyword evidence", () => {
+    const results = checkCompliance({
+      rules: [
+        { content: "Always use `zod` validation.", score: 1 },
+        { content: "Never use `console.log` in committed code.", score: 1 }
+      ],
+      addedLines: [
+        { file: "src/user.ts", content: 'import { z } from "zod";' },
+        { file: "src/user.ts", content: "console.log('debug');" }
+      ]
+    });
+
+    expect(results[0]).toMatchObject({ status: "followed" });
+    expect(results[1]).toMatchObject({ status: "ignored" });
+    expect(results[0].evidence).toContain("src/user.ts");
+    expect(results[1].matchedLines[0].content).toContain("console.log");
+  });
+
+  it("does not treat generic prose words as compliance evidence", () => {
+    const results = checkCompliance({
+      rules: [
+        { content: "Always use code-review-graph before reading files." }
+      ],
+      addedLines: [
+        { file: "src/user.ts", content: "this file changed" }
+      ]
+    });
+
+    expect(results[0]).toMatchObject({ status: "unknown" });
+    expect(results[0].evidence).not.toContain("this");
+  });
+
+  it("marks runtime-only workflow rules as unknown with a concrete reason", () => {
+    const results = checkCompliance({
+      rules: [
+        { content: "Always use `code-review-graph` before reading files.", score: 1 }
+      ],
+      addedLines: [
+        { file: "src/user.ts", line: 10, content: "const user = await repo.findUser();" }
+      ]
+    });
+
+    expect(results[0]).toMatchObject({
+      status: "unknown",
+      kind: "runtime"
+    });
+    expect(results[0].evidence).toContain("runtime/tool-call evidence");
+  });
+
+  it("uses readable file content when git diff HEAD is unavailable", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-status-snapshot-"));
+    execFileSync("git", ["init"], { cwd: tmp, stdio: "ignore" });
+    fs.writeFileSync(path.join(tmp, "package.json"), JSON.stringify({ dependencies: { zod: "^4.0.0" } }, null, 2));
+
+    const snapshot = readGitSnapshot({ cwd: tmp });
+
+    expect(snapshot.mode).toBe("status");
+    expect(snapshot.changedFiles).toContain("package.json");
+    expect(snapshot.addedLines.some((line) => line.content.includes("zod"))).toBe(true);
+  });
+});

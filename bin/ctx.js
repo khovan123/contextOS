@@ -1,0 +1,261 @@
+#!/usr/bin/env node
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { execFileSync } from "node:child_process";
+
+import { readAgentsChain } from "../plugins/ctx/lib/reader.js";
+import { parseRules, scoreRules } from "../plugins/ctx/lib/analyzer.js";
+import { scheduleContext } from "../plugins/ctx/lib/scheduler.js";
+import { formatEvidence, formatReport } from "../plugins/ctx/lib/reporter.js";
+import { installGlobalHooks } from "../plugins/ctx/lib/global-hooks.js";
+import { formatStats, loadStats } from "../plugins/ctx/lib/stats.js";
+import { modelCacheDir, warmRuleEmbeddings } from "../plugins/ctx/lib/embedding-scorer.js";
+import { warmFileEmbeddings } from "../plugins/ctx/lib/file-embedding-retriever.js";
+import { scoreContext } from "../plugins/ctx/lib/score-context.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const rootDir = path.resolve(__dirname, "..");
+const pluginSourceDir = path.join(rootDir, "plugins", "ctx");
+
+function usage() {
+  return `ContextOS (ctx)
+
+Usage:
+  ctx install
+  ctx install --quiet
+  ctx install --inject
+  ctx install --copy
+  ctx debug -- "task"
+  ctx report
+  ctx evidence
+  ctx stats
+  ctx embeddings warm -- "task"
+  ctx --version
+`;
+}
+
+function codexHome() {
+  return process.env.CODEX_HOME || path.join(process.env.HOME || process.cwd(), ".codex");
+}
+
+function copyDir(src, dest) {
+  fs.mkdirSync(dest, { recursive: true });
+  for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+    const srcPath = path.join(src, entry.name);
+    const destPath = path.join(dest, entry.name);
+    if (entry.isDirectory()) {
+      copyDir(srcPath, destPath);
+    } else if (entry.isFile()) {
+      fs.copyFileSync(srcPath, destPath);
+      fs.chmodSync(destPath, fs.statSync(srcPath).mode);
+    }
+  }
+}
+
+function copyPath(src, dest) {
+  const stat = fs.statSync(src);
+  if (stat.isDirectory()) {
+    copyDir(src, dest);
+  } else {
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.copyFileSync(src, dest);
+    fs.chmodSync(dest, stat.mode);
+  }
+}
+
+function copyInstall() {
+  const target = path.join(codexHome(), "plugins", "ctx");
+  fs.rmSync(target, { recursive: true, force: true });
+  copyDir(pluginSourceDir, target);
+  console.log(`Installed ctx plugin to ${target}`);
+  console.log("Restart Codex if it was already running, then submit a task to trigger ContextOS.");
+}
+
+async function install({ copy = false, inject = true } = {}) {
+  if (copy) {
+    copyInstall();
+    return;
+  }
+
+  const marketplaceRoot = path.join(codexHome(), "marketplaces", "contextos");
+  fs.rmSync(marketplaceRoot, { recursive: true, force: true });
+  for (const entry of [".agents", "bin", "plugins", "package.json", "package-lock.json", "README.md", "LICENSE", "node_modules"]) {
+    const src = path.join(rootDir, entry);
+    if (fs.existsSync(src)) copyPath(src, path.join(marketplaceRoot, entry));
+  }
+
+  tryRunCodex(["plugin", "remove", "ctx@contextos"]);
+  tryRunCodex(["plugin", "marketplace", "remove", "contextos"]);
+  tryRunCodex(["mcp", "remove", "ctx-mcp"]);
+  runCodex(["plugin", "marketplace", "add", marketplaceRoot]);
+  runCodex(["plugin", "add", "ctx@contextos"]);
+  runCodex(["mcp", "add", "ctx-mcp", "--", "node", path.join(marketplaceRoot, "plugins", "ctx", "mcp", "server.js")]);
+  const hooksPath = installGlobalHooks({ codexHome: codexHome(), marketplaceRoot, injectPromptContext: inject });
+
+  console.log("Preparing required local embedding model...");
+  const warmResult = await warmInstallEmbeddings();
+  console.log("Installed ctx through Codex plugin marketplace.");
+  console.log(`Stable marketplace root: ${marketplaceRoot}`);
+  console.log(`Installed ContextOS global hooks to ${hooksPath}`);
+  console.log("Installed ctx-mcp MCP server.");
+  console.log(`Embedding model cache: ${modelCacheDir(contextOSDataDir())}`);
+  console.log(`Embedding vectors cache: ${warmResult.cachePath}`);
+  console.log(`File path embeddings warmed: ${warmResult.fileCount || 0}`);
+  console.log(`Prompt context injection: ${inject ? "enabled" : "quiet logging only"}`);
+  console.log("Restart Codex if it was already running, then submit a task to trigger ContextOS.");
+}
+
+async function warmInstallEmbeddings() {
+  const dataDir = contextOSDataDir();
+  const result = await warmRuleEmbeddings({
+    rules: [
+      { content: "Always use project rules that are semantically relevant to the user prompt." },
+      { content: "Find code files by meaning, imports, graph relationships, and task intent." },
+      { content: "Use local embeddings to bridge natural language and code vocabulary mismatch." }
+    ],
+    task: "kiểm duyệt upload moderation semantic code search",
+    dataDir,
+    sources: [],
+    allowRemote: true
+  });
+  const fileResult = await warmFileEmbeddings({
+    cwd: process.cwd(),
+    dataDir,
+    allowRemote: true
+  });
+  return { ...result, fileCount: fileResult.count };
+}
+
+function tryRunCodex(args) {
+  try {
+    execFileSync("codex", args, { stdio: "ignore" });
+  } catch {
+    // Best effort cleanup for repeat installs.
+  }
+}
+
+function runCodex(args) {
+  try {
+    execFileSync("codex", args, { stdio: "inherit" });
+  } catch (error) {
+    const status = typeof error.status === "number" ? error.status : 1;
+    throw new Error(`codex ${args.join(" ")} failed with exit code ${status}. Make sure Codex CLI is installed and authenticated.`);
+  }
+}
+
+function loadLastReport() {
+  const candidates = [
+    process.env.PLUGIN_DATA && path.join(process.env.PLUGIN_DATA, "last-report.json"),
+    path.join(codexHome(), "contextos", "last-report.json"),
+    path.join(codexHome(), "marketplaces", "contextos", "plugins", "ctx", ".data", "last-report.json"),
+    path.join(codexHome(), "plugins", "ctx", ".data", "last-report.json"),
+    path.join(process.cwd(), ".contextos", "last-report.json")
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return JSON.parse(fs.readFileSync(candidate, "utf8"));
+    }
+  }
+  throw new Error("No ContextOS report found. Run a Codex task with the ctx plugin enabled first.");
+}
+
+function contextOSDataDir() {
+  return process.env.PLUGIN_DATA || path.join(codexHome(), "contextos");
+}
+
+async function debug(task) {
+  const cwd = process.cwd();
+  const scored = await scoreContext({
+    cwd,
+    prompt: task,
+    dataDir: contextOSDataDir(),
+    maxFiles: 3,
+    embeddingTimeoutMs: Number(process.env.CONTEXTOS_EMBEDDING_DEBUG_TIMEOUT_MS || 5000)
+  });
+  const rules = scored.scoredRules;
+  const relevantFiles = scored.suggestedFiles.slice(0, 3);
+  const scheduled = scheduleContext({ rules, relevantFiles });
+
+  console.log("ContextOS debug");
+  console.log(`cwd: ${cwd}`);
+  console.log(`rules: ${rules.length}`);
+  console.log(`mcp scorer: ${scored.telemetry.modelStatus}${scored.telemetry.model ? ` (${scored.telemetry.model})` : ""}`);
+  console.log(`elapsed: ${scored.telemetry.elapsedMs}ms`);
+  console.log("");
+  for (const rule of rules.slice(0, 20)) {
+    console.log(`${rule.score.toFixed(2)}  ${rule.content}`);
+    if (rule.reasons.length) console.log(`      reasons: ${rule.reasons.join(", ")}`);
+  }
+  if (rules.length > 20) console.log(`... ${rules.length - 20} more rules`);
+  console.log("");
+  console.log("Suggested files:");
+  for (const file of relevantFiles) {
+    const source = file.source ? ` source:${file.source}` : "";
+    const reasons = file.reasons?.length ? ` reasons:${file.reasons.join(", ")}` : "";
+    console.log(`${Number(file.score || 0).toFixed(2)}  ${file.path}${source}${reasons}`);
+  }
+  if (!relevantFiles.length) console.log("(none)");
+  console.log("");
+  console.log("Final additionalContext:");
+  console.log(scheduled.additionalContext || "(empty)");
+}
+
+async function warmEmbeddings(task) {
+  const cwd = process.cwd();
+  const merged = readAgentsChain({ cwd });
+  const rules = scoreRules(parseRules(merged.content), task, []);
+  const result = await warmRuleEmbeddings({
+    rules,
+    task,
+    dataDir: contextOSDataDir(),
+    sources: merged.sources,
+    allowRemote: true
+  });
+  const fileResult = await warmFileEmbeddings({
+    cwd,
+    dataDir: contextOSDataDir(),
+    allowRemote: true
+  });
+  console.log(`Warmed ${result.count} embeddings`);
+  console.log(`Warmed ${fileResult.count} file path embeddings`);
+  console.log(`Cache: ${result.cachePath}`);
+}
+
+const args = process.argv.slice(2);
+const command = args[0];
+
+try {
+  if (!command || command === "--help" || command === "-h") {
+    console.log(usage());
+  } else if (command === "--version" || command === "-v") {
+    console.log("0.1.0");
+  } else if (command === "install") {
+    await install({ copy: args.includes("--copy"), inject: !args.includes("--quiet") });
+  } else if (command === "debug") {
+    const marker = args.indexOf("--");
+    const task = marker >= 0 ? args.slice(marker + 1).join(" ") : args.slice(1).join(" ");
+    if (!task.trim()) throw new Error('Usage: ctx debug -- "task"');
+    await debug(task);
+  } else if (command === "embeddings") {
+    if (args[1] === "warm") {
+      const marker = args.indexOf("--");
+      const task = marker >= 0 ? args.slice(marker + 1).join(" ") : args.slice(2).join(" ");
+      await warmEmbeddings(task);
+    } else {
+      throw new Error(`Unknown embeddings command: ${args[1] || ""}\n\n${usage()}`);
+    }
+  } else if (command === "report") {
+    console.log(formatReport(loadLastReport()));
+  } else if (command === "evidence") {
+    console.log(formatEvidence(loadLastReport()));
+  } else if (command === "stats") {
+    console.log(formatStats(loadStats(contextOSDataDir())));
+  } else {
+    throw new Error(`Unknown command: ${command}\n\n${usage()}`);
+  }
+} catch (error) {
+  console.error(error.message);
+  process.exitCode = 1;
+}

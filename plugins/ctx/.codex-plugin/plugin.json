@@ -1,0 +1,35 @@
+{
+  "name": "ctx",
+  "version": "0.1.0",
+  "description": "Inject task-relevant AGENTS.md rules into Codex through plugin hooks.",
+  "author": {
+    "name": "ContextOS"
+  },
+  "homepage": "https://github.com/contextos/ctx",
+  "repository": "https://github.com/contextos/ctx",
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "context",
+    "agents",
+    "hooks"
+  ],
+  "mcpServers": ".mcp.json",
+  "interface": {
+    "displayName": "ContextOS",
+    "shortDescription": "Task-aware AGENTS.md context injection for Codex",
+    "longDescription": "ContextOS reads AGENTS.md guidance, schedules the most relevant rules for the current task, injects them into Codex through hooks, and reports which rules appear to be followed.",
+    "developerName": "ContextOS",
+    "category": "Coding",
+    "capabilities": [
+      "Interactive",
+      "Read"
+    ],
+    "defaultPrompt": [
+      "Inject relevant AGENTS.md rules into my Codex task",
+      "Show which rules Codex followed after a task"
+    ],
+    "brandColor": "#534AB7",
+    "screenshots": []
+  }
+}

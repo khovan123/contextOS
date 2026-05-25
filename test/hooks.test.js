@@ -1,0 +1,141 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { describe, expect, it } from "vitest";
+
+import { handlePromptPayload } from "../plugins/ctx/lib/prompt-hook.js";
+import { handleStopPayload } from "../plugins/ctx/lib/stop-hook.js";
+import { logError, persistRuntime } from "../plugins/ctx/lib/hook-io.js";
+
+function mockScoreContext({ rules = [{ content: "Always use zod for validation.", score: 1, reasons: ["mock"], sourcePath: "AGENTS.md" }] } = {}) {
+  return async () => ({
+    scoredRules: rules,
+    suggestedFiles: [],
+    telemetry: {
+      elapsedMs: 3,
+      modelStatus: "mock",
+      rulesParsed: rules.length,
+      rulesInjected: rules.length,
+      filesSuggested: 0
+    }
+  });
+}
+
+describe("hook contracts", () => {
+  it("on-prompt handler injects context by default", async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-hook-"));
+    const dataPath = path.join(tmp, ".data", "last-prompt-context.json");
+    fs.writeFileSync(path.join(tmp, "AGENTS.md"), "- Always use zod for validation.\n");
+
+    const output = await handlePromptPayload(
+      { prompt: "fix zod validation", cwd: tmp, hook_event_name: "UserPromptSubmit" },
+      { dataPath, scoreContextClient: mockScoreContext() }
+    );
+
+    expect(output.continue).toBe(true);
+    expect(output.suppressOutput).toBe(true);
+    expect(output.hookSpecificOutput.hookEventName).toBe("UserPromptSubmit");
+    expect(output.hookSpecificOutput.additionalContext).toContain("zod");
+    expect(fs.existsSync(dataPath)).toBe(true);
+    expect(JSON.parse(fs.readFileSync(dataPath, "utf8")).injected).toBe(true);
+    expect(JSON.parse(fs.readFileSync(dataPath, "utf8")).scheduled.additionalContext).toContain("zod");
+  });
+
+  it("on-prompt handler can run quiet when disabled", async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-hook-quiet-"));
+    fs.writeFileSync(path.join(tmp, "AGENTS.md"), "- Always use zod for validation.\n");
+
+    const output = await handlePromptPayload(
+      { prompt: "fix zod validation", cwd: tmp, hook_event_name: "UserPromptSubmit" },
+      { injectContext: false, scoreContextClient: mockScoreContext() }
+    );
+
+    expect(output.continue).toBe(true);
+    expect(output.suppressOutput).toBe(true);
+    expect(output.hookSpecificOutput.hookEventName).toBe("UserPromptSubmit");
+    expect(output.hookSpecificOutput.additionalContext).toBe("");
+  });
+
+  it("still injects prompt context when runtime persistence fails", async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-hook-persist-fail-"));
+    const blockedPath = path.join(tmp, "not-a-dir");
+    fs.writeFileSync(blockedPath, "file");
+
+    const output = await handlePromptPayload(
+      { prompt: "fix zod validation", cwd: tmp, hook_event_name: "UserPromptSubmit" },
+      {
+        dataPath: path.join(blockedPath, "last-prompt-context.json"),
+        historyPath: path.join(blockedPath, "history.jsonl"),
+        scoreContextClient: mockScoreContext()
+      }
+    );
+
+    expect(output.continue).toBe(true);
+    expect(output.hookSpecificOutput.additionalContext).toContain("zod");
+  });
+
+  it("on-stop handler returns valid JSON when no git repo exists", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-stop-"));
+    fs.mkdirSync(path.join(tmp, ".data"), { recursive: true });
+    const contextPath = path.join(tmp, ".data", "last-prompt-context.json");
+    const reportPath = path.join(tmp, ".data", "last-report.json");
+    fs.writeFileSync(contextPath, JSON.stringify({
+      prompt: "fix auth",
+      rules: [{ content: "Always use auth guards.", score: 1 }],
+      relevantFiles: [],
+      scheduled: { highRules: [{ content: "Always use auth guards.", score: 1 }], midRules: [] }
+    }));
+
+    const output = handleStopPayload(
+      { cwd: tmp, hook_event_name: "Stop" },
+      { contextPath, reportPath }
+    );
+
+    expect(output.continue).toBe(true);
+    expect(output).not.toHaveProperty("message");
+    expect(output).not.toHaveProperty("hookSpecificOutput");
+    expect(output.systemMessage).toContain("ContextOS report");
+    expect(output.systemMessage).toContain("Rule outcomes:");
+    expect(fs.existsSync(reportPath)).toBe(true);
+  });
+
+  it("on-stop measures mid-priority scheduled rules", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-stop-mid-"));
+    fs.mkdirSync(path.join(tmp, ".data"), { recursive: true });
+    const contextPath = path.join(tmp, ".data", "last-prompt-context.json");
+    const reportPath = path.join(tmp, ".data", "last-report.json");
+    fs.writeFileSync(contextPath, JSON.stringify({
+      prompt: "check graph workflow",
+      rules: [],
+      relevantFiles: [],
+      scheduled: {
+        highRules: [],
+        midRules: [{ content: "Always use `code-review-graph` before reading files.", score: 0.4 }]
+      }
+    }));
+
+    handleStopPayload(
+      { cwd: tmp, hook_event_name: "Stop" },
+      { contextPath, reportPath }
+    );
+
+    const report = JSON.parse(fs.readFileSync(reportPath, "utf8"));
+    expect(report.unknown).toHaveLength(1);
+    expect(report.unknown[0].rule.content).toContain("code-review-graph");
+  });
+
+  it("keeps diagnostic writes best-effort when data dir is not writable", () => {
+    const previous = process.env.PLUGIN_DATA;
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-unwritable-data-"));
+    const fileDataDir = path.join(tmp, "not-a-directory");
+    fs.writeFileSync(fileDataDir, "file");
+    process.env.PLUGIN_DATA = fileDataDir;
+
+    expect(() => logError("UserPromptSubmit", new Error("boom"))).not.toThrow();
+    expect(() => persistRuntime("last-prompt-context.json", { ok: true })).not.toThrow();
+
+    if (previous === undefined) delete process.env.PLUGIN_DATA;
+    else process.env.PLUGIN_DATA = previous;
+    fs.rmSync(tmp, { recursive: true, force: true });
+  });
+});

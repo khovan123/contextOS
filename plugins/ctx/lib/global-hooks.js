@@ -1,0 +1,110 @@
+import fs from "node:fs";
+import path from "node:path";
+
+const CONTEXTOS_COMMAND_MARKER = "/contextos/plugins/ctx/bin/on-";
+const QUIET_CODE_REVIEW_GRAPH_STATUS_COMMAND =
+  "git rev-parse --git-dir >/dev/null 2>&1 && code-review-graph status >/dev/null 2>&1 || true";
+
+function shellQuote(value) {
+  return `'${String(value).replaceAll("'", "'\\''")}'`;
+}
+
+function readHooksFile(hooksPath) {
+  if (!fs.existsSync(hooksPath)) return { hooks: {} };
+  const raw = fs.readFileSync(hooksPath, "utf8").trim();
+  if (!raw) return { hooks: {} };
+  const parsed = JSON.parse(raw);
+  if (!parsed.hooks || typeof parsed.hooks !== "object") parsed.hooks = {};
+  return parsed;
+}
+
+function isContextOSHookEntry(entry) {
+  return (entry.hooks || []).some((hook) => {
+    return typeof hook.command === "string" && hook.command.includes(CONTEXTOS_COMMAND_MARKER);
+  });
+}
+
+function withoutContextOSEntries(entries = []) {
+  return entries.filter((entry) => !isContextOSHookEntry(entry));
+}
+
+function quietCodeReviewGraphSessionStart(entries = []) {
+  return entries.map((entry) => ({
+    ...entry,
+    hooks: (entry.hooks || []).map((hook) => {
+      if (typeof hook.command === "string" && hook.command.includes("code-review-graph status")) {
+        return {
+          ...hook,
+          command: QUIET_CODE_REVIEW_GRAPH_STATUS_COMMAND
+        };
+      }
+      return hook;
+    })
+  }));
+}
+
+function commandFor(marketplaceRoot, scriptName, { injectPromptContext = true } = {}) {
+  const envPrefix = scriptName === "on-prompt.js" && !injectPromptContext ? "CONTEXTOS_INJECT=0 " : "";
+  return `${envPrefix}node ${shellQuote(path.join(marketplaceRoot, "plugins", "ctx", "bin", scriptName))}`;
+}
+
+function contextOSEntry({ marketplaceRoot, scriptName, matcher, timeout, statusMessage, injectPromptContext = true }) {
+  const entry = {
+    hooks: [
+      {
+        type: "command",
+        command: commandFor(marketplaceRoot, scriptName, { injectPromptContext }),
+        timeout,
+        statusMessage
+      }
+    ]
+  };
+
+  if (matcher) entry.matcher = matcher;
+  return entry;
+}
+
+export function buildGlobalHooksConfig(existingConfig, { marketplaceRoot, injectPromptContext = true }) {
+  const config = existingConfig && typeof existingConfig === "object" ? structuredClone(existingConfig) : {};
+  if (!config.hooks || typeof config.hooks !== "object") config.hooks = {};
+
+  const additions = {
+    SessionStart: contextOSEntry({
+      marketplaceRoot,
+      scriptName: "on-session-start.js",
+      matcher: "startup|resume",
+      timeout: 10,
+      statusMessage: "ContextOS session start"
+    }),
+    UserPromptSubmit: contextOSEntry({
+      marketplaceRoot,
+      scriptName: "on-prompt.js",
+      timeout: 10,
+      statusMessage: "ContextOS scheduling context",
+      injectPromptContext
+    }),
+    Stop: contextOSEntry({
+      marketplaceRoot,
+      scriptName: "on-stop.js",
+      timeout: 10,
+      statusMessage: "ContextOS reporting"
+    })
+  };
+
+  for (const [eventName, entry] of Object.entries(additions)) {
+    config.hooks[eventName] = [...withoutContextOSEntries(config.hooks[eventName]), entry];
+  }
+
+  config.hooks.SessionStart = quietCodeReviewGraphSessionStart(config.hooks.SessionStart);
+
+  return config;
+}
+
+export function installGlobalHooks({ codexHome, marketplaceRoot, injectPromptContext = true }) {
+  const hooksPath = path.join(codexHome, "hooks.json");
+  const existing = readHooksFile(hooksPath);
+  const next = buildGlobalHooksConfig(existing, { marketplaceRoot, injectPromptContext });
+  fs.mkdirSync(path.dirname(hooksPath), { recursive: true });
+  fs.writeFileSync(hooksPath, `${JSON.stringify(next, null, 2)}\n`, "utf8");
+  return hooksPath;
+}
