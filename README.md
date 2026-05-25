@@ -7,7 +7,7 @@ It reads `AGENTS.md` guidance, scores the rules against the current prompt, sugg
 ## Quick Start
 
 ```bash
-npm install -g @khovan123/contextos
+npm install -g @minhpnq1807/contextos
 ctx install
 ```
 
@@ -16,7 +16,7 @@ Restart Codex after installing, then use Codex normally. ContextOS runs through 
 You can also run without a global install:
 
 ```bash
-npx @khovan123/contextos install
+npx @minhpnq1807/contextos install
 ```
 
 ## Demo Flow
@@ -78,7 +78,7 @@ By default, ContextOS runs in injection mode. It adds task-relevant rules and fi
 From the package:
 
 ```bash
-npx @khovan123/contextos install
+npx @minhpnq1807/contextos install
 ```
 
 From this repository during local development:

@@ -5,7 +5,7 @@ Use this script to record the README demo GIF or terminal clip.
 ## Setup
 
 ```bash
-npm install -g @khovan123/contextos
+npm install -g @minhpnq1807/contextos
 ctx install
 ```
 
