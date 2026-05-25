@@ -4,10 +4,13 @@ ContextOS (`ctx`) is a Codex companion plugin for task-aware project context.
 
 It reads `AGENTS.md` guidance, scores the rules against the current prompt, suggests relevant files, records what context would have been injected, and reports lightweight compliance evidence after the task finishes.
 
+Published package: [`@minhpnq1807/contextos`](https://www.npmjs.com/package/@minhpnq1807/contextos)
+
 ## Quick Start
 
 ```bash
 npm install -g @minhpnq1807/contextos
+ctx --version
 ctx install
 ```
 
@@ -16,7 +19,7 @@ Restart Codex after installing, then use Codex normally. ContextOS runs through 
 You can also run without a global install:
 
 ```bash
-npx @minhpnq1807/contextos install
+npx @minhpnq1807/contextos@latest install
 ```
 
 ## Demo Flow
@@ -78,7 +81,14 @@ By default, ContextOS runs in injection mode. It adds task-relevant rules and fi
 From the package:
 
 ```bash
-npx @minhpnq1807/contextos install
+npm install -g @minhpnq1807/contextos
+ctx install
+```
+
+Without a global install:
+
+```bash
+npx @minhpnq1807/contextos@latest install
 ```
 
 From this repository during local development:
@@ -98,6 +108,13 @@ rtk node bin/ctx.js install
 Restart Codex after installing.
 
 The embedding model is mandatory. `ctx install` intentionally fails if the model cannot be prepared, because otherwise the first prompt hook would have to cold-load or download the model.
+
+Verify the published package in any project:
+
+```bash
+npm exec --yes --package=@minhpnq1807/contextos@latest -- ctx --version
+npm exec --yes --package=@minhpnq1807/contextos@latest -- ctx debug -- "fix upload moderation flow"
+```
 
 ## Modes
 
@@ -154,6 +171,10 @@ Run at least one Codex task with ContextOS enabled and let the task finish so th
 ### `Average efficiency: unknown`
 
 ContextOS only reports efficiency when git diff/status contains concrete evidence. Runtime-only rules, such as tool usage order, are shown as `unknown` unless they leave evidence in changed files.
+
+### `npm warn deprecated prebuild-install@7.1.3`
+
+This warning comes from a transitive dependency in the local embedding/WASM stack. It does not block installation or runtime commands. ContextOS still runs normally if npm exits with code `0`.
 
 ## Commands
 
