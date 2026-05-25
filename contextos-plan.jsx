@@ -252,9 +252,9 @@ const TESTING = [
     coverage: "p50 / p95 / p99 tracked mỗi PR",
   },
   {
-    layer: "Manual smoke test (rtk)",
+    layer: "Manual smoke test",
     tool: "npm test + validate:plugin",
-    what: "Sau mỗi thay đổi: rtk npm test, rtk npm run validate:plugin. Smoke test ctx debug trong buddy: verify elapsedMs < 200ms, files suggested hợp lý, không có cold-load trong hook.",
+    what: "Sau mỗi thay đổi: npm test, npm run validate:plugin. Smoke test ctx debug trong buddy: verify elapsedMs < 200ms, files suggested hợp lý, không có cold-load trong hook.",
     coverage: "Chạy trước mỗi push lên main",
   },
 ];
@@ -362,8 +362,8 @@ export default function Plan() {
                 ["embedding.status", "enabled-mcp"],
                 ["MCP warm p95", "7ms"],
                 ["model cold-load in hook", "không xảy ra"],
-                ["rtk npm test", "28 passed"],
-                ["rtk npm run test:mcp", "passed"],
+                ["npm test", "28 passed"],
+                ["npm run test:mcp", "passed"],
                 ["validate:plugin", "passed"],
               ].map(([k,v]) => (
                 <div key={k} style={{ display:"flex", gap:12, fontSize:12 }}>

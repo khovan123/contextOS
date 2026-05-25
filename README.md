@@ -94,7 +94,7 @@ npx @minhpnq1807/contextos@latest install
 From this repository during local development:
 
 ```bash
-rtk node bin/ctx.js install
+node bin/ctx.js install
 ```
 
 `ctx install` does three things:
@@ -335,25 +335,25 @@ Example `unknown`: a rule says shell commands must run as `minh_dev`, but git di
 Install dependencies:
 
 ```bash
-rtk npm install
+npm install
 ```
 
 Run tests:
 
 ```bash
-rtk npm test
+npm test
 ```
 
 Run MCP protocol and warm performance smoke:
 
 ```bash
-rtk npm run test:mcp
+npm run test:mcp
 ```
 
 Validate plugin schema:
 
 ```bash
-rtk npm run validate:plugin
+npm run validate:plugin
 ```
 
 Check the npm package contents:
