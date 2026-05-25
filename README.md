@@ -4,6 +4,59 @@ ContextOS (`ctx`) is a Codex companion plugin for task-aware project context.
 
 It reads `AGENTS.md` guidance, scores the rules against the current prompt, suggests relevant files, records what context would have been injected, and reports lightweight compliance evidence after the task finishes.
 
+## Quick Start
+
+```bash
+npm install -g @khovan123/contextos
+ctx install
+```
+
+Restart Codex after installing, then use Codex normally. ContextOS runs through Codex hooks and the `ctx-mcp` MCP server.
+
+You can also run without a global install:
+
+```bash
+npx @khovan123/contextos install
+```
+
+## Demo Flow
+
+Use this flow for a 60-second demo recording:
+
+```bash
+ctx install
+codex
+```
+
+Prompt Codex:
+
+```text
+kiểm tra flow kiểm duyệt upload
+```
+
+Expected result:
+
+- `UserPromptSubmit` injects relevant AGENTS.md rules.
+- ContextOS suggests upload/moderation files.
+- `Stop` prints a ContextOS report with rule outcomes.
+- `ctx evidence` shows the specific evidence behind the last report.
+
+## Before / After
+
+Without ContextOS, Codex receives the full AGENTS.md context passively and can miss task-relevant rules in large context windows.
+
+With ContextOS, each prompt gets a compact block:
+
+```text
+## Critical ContextOS rules
+- Use code-review-graph before reading files.
+- All shell commands must run as minh_dev.
+
+## Suggested files to check
+- services/content-service/src/infrastructure/services/content-moderation.service.ts
+- webapp/src/features/dashboard/components/moderation-status-badge.tsx
+```
+
 ## What It Does
 
 - Hooks into Codex `UserPromptSubmit`, `SessionStart`, and `Stop`.
@@ -25,7 +78,7 @@ By default, ContextOS runs in injection mode. It adds task-relevant rules and fi
 From the package:
 
 ```bash
-npx ctx install
+npx @khovan123/contextos install
 ```
 
 From this repository during local development:
@@ -77,6 +130,30 @@ ctx install --copy
 ```
 
 Copies only the plugin payload into `$CODEX_HOME/plugins/ctx`. This is mostly for local experiments.
+
+## Troubleshooting
+
+### `ctx-mcp bridge socket not found`
+
+Restart Codex after `ctx install`. The bridge socket is owned by the long-running `ctx-mcp` MCP server, so it exists only after Codex starts the server.
+
+### `ContextOS model cache missing`
+
+Run:
+
+```bash
+ctx embeddings warm -- "kiểm tra flow kiểm duyệt upload"
+```
+
+Then restart Codex.
+
+### No report found
+
+Run at least one Codex task with ContextOS enabled and let the task finish so the `Stop` hook can write `last-report.json`.
+
+### `Average efficiency: unknown`
+
+ContextOS only reports efficiency when git diff/status contains concrete evidence. Runtime-only rules, such as tool usage order, are shown as `unknown` unless they leave evidence in changed files.
 
 ## Commands
 
@@ -256,6 +333,12 @@ Validate plugin schema:
 
 ```bash
 rtk npm run validate:plugin
+```
+
+Check the npm package contents:
+
+```bash
+npm pack --dry-run
 ```
 
 Smoke test prompt hook:
