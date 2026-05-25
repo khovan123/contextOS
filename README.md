@@ -178,75 +178,18 @@ This warning comes from a transitive dependency in the local embedding/WASM stac
 
 ## Commands
 
-```bash
-ctx install
-ctx install --quiet
-ctx install --inject
-ctx install --copy
-ctx debug -- "fix auth login bug"
-ctx report
-ctx evidence
-ctx stats
-ctx embeddings warm -- "fix upload moderation flow"
-ctx --version
-```
-
-### `ctx debug`
-
-Runs ContextOS scheduling locally for a fake task and prints rule scores plus the final context that would be injected.
-
-```bash
-ctx debug -- "fix upload moderation flow"
-```
-
-### `ctx report`
-
-Shows the last Stop-hook report.
-
-```bash
-ctx report
-```
-
-### `ctx evidence`
-
-Shows detailed rule-by-rule evidence for the last report:
-
-- status
-- rule text
-- source file
-- score
-- evidence reason
-
-```bash
-ctx evidence
-```
-
-### `ctx stats`
-
-Shows aggregate runtime stats:
-
-- prompts analyzed
-- reports generated
-- injected vs quiet prompts
-- average prompt analysis time
-- average efficiency
-- followed / ignored / unknown counts
-- hook event counts
-- last prompt and suggested files
-
-```bash
-ctx stats
-```
-
-### `ctx embeddings`
-
-Builds local embeddings for semantic rule scoring.
-
-```bash
-ctx embeddings warm -- "fix upload moderation flow"
-```
-
-`warm` downloads/loads the local `Xenova/all-MiniLM-L6-v2` model if needed and stores rule/prompt vectors plus project file path vectors in `$CODEX_HOME/contextos/embeddings.db`.
+| Command | Meaning | Use when | Output / side effect |
+| --- | --- | --- | --- |
+| `ctx install` | Installs ContextOS into Codex with prompt context injection enabled. | Normal setup after installing the npm package. | Copies the plugin into `$CODEX_HOME/marketplaces/contextos`, registers `ctx@contextos`, registers `ctx-mcp`, installs global hooks, downloads the embedding model, and warms caches. |
+| `ctx install --quiet` | Installs ContextOS in measurement-only mode. | You want reports and stats but do not want a visible `hook context` block in Codex. | Installs the same plugin/hooks, but prompt hooks return empty `additionalContext`. |
+| `ctx install --inject` | Installs ContextOS with explicit injection mode. | You want to be explicit in scripts or docs. | Same runtime behavior as `ctx install`. |
+| `ctx install --copy` | Copies only the plugin payload to `$CODEX_HOME/plugins/ctx`. | Local development or manual plugin experiments. | Does not register marketplace, MCP, or global hooks. |
+| `ctx debug -- "task"` | Runs the scheduler locally for a fake prompt. | You want to see which AGENTS.md rules and files ContextOS would inject before using Codex. | Prints rule scores, scoring reasons, suggested files, and final `additionalContext`. |
+| `ctx report` | Shows the last Stop-hook compliance report. | A Codex task has finished and you want the summary again. | Reads `$CODEX_HOME/contextos/last-report.json`. |
+| `ctx evidence` | Shows detailed evidence behind the last report. | You want to inspect why a rule was marked `followed`, `ignored`, or `unknown`. | Prints rule text, source file, score, status, and evidence reason. |
+| `ctx stats` | Shows aggregate runtime metrics. | You want to know whether ContextOS is active and useful over time. | Prints prompt count, report count, injected/quiet ratio, average prompt analysis time, efficiency, rule outcomes, hook events, and last suggested files. |
+| `ctx embeddings warm -- "task"` | Prepares local semantic embedding caches. | First install, CI smoke checks, or after changing AGENTS.md/project files. | Loads/downloads `Xenova/all-MiniLM-L6-v2` and writes vectors to `$CODEX_HOME/contextos/embeddings.db`. |
+| `ctx --version` | Prints the installed ContextOS CLI version. | You want to confirm which npm version is being executed. | Prints the version from package metadata. |
 
 ## Runtime Files
 
