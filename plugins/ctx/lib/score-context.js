@@ -1,7 +1,7 @@
 import path from "node:path";
 
 import { readAgentsChain } from "./reader.js";
-import { parseRules, scoreRules, findRelevantFiles } from "./analyzer.js";
+import { filterActionableRules, parseRules, scoreRules, findRelevantFiles } from "./analyzer.js";
 import { enhanceRuleScoresWithEmbeddings } from "./embedding-scorer.js";
 
 export async function scoreContext({
@@ -15,7 +15,8 @@ export async function scoreContext({
 } = {}) {
   const started = Date.now();
   const merged = readAgentsChain({ cwd });
-  const parsedRules = parseRules(merged.content);
+  const rawRules = parseRules(merged.content);
+  const parsedRules = filterActionableRules(rawRules);
   const baseScoredRules = scoreRules(parsedRules, prompt, openFiles);
   const embedding = await enhanceRuleScoresWithEmbeddings(baseScoredRules, prompt, {
     dataDir,
@@ -47,6 +48,7 @@ export async function scoreContext({
       model: embedding.model,
       cachePath: embedding.cachePath,
       rulesParsed: parsedRules.length,
+      rulesFiltered: rawRules.length - parsedRules.length,
       rulesInjected: scoredRules.filter((rule) => Number(rule.score || 0) >= 0.1).length,
       filesSuggested: suggestedFiles.length,
       sources: merged.sources.map((source) => path.relative(cwd, source))

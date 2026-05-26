@@ -53,7 +53,7 @@ With ContextOS, each prompt gets a compact block:
 ```text
 ## Critical ContextOS rules
 - Use code-review-graph before reading files.
-- All shell commands must run as minh_dev.
+- Check upload moderation flows before editing approval code.
 
 ## Suggested files to check
 - services/content-service/src/infrastructure/services/content-moderation.service.ts
@@ -66,6 +66,7 @@ With ContextOS, each prompt gets a compact block:
 - Registers a `ctx-mcp` MCP server that owns model loading and semantic scoring.
 - Reads the active `AGENTS.md` chain for the current workspace.
 - Scores rules by relevance to the user prompt.
+- Filters host/session setup rules such as "run commands as user X" or `sudo -u user` because they are environment instructions, not project guidance.
 - Finds likely relevant files with a hybrid retriever:
   - first, local prompt/file heuristics create seed candidates;
   - then, if `.code-review-graph/graph.db` exists, ContextOS queries `code-review-graph` semantic search and re-ranks graph-backed matches;
@@ -288,7 +289,7 @@ unknown  = the rule was relevant, but the diff does not prove either way
 
 For runtime-only rules, ContextOS also checks `telemetry.jsonl` for hook-visible tool names, MCP server names, and command metadata. A rule like "use code-review-graph before reading files" can be marked `followed` when telemetry contains a matching `code-review-graph` signal.
 
-Example `unknown`: a rule says shell commands must run as a specific OS user, but neither git diff nor hook telemetry records that user identity. ContextOS cannot prove the rule was followed from available evidence alone.
+Host/session setup rules such as "run shell commands as user X", `sudo su - user`, `sudo -i -u user`, and `sudo -u user` are filtered before scoring. They are not injected and do not count toward `unknown` outcomes because they describe the agent runtime environment rather than project behavior.
 
 ## Development
 

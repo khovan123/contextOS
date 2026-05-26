@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.4
+
+- Filters host/session user rules such as `sudo -u user`, `sudo su - user`, and "commands must run as user X" before scoring and injection.
+- Prevents system-user setup instructions from inflating `unknown` outcomes or skewing ContextOS efficiency reports.
+
 ## 0.1.3
 
 - Separates runtime prompt/report/stats files per workspace under `~/.ctx/contextos/workspaces/<workspace-id>`.

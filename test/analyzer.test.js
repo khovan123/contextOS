@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { findRelevantFiles, parseRules, scoreRules } from "../plugins/ctx/lib/analyzer.js";
+import { filterActionableRules, findRelevantFiles, isSystemUserRule, parseRules, scoreRules } from "../plugins/ctx/lib/analyzer.js";
 import { buildGraphQueries, mergeRelevantFiles } from "../plugins/ctx/lib/graph-retriever.js";
 
 describe("analyzer", () => {
@@ -35,6 +35,22 @@ Plain paragraph with enough content to become a standalone rule.
     expect(scored[0].score).toBeGreaterThan(0.5);
     expect(scored.at(-1).content).toContain("CSS modules");
     expect(scored.at(-1).score).toBeLessThan(0.5);
+  });
+
+  it("filters system-user shell rules before scheduling", () => {
+    const rules = parseRules(`## Source: /repo/AGENTS.md
+- All shell commands MUST run as minh_dev, not root.
+- Do not prefix every command with sudo -u minh_dev.
+- First run sudo su - minh_dev before doing project work.
+- @/home/example/.codex/RTK.md
+- Always use zod for validation.
+`);
+
+    expect(rules).toHaveLength(5);
+    expect(isSystemUserRule("sudo -i -u minh_dev")).toBe(true);
+    expect(filterActionableRules(rules).map((rule) => rule.content)).toEqual([
+      "Always use zod for validation."
+    ]);
   });
 
   it("finds relevant files from task keywords", async () => {

@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 
 import { readAgentsChain } from "../plugins/ctx/lib/reader.js";
-import { parseRules, scoreRules } from "../plugins/ctx/lib/analyzer.js";
+import { filterActionableRules, parseRules, scoreRules } from "../plugins/ctx/lib/analyzer.js";
 import { scheduleContext } from "../plugins/ctx/lib/scheduler.js";
 import { formatEvidence, formatReport } from "../plugins/ctx/lib/reporter.js";
 import { installGlobalHooks } from "../plugins/ctx/lib/global-hooks.js";
@@ -222,7 +222,7 @@ async function debug(task) {
 async function warmEmbeddings(task) {
   const cwd = process.cwd();
   const merged = readAgentsChain({ cwd });
-  const rules = scoreRules(parseRules(merged.content), task, []);
+  const rules = scoreRules(filterActionableRules(parseRules(merged.content)), task, []);
   const result = await warmRuleEmbeddings({
     rules,
     task,

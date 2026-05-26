@@ -48,6 +48,20 @@ const SEMANTIC_ALIASES = {
 
 const MODERATION_TOKENS = new Set(["moderation", "moderate", "content-moderation", "approval", "approved", "reject", "rejected", "needs_review"]);
 
+const SYSTEM_USER_RULE_PATTERNS = [
+  /\ball\s+shell\s+commands?\s+must\s+run\s+as\b/i,
+  /\bcommands?\s+must\s+run\s+as\b/i,
+  /\bstrictly\s+follow\s+this\s+sequence\b/i,
+  /\bswitch\s+the\s+user\s+context\b/i,
+  /\bdo\s+not\s+prefix\b.*\bsudo\s+-u\b/i,
+  /\bsudo\s+su\s+-\s*[a-z_][a-z0-9_-]*\b/i,
+  /\bsudo\s+-i\s+-u\s+[a-z_][a-z0-9_-]*\b/i,
+  /\bsudo\s+-u\s+[a-z_][a-z0-9_-]*\b/i,
+  /\bsu\s+-\s+[a-z_][a-z0-9_-]*\b/i,
+  /[/\\]\.codex[/\\]RTK\.md\b/i,
+  /\bminh_dev\b/i
+];
+
 export function tokenize(value) {
   const normalized = String(value || "")
     .toLowerCase()
@@ -136,6 +150,17 @@ export function parseRules(markdown) {
   }
   flushParagraph();
   return dedupeRules(rules);
+}
+
+export function filterActionableRules(rules = []) {
+  return rules
+    .filter((rule) => !isSystemUserRule(rule))
+    .map((rule, index) => ({ ...rule, id: `r${index + 1}`, originalOrder: index }));
+}
+
+export function isSystemUserRule(rule) {
+  const content = typeof rule === "string" ? rule : rule?.content;
+  return SYSTEM_USER_RULE_PATTERNS.some((pattern) => pattern.test(String(content || "")));
 }
 
 function dedupeRules(rules) {
