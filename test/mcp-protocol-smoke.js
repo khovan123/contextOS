@@ -8,9 +8,12 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
 import { modelCacheDir, warmRuleEmbeddings } from "../plugins/ctx/lib/embedding-scorer.js";
+import { defaultDataRoot } from "../plugins/ctx/lib/workspace-data.js";
 import { createContextOSMcpServer } from "../plugins/ctx/mcp/contextos-server.js";
 
-const installedModelDir = modelCacheDir(path.join(os.homedir(), ".codex", "contextos"));
+const preferredModelDir = modelCacheDir(defaultDataRoot());
+const legacyModelDir = modelCacheDir(path.join(os.homedir(), ".codex", "contextos"));
+const installedModelDir = fs.existsSync(preferredModelDir) ? preferredModelDir : legacyModelDir;
 
 if (!fs.existsSync(installedModelDir)) {
   console.error(`Missing ContextOS model cache: ${installedModelDir}`);

@@ -70,7 +70,7 @@ With ContextOS, each prompt gets a compact block:
   - first, local prompt/file heuristics create seed candidates;
   - then, if `.code-review-graph/graph.db` exists, ContextOS queries `code-review-graph` semantic search and re-ranks graph-backed matches;
   - if no graph exists or graph lookup times out, it falls back to local heuristics.
-- Stores scheduled context and hook telemetry under `$CODEX_HOME/contextos`.
+- Stores scheduled context and hook telemetry per workspace under `~/.ctx/contextos/workspaces/<workspace-id>`.
 - Reports rule outcomes as `followed`, `ignored`, or `unknown`, using runtime telemetry for tool/command rules when available.
 - Injects `additionalContext` into Codex by default.
 
@@ -101,8 +101,8 @@ node bin/ctx.js install
 
 1. Copies this package into `$CODEX_HOME/marketplaces/contextos`.
 2. Registers and installs `ctx@contextos` through Codex plugin marketplace commands.
-3. Downloads and caches the required local MiniLM embedding model under `$CODEX_HOME/contextos/models`.
-4. Warms `$CODEX_HOME/contextos/embeddings.db` for AGENTS rules and project file paths.
+3. Downloads and caches the required local MiniLM embedding model under `~/.ctx/contextos/models`.
+4. Warms `~/.ctx/contextos/embeddings.db` for AGENTS rules and project file paths.
 5. Registers the `ctx-mcp` MCP server and merges ContextOS global hooks into `$CODEX_HOME/hooks.json`.
 
 Restart Codex after installing.
@@ -185,18 +185,24 @@ This warning comes from a transitive dependency in the local embedding/WASM stac
 | `ctx install --inject` | Installs ContextOS with explicit injection mode. | You want to be explicit in scripts or docs. | Same runtime behavior as `ctx install`. |
 | `ctx install --copy` | Copies only the plugin payload to `$CODEX_HOME/plugins/ctx`. | Local development or manual plugin experiments. | Does not register marketplace, MCP, or global hooks. |
 | `ctx debug -- "task"` | Runs the scheduler locally for a fake prompt. | You want to see which AGENTS.md rules and files ContextOS would inject before using Codex. | Prints rule scores, scoring reasons, suggested files, and final `additionalContext`. |
-| `ctx report` | Shows the last Stop-hook compliance report. | A Codex task has finished and you want the summary again. | Reads `$CODEX_HOME/contextos/last-report.json`. |
-| `ctx evidence` | Shows detailed evidence behind the last report. | You want to inspect why a rule was marked `followed`, `ignored`, or `unknown`. | Prints rule text, source file, score, status, and evidence reason. |
-| `ctx stats` | Shows aggregate runtime metrics. | You want to know whether ContextOS is active and useful over time. | Prints prompt count, report count, injected/quiet ratio, average prompt analysis time, efficiency, rule outcomes, hook events, and last suggested files. |
-| `ctx embeddings warm -- "task"` | Prepares local semantic embedding caches. | First install, CI smoke checks, or after changing AGENTS.md/project files. | Loads/downloads `Xenova/all-MiniLM-L6-v2` and writes vectors to `$CODEX_HOME/contextos/embeddings.db`. |
+| `ctx report` | Shows the last Stop-hook compliance report for the current workspace. | A Codex task has finished and you want the summary again. | Reads `~/.ctx/contextos/workspaces/<workspace-id>/last-report.json`. |
+| `ctx evidence` | Shows detailed evidence behind the last report for the current workspace. | You want to inspect why a rule was marked `followed`, `ignored`, or `unknown`. | Prints rule text, source file, score, status, and evidence reason. |
+| `ctx stats` | Shows aggregate runtime metrics for the current workspace. | You want to know whether ContextOS is active and useful over time. | Prints prompt count, report count, injected/quiet ratio, average prompt analysis time, efficiency, rule outcomes, hook events, and last suggested files for the current workspace only. |
+| `ctx embeddings warm -- "task"` | Prepares local semantic embedding caches. | First install, CI smoke checks, or after changing AGENTS.md/project files. | Loads/downloads `Xenova/all-MiniLM-L6-v2` and writes vectors to `~/.ctx/contextos/embeddings.db`. |
 | `ctx --version` | Prints the installed ContextOS CLI version. | You want to confirm which npm version is being executed. | Prints the version from package metadata. |
 
 ## Runtime Files
 
-ContextOS writes runtime data to:
+ContextOS writes shared caches to:
 
 ```text
-$CODEX_HOME/contextos/
+~/.ctx/contextos/
+```
+
+Runtime prompt/report files are isolated by workspace:
+
+```text
+~/.ctx/contextos/workspaces/<workspace-id>/
 ```
 
 Important files:
@@ -210,6 +216,14 @@ prompt-history.jsonl      prompt scheduling history
 report-history.jsonl      report history
 telemetry.jsonl           local runtime signals from hooks, tools, and commands
 ```
+
+The workspace id is stored in the target repo at:
+
+```text
+.contextos/workspace.json
+```
+
+ContextOS also adds `.contextos/` to the repo `.gitignore` so the local marker is not pushed. If the marker cannot be written, ContextOS falls back to a deterministic id generated from the workspace real path.
 
 These files are local telemetry only. Hooks do not make network calls.
 

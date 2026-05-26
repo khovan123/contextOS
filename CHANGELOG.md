@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.3
+
+- Separates runtime prompt/report/stats files per workspace under `~/.ctx/contextos/workspaces/<workspace-id>`.
+- Adds a local `.contextos/workspace.json` marker and `.gitignore` entry so workspace identity is stable without being pushed.
+- Keeps MCP/model caches shared at the ContextOS data root while isolating report, evidence, stats, and telemetry by project path.
+
 ## 0.1.2
 
 - Adds local runtime telemetry for hook-visible tool, MCP, and command signals.

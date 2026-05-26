@@ -11,7 +11,8 @@ export async function handlePromptPayload(
     now = new Date(),
     started = Date.now(),
     injectContext = process.env.CONTEXTOS_INJECT !== "0",
-    scoreContextClient = callCtxScoreContext
+    scoreContextClient = callCtxScoreContext,
+    mcpDataDir
   } = {}
 ) {
   const prompt = payload.prompt || payload.message || payload.user_prompt || "";
@@ -25,7 +26,7 @@ export async function handlePromptPayload(
     openFiles,
     maxFiles: 3
   }, {
-    dataDir,
+    dataDir: mcpDataDir || dataDir,
     timeoutMs: Number(process.env.CONTEXTOS_MCP_BRIDGE_TIMEOUT_MS || 1000)
   });
 

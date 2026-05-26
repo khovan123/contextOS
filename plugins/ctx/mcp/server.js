@@ -1,17 +1,16 @@
 #!/usr/bin/env node
 import fs from "node:fs";
 import net from "node:net";
-import os from "node:os";
-import path from "node:path";
 
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 
 import { modelCacheDir, warmRuleEmbeddings } from "../lib/embedding-scorer.js";
 import { scoreContext } from "../lib/score-context.js";
 import { ctxMcpSocketPath } from "../lib/ctx-mcp-client.js";
+import { defaultDataRoot } from "../lib/workspace-data.js";
 import { createContextOSMcpServer } from "./contextos-server.js";
 
-const dataDir = process.env.PLUGIN_DATA || path.join(process.env.CODEX_HOME || path.join(os.homedir(), ".codex"), "contextos");
+const dataDir = defaultDataRoot();
 const socketPath = ctxMcpSocketPath(dataDir);
 
 fs.mkdirSync(dataDir, { recursive: true });

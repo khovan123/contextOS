@@ -1,7 +1,8 @@
 import fs from "node:fs";
 import net from "node:net";
-import os from "node:os";
 import path from "node:path";
+
+import { defaultDataRoot } from "./workspace-data.js";
 
 const DEFAULT_TIMEOUT_MS = 1000;
 
@@ -48,5 +49,5 @@ export async function callCtxScoreContext(payload, {
 }
 
 function defaultDataDir() {
-  return process.env.PLUGIN_DATA || path.join(process.env.CODEX_HOME || path.join(os.homedir(), ".codex"), "contextos");
+  return defaultDataRoot();
 }

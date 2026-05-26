@@ -1,10 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { writeJsonFile } from "./fs-utils.js";
-
-function codexHome() {
-  return process.env.CODEX_HOME || path.join(process.env.HOME || process.cwd(), ".codex");
-}
+import { defaultDataRoot, workspaceDataDir } from "./workspace-data.js";
 
 export async function readStdinJson() {
   const chunks = [];
@@ -18,8 +15,19 @@ export function writeJson(value) {
   process.stdout.write(`${JSON.stringify(value)}\n`);
 }
 
-export function pluginDataDir(fileName = "") {
-  const root = process.env.PLUGIN_DATA || path.join(codexHome(), "contextos");
+export function pluginDataDir(fileName = "", cwd = process.cwd()) {
+  let root;
+  try {
+    root = workspaceDataDir({ cwd });
+    fs.mkdirSync(root, { recursive: true });
+  } catch {
+    return path.join(process.cwd(), ".contextos", fileName);
+  }
+  return path.join(root, fileName);
+}
+
+export function pluginDataRoot(fileName = "") {
+  const root = defaultDataRoot();
   try {
     fs.mkdirSync(root, { recursive: true });
   } catch {
@@ -28,10 +36,14 @@ export function pluginDataDir(fileName = "") {
   return path.join(root, fileName);
 }
 
+export function pluginRuntimeFile(fileName = "", cwd) {
+  return cwd ? pluginDataDir(fileName, cwd) : pluginDataRoot(fileName);
+}
+
 export function logDebug(event, payload) {
   const line = JSON.stringify({ at: new Date().toISOString(), event, payload });
   try {
-    fs.appendFileSync(pluginDataDir("debug.log"), `${line}\n`, "utf8");
+    fs.appendFileSync(pluginRuntimeFile("debug.log", payload?.cwd || payload?.working_directory), `${line}\n`, "utf8");
   } catch {
     // Logging must never break Codex hooks.
   }

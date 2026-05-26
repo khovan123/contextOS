@@ -1,9 +1,10 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
+
+import { defaultDataRoot } from "./workspace-data.js";
 
 const DEFAULT_MODEL = "Xenova/all-MiniLM-L6-v2";
 const DEFAULT_TIMEOUT_MS = 800;
@@ -20,7 +21,7 @@ export async function enhanceRuleScoresWithEmbeddings(
   rules,
   task,
   {
-    dataDir = path.join(os.homedir(), ".codex", "contextos"),
+    dataDir = defaultDataRoot(),
     sources = [],
     timeoutMs = Number(process.env.CONTEXTOS_EMBEDDING_TIMEOUT_MS || DEFAULT_TIMEOUT_MS),
     allowRemote = process.env.CONTEXTOS_EMBEDDING_ALLOW_REMOTE === "1",
@@ -52,7 +53,7 @@ export async function enhanceRuleScoresWithEmbeddings(
 export async function warmRuleEmbeddings({
   rules = [],
   task = "",
-  dataDir = path.join(os.homedir(), ".codex", "contextos"),
+  dataDir = defaultDataRoot(),
   sources = [],
   allowRemote = true
 } = {}) {
@@ -126,7 +127,7 @@ async function getExtractor({ allowRemote, dataDir }) {
   return extractorPromises.get(key);
 }
 
-export function modelCacheDir(dataDir = path.join(os.homedir(), ".codex", "contextos")) {
+export function modelCacheDir(dataDir = defaultDataRoot()) {
   return path.join(dataDir, "models");
 }
 

@@ -13,6 +13,7 @@ import { formatStats, loadStats } from "../plugins/ctx/lib/stats.js";
 import { modelCacheDir, warmRuleEmbeddings } from "../plugins/ctx/lib/embedding-scorer.js";
 import { warmFileEmbeddings } from "../plugins/ctx/lib/file-embedding-retriever.js";
 import { scoreContext } from "../plugins/ctx/lib/score-context.js";
+import { defaultDataRoot, workspaceDataDir, workspaceMarkerPath } from "../plugins/ctx/lib/workspace-data.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
@@ -154,8 +155,9 @@ function runCodex(args) {
 }
 
 function loadLastReport() {
+  const workspaceDir = contextOSWorkspaceDataDir();
   const candidates = [
-    process.env.PLUGIN_DATA && path.join(process.env.PLUGIN_DATA, "last-report.json"),
+    path.join(workspaceDir, "last-report.json"),
     path.join(codexHome(), "contextos", "last-report.json"),
     path.join(codexHome(), "marketplaces", "contextos", "plugins", "ctx", ".data", "last-report.json"),
     path.join(codexHome(), "plugins", "ctx", ".data", "last-report.json"),
@@ -171,7 +173,11 @@ function loadLastReport() {
 }
 
 function contextOSDataDir() {
-  return process.env.PLUGIN_DATA || path.join(codexHome(), "contextos");
+  return defaultDataRoot();
+}
+
+function contextOSWorkspaceDataDir(cwd = process.cwd()) {
+  return workspaceDataDir({ cwd, dataRoot: contextOSDataDir() });
 }
 
 async function debug(task) {
@@ -189,6 +195,8 @@ async function debug(task) {
 
   console.log("ContextOS debug");
   console.log(`cwd: ${cwd}`);
+  console.log(`workspace data: ${contextOSWorkspaceDataDir(cwd)}`);
+  console.log(`workspace marker: ${workspaceMarkerPath(cwd)}`);
   console.log(`rules: ${rules.length}`);
   console.log(`mcp scorer: ${scored.telemetry.modelStatus}${scored.telemetry.model ? ` (${scored.telemetry.model})` : ""}`);
   console.log(`elapsed: ${scored.telemetry.elapsedMs}ms`);
@@ -260,7 +268,7 @@ try {
   } else if (command === "evidence") {
     console.log(formatEvidence(loadLastReport()));
   } else if (command === "stats") {
-    console.log(formatStats(loadStats(contextOSDataDir())));
+    console.log(formatStats(loadStats(contextOSWorkspaceDataDir())));
   } else {
     throw new Error(`Unknown command: ${command}\n\n${usage()}`);
   }
