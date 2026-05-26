@@ -124,6 +124,43 @@ describe("hook contracts", () => {
     expect(report.unknown[0].rule.content).toContain("code-review-graph");
   });
 
+  it("on-stop uses runtime telemetry to score workflow rules", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-stop-telemetry-"));
+    fs.mkdirSync(path.join(tmp, ".data"), { recursive: true });
+    const contextPath = path.join(tmp, ".data", "last-prompt-context.json");
+    const reportPath = path.join(tmp, ".data", "last-report.json");
+    const telemetryPath = path.join(tmp, ".data", "telemetry.jsonl");
+    fs.writeFileSync(contextPath, JSON.stringify({
+      at: "2026-01-01T00:00:00.000Z",
+      prompt: "check graph workflow",
+      rules: [],
+      relevantFiles: [],
+      scheduled: {
+        highRules: [],
+        midRules: [{ content: "Always use `code-review-graph` before reading files.", score: 0.4 }]
+      }
+    }));
+    fs.writeFileSync(telemetryPath, `${JSON.stringify({
+      at: "2026-01-01T00:00:01.000Z",
+      event: "ToolCall",
+      cwd: tmp,
+      signals: ["code-review-graph", "semantic_search_nodes"],
+      toolSignals: ["code-review-graph.semantic_search_nodes"],
+      commandSignals: []
+    })}\n`);
+
+    const output = handleStopPayload(
+      { cwd: tmp, hook_event_name: "Stop" },
+      { contextPath, reportPath, telemetryPath }
+    );
+
+    const report = JSON.parse(fs.readFileSync(reportPath, "utf8"));
+    expect(report.followed).toHaveLength(1);
+    expect(report.followed[0]).toMatchObject({ kind: "runtime" });
+    expect(report.followed[0].evidence).toContain("runtime telemetry observed code-review-graph");
+    expect(output.systemMessage).toContain("Runtime telemetry: code-review-graph.semantic_search_nodes");
+  });
+
   it("keeps diagnostic writes best-effort when data dir is not writable", () => {
     const previous = process.env.PLUGIN_DATA;
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-unwritable-data-"));

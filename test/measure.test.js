@@ -67,7 +67,29 @@ describe("measure", () => {
       status: "unknown",
       kind: "runtime"
     });
-    expect(results[0].evidence).toContain("runtime/tool-call evidence");
+    expect(results[0].evidence).toContain("runtime/tool-call telemetry");
+  });
+
+  it("marks runtime-only workflow rules followed when telemetry has tool signals", () => {
+    const results = checkCompliance({
+      rules: [
+        { content: "Always use `code-review-graph` before reading files.", score: 1 }
+      ],
+      addedLines: [
+        { file: "src/user.ts", line: 10, content: "const user = await repo.findUser();" }
+      ],
+      runtimeEvidence: {
+        toolSignals: ["code-review-graph.semantic_search_nodes"],
+        commandSignals: [],
+        signals: ["code-review-graph", "semantic_search_nodes"]
+      }
+    });
+
+    expect(results[0]).toMatchObject({
+      status: "followed",
+      kind: "runtime"
+    });
+    expect(results[0].evidence).toContain("runtime telemetry observed code-review-graph");
   });
 
   it("uses readable file content when git diff HEAD is unavailable", () => {

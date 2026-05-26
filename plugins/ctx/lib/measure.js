@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { tokenize } from "./analyzer.js";
+import { findRuntimeEvidence, runtimeKeywordsForRule } from "./telemetry.js";
 
 const COMPLIANCE_STOPWORDS = new Set([
   "always",
@@ -156,24 +157,38 @@ export function parseGitDiff(diff) {
   };
 }
 
-export function checkCompliance({ rules = [], addedLines = [] } = {}) {
+export function checkCompliance({ rules = [], addedLines = [], runtimeEvidence = {} } = {}) {
   const results = [];
 
   for (const rule of rules) {
     const lower = rule.content.toLowerCase();
     const keywords = extractComplianceKeywords(rule.content);
     const isRuntimeOnly = needsRuntimeEvidence(rule.content);
+    const runtimeMatch = isRuntimeOnly ? findRuntimeEvidence(rule, runtimeEvidence) : null;
     const kind = lower.includes("no ") || lower.includes("never") || lower.includes("khong")
       ? "forbidden"
       : "required";
+
+    if (isRuntimeOnly && runtimeMatch) {
+      results.push({
+        rule,
+        status: "followed",
+        kind: "runtime",
+        keywords: [...new Set([...keywords, ...runtimeKeywordsForRule(rule.content)])],
+        evidence: runtimeMatch.evidence
+      });
+      continue;
+    }
 
     if (!keywords.length || !addedLines.length) {
       results.push({
         rule,
         status: "unknown",
-        kind,
+        kind: isRuntimeOnly ? "runtime" : kind,
         keywords,
-        evidence: !addedLines.length ? "no added lines in git diff" : "no concrete compliance keywords found"
+        evidence: isRuntimeOnly
+          ? "requires runtime/tool-call telemetry; no matching runtime signal observed"
+          : (!addedLines.length ? "no added lines in git diff" : "no concrete compliance keywords found")
       });
       continue;
     }
@@ -184,7 +199,7 @@ export function checkCompliance({ rules = [], addedLines = [] } = {}) {
         status: "unknown",
         kind: "runtime",
         keywords,
-        evidence: "requires runtime/tool-call evidence, not git diff evidence"
+        evidence: "requires runtime/tool-call telemetry; no matching runtime signal observed"
       });
       continue;
     }
@@ -235,7 +250,8 @@ export function checkCompliance({ rules = [], addedLines = [] } = {}) {
 }
 
 function needsRuntimeEvidence(content) {
-  return RUNTIME_EVIDENCE_PATTERNS.some((pattern) => pattern.test(content));
+  return RUNTIME_EVIDENCE_PATTERNS.some((pattern) => pattern.test(content))
+    || runtimeKeywordsForRule(content).length > 0;
 }
 
 function findKeywordEvidence(lines, keywords) {

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.2
+
+- Adds local runtime telemetry for hook-visible tool, MCP, and command signals.
+- Uses telemetry evidence in Stop reports so runtime-only rules can be marked `followed` instead of staying `unknown` when matching tool/command signals are observed.
+- Shows runtime telemetry summaries in `ctx report` output.
+
 ## 0.1.1
 
 - Fixes `sql.js` WASM resolution when ContextOS is executed from the published npm package through `npm exec` or `npx`.

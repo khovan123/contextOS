@@ -1,4 +1,4 @@
-export function buildReport({ cwd, prompt, relevantFiles, scheduled, gitSnapshot, compliance }) {
+export function buildReport({ cwd, prompt, relevantFiles, scheduled, gitSnapshot, compliance, runtimeEvidence }) {
   const followed = compliance.filter((item) => item.status === "followed");
   const ignored = compliance.filter((item) => item.status === "ignored");
   const unknown = compliance.filter((item) => item.status === "unknown");
@@ -13,6 +13,7 @@ export function buildReport({ cwd, prompt, relevantFiles, scheduled, gitSnapshot
     relevantFiles,
     changedFiles: gitSnapshot.changedFiles,
     warnings: gitSnapshot.warnings || [],
+    runtimeEvidence: summarizeRuntimeEvidence(runtimeEvidence),
     followed,
     ignored,
     unknown,
@@ -33,6 +34,9 @@ export function formatReport(report) {
 
   if (report.relevantFiles?.length) {
     lines.push(`Suggested files: ${report.relevantFiles.map((file) => file.path).join(", ")}`);
+  }
+  if (report.runtimeEvidence?.signals?.length) {
+    lines.push(`Runtime telemetry: ${report.runtimeEvidence.signals.join(", ")}`);
   }
 
   for (const warning of report.warnings || []) lines.push(`Warning: ${warning}`);
@@ -102,4 +106,16 @@ function appendBucket(lines, label, items = []) {
 function truncate(value, max) {
   const normalized = String(value || "").replace(/\s+/g, " ").trim();
   return normalized.length > max ? `${normalized.slice(0, max - 3)}...` : normalized;
+}
+
+function summarizeRuntimeEvidence(runtimeEvidence = {}) {
+  const signals = [
+    ...(runtimeEvidence.toolSignals || []),
+    ...(runtimeEvidence.commandSignals || []),
+    ...(runtimeEvidence.signals || [])
+  ];
+  return {
+    signals: [...new Set(signals)].slice(0, 20),
+    sources: (runtimeEvidence.sources || []).slice(0, 10)
+  };
 }

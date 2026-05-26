@@ -71,7 +71,7 @@ With ContextOS, each prompt gets a compact block:
   - then, if `.code-review-graph/graph.db` exists, ContextOS queries `code-review-graph` semantic search and re-ranks graph-backed matches;
   - if no graph exists or graph lookup times out, it falls back to local heuristics.
 - Stores scheduled context and hook telemetry under `$CODEX_HOME/contextos`.
-- Reports rule outcomes as `followed`, `ignored`, or `unknown`.
+- Reports rule outcomes as `followed`, `ignored`, or `unknown`, using runtime telemetry for tool/command rules when available.
 - Injects `additionalContext` into Codex by default.
 
 By default, ContextOS runs in injection mode. It adds task-relevant rules and files to the model context so the agent has the right project guidance at the moment it starts working.
@@ -170,7 +170,7 @@ Run at least one Codex task with ContextOS enabled and let the task finish so th
 
 ### `Average efficiency: unknown`
 
-ContextOS only reports efficiency when git diff/status contains concrete evidence. Runtime-only rules, such as tool usage order, are shown as `unknown` unless they leave evidence in changed files.
+ContextOS only reports efficiency when it has concrete evidence. Diff-based rules are measured from git diff/status. Runtime-only rules, such as tool usage order, are measured from local hook telemetry when Codex exposes tool or command metadata. If neither source proves the outcome, the rule remains `unknown`.
 
 ### `npm warn deprecated prebuild-install@7.1.3`
 
@@ -208,6 +208,7 @@ last-prompt-context.json  latest scheduled context
 last-report.json          latest compliance report
 prompt-history.jsonl      prompt scheduling history
 report-history.jsonl      report history
+telemetry.jsonl           local runtime signals from hooks, tools, and commands
 ```
 
 These files are local telemetry only. Hooks do not make network calls.
@@ -263,7 +264,7 @@ Codex prompt
 
 ## Rule Outcomes
 
-ContextOS uses a heuristic diff-based measurement.
+ContextOS uses heuristic evidence collection from git diff/status plus local runtime telemetry.
 
 ```text
 followed = evidence in the diff suggests the rule was applied
@@ -271,7 +272,9 @@ ignored  = evidence in the diff suggests the rule was violated
 unknown  = the rule was relevant, but the diff does not prove either way
 ```
 
-Example `unknown`: a rule says shell commands must run as `minh_dev`, but git diff does not record shell user identity. ContextOS cannot prove the rule was followed from code changes alone.
+For runtime-only rules, ContextOS also checks `telemetry.jsonl` for hook-visible tool names, MCP server names, and command metadata. A rule like "use code-review-graph before reading files" can be marked `followed` when telemetry contains a matching `code-review-graph` signal.
+
+Example `unknown`: a rule says shell commands must run as a specific OS user, but neither git diff nor hook telemetry records that user identity. ContextOS cannot prove the rule was followed from available evidence alone.
 
 ## Development
 
