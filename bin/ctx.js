@@ -14,6 +14,7 @@ import { modelCacheDir, warmRuleEmbeddings } from "../plugins/ctx/lib/embedding-
 import { warmFileEmbeddings } from "../plugins/ctx/lib/file-embedding-retriever.js";
 import { scoreContext } from "../plugins/ctx/lib/score-context.js";
 import { defaultDataRoot, workspaceDataDir, workspaceMarkerPath } from "../plugins/ctx/lib/workspace-data.js";
+import { installMcpTelemetryProxies } from "../plugins/ctx/lib/mcp-proxy-install.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
@@ -101,6 +102,7 @@ async function install({ copy = false, inject = true } = {}) {
   runCodex(["plugin", "marketplace", "add", marketplaceRoot]);
   runCodex(["plugin", "add", "ctx@contextos"]);
   runCodex(["mcp", "add", "ctx-mcp", "--", "node", path.join(marketplaceRoot, "plugins", "ctx", "mcp", "server.js")]);
+  const proxyResult = installMcpTelemetryProxies({ codexHome: codexHome(), marketplaceRoot });
   const hooksPath = installGlobalHooks({ codexHome: codexHome(), marketplaceRoot, injectPromptContext: inject });
 
   console.log("Preparing required local embedding model...");
@@ -109,6 +111,7 @@ async function install({ copy = false, inject = true } = {}) {
   console.log(`Stable marketplace root: ${marketplaceRoot}`);
   console.log(`Installed ContextOS global hooks to ${hooksPath}`);
   console.log("Installed ctx-mcp MCP server.");
+  console.log(`MCP telemetry proxies: ${proxyResult.wrapped.length ? proxyResult.wrapped.map((item) => item.name).join(", ") : "none changed"}`);
   console.log(`Embedding model cache: ${modelCacheDir(contextOSDataDir())}`);
   console.log(`Embedding vectors cache: ${warmResult.cachePath}`);
   console.log(`File path embeddings warmed: ${warmResult.fileCount || 0}`);

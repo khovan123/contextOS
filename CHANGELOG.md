@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.6
+
+- Adds a transparent stdio MCP telemetry proxy that records `tools/call` events while forwarding requests to the original MCP server.
+- `ctx install` now wraps supported local MCP servers, including `code-review-graph` and `agentmemory`, so runtime-only tool rules can be measured from real MCP usage.
+
 ## 0.1.5
 
 - Sanitizes stale Stop reports at display time so previously recorded system-user rules no longer appear in `ctx report` or `ctx evidence` after upgrading.

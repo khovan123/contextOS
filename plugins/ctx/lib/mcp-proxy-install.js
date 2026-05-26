@@ -1,0 +1,118 @@
+import fs from "node:fs";
+import path from "node:path";
+
+const DEFAULT_TARGETS = new Set(["code-review-graph", "agentmemory"]);
+
+export function installMcpTelemetryProxies({ codexHome, marketplaceRoot, targets = DEFAULT_TARGETS } = {}) {
+  const configPath = path.join(codexHome, "config.toml");
+  if (!fs.existsSync(configPath)) return { wrapped: [], skipped: [], configPath };
+
+  const original = fs.readFileSync(configPath, "utf8");
+  const proxyPath = path.join(marketplaceRoot, "plugins", "ctx", "mcp", "proxy.js");
+  const result = rewriteMcpTelemetryProxies(original, { proxyPath, targets });
+  if (result.content !== original) {
+    fs.writeFileSync(configPath, result.content, "utf8");
+  }
+  return { ...result, configPath };
+}
+
+export function rewriteMcpTelemetryProxies(toml, { proxyPath, targets = DEFAULT_TARGETS } = {}) {
+  const lines = String(toml || "").split(/\r?\n/);
+  const sections = findMcpServerSections(lines);
+  const wrapped = [];
+  const skipped = [];
+
+  for (const section of sections.reverse()) {
+    if (!targets.has(section.name)) {
+      skipped.push({ name: section.name, reason: "not-targeted" });
+      continue;
+    }
+
+    const body = lines.slice(section.start + 1, section.end);
+    const command = findStringValue(body, "command");
+    const args = findArrayValue(body, "args") || [];
+    if (!command) {
+      skipped.push({ name: section.name, reason: "missing-command" });
+      continue;
+    }
+    if (command === "node" && args[0] === proxyPath) {
+      skipped.push({ name: section.name, reason: "already-wrapped" });
+      continue;
+    }
+
+    const nextBody = replaceOrInsertServerField(
+      replaceOrInsertServerField(body, "command", tomlString("node")),
+      "args",
+      tomlArray([proxyPath, "--name", section.name, "--", command, ...args])
+    );
+    lines.splice(section.start + 1, section.end - section.start - 1, ...nextBody);
+    wrapped.push({ name: section.name, command, args });
+  }
+
+  return { content: lines.join("\n"), wrapped: wrapped.reverse(), skipped: skipped.reverse() };
+}
+
+function findMcpServerSections(lines) {
+  const sections = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const match = lines[index].match(/^\[mcp_servers\.([^\].]+)\]\s*$/);
+    if (!match) continue;
+    let end = lines.length;
+    for (let cursor = index + 1; cursor < lines.length; cursor += 1) {
+      if (/^\[/.test(lines[cursor])) {
+        end = cursor;
+        break;
+      }
+    }
+    sections.push({ name: unquoteTomlKey(match[1]), start: index, end });
+  }
+  return sections;
+}
+
+function replaceOrInsertServerField(body, key, value) {
+  const next = [...body];
+  const index = next.findIndex((line) => new RegExp(`^\\s*${escapeRegExp(key)}\\s*=`).test(line));
+  const line = `${key} = ${value}`;
+  if (index >= 0) next[index] = line;
+  else next.unshift(line);
+  return next;
+}
+
+function findStringValue(lines, key) {
+  const line = lines.find((item) => new RegExp(`^\\s*${escapeRegExp(key)}\\s*=`).test(item));
+  if (!line) return null;
+  const match = line.match(/=\s*"((?:\\.|[^"\\])*)"/);
+  return match ? unescapeTomlString(match[1]) : null;
+}
+
+function findArrayValue(lines, key) {
+  const line = lines.find((item) => new RegExp(`^\\s*${escapeRegExp(key)}\\s*=`).test(item));
+  if (!line) return null;
+  const arrayMatch = line.match(/=\s*\[(.*)\]\s*$/);
+  if (!arrayMatch) return null;
+  const values = [];
+  const pattern = /"((?:\\.|[^"\\])*)"/g;
+  let match;
+  while ((match = pattern.exec(arrayMatch[1]))) values.push(unescapeTomlString(match[1]));
+  return values;
+}
+
+function tomlArray(values) {
+  return `[${values.map(tomlString).join(", ")}]`;
+}
+
+function tomlString(value) {
+  return `"${String(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+function unescapeTomlString(value) {
+  return String(value).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+}
+
+function unquoteTomlKey(value) {
+  return value.replace(/^"|"$/g, "");
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
