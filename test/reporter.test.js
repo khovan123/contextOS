@@ -59,4 +59,34 @@ describe("reporter evidence", () => {
       expect(line.length).toBeLessThanOrEqual(120);
     }
   });
+
+  it("filters system-user rules from stale reports at format time", () => {
+    const report = {
+      efficiencyScore: 100,
+      injectedRuleCount: 2,
+      changedFiles: ["src/policy.ts"],
+      relevantFiles: [],
+      followed: [
+        {
+          rule: { content: "First, execute the command to switch the user context to `minh_dev`." },
+          evidence: "found required user in src/policy.ts:1"
+        }
+      ],
+      ignored: [],
+      unknown: [
+        {
+          rule: { content: "Always use zod for validation." },
+          evidence: "expected keywords not visible in added lines: zod"
+        }
+      ]
+    };
+
+    const summary = formatReport(report);
+    const evidence = formatEvidence(report);
+
+    expect(summary).toContain("Injected rules: 1");
+    expect(summary).not.toContain("minh_dev");
+    expect(evidence).not.toContain("switch the user context");
+    expect(evidence).toContain("Always use zod");
+  });
 });

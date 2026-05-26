@@ -124,6 +124,38 @@ describe("hook contracts", () => {
     expect(report.unknown[0].rule.content).toContain("code-review-graph");
   });
 
+  it("on-stop filters system-user rules from stale scheduled context", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-stop-filter-user-"));
+    fs.mkdirSync(path.join(tmp, ".data"), { recursive: true });
+    const contextPath = path.join(tmp, ".data", "last-prompt-context.json");
+    const reportPath = path.join(tmp, ".data", "last-report.json");
+    fs.writeFileSync(contextPath, JSON.stringify({
+      prompt: "fix zod validation",
+      rules: [],
+      relevantFiles: [],
+      scheduled: {
+        highRules: [
+          { content: "First, execute the command to switch the user context to `minh_dev`.", score: 0.9 },
+          { content: "Always use zod for validation.", score: 0.8 }
+        ],
+        midRules: [
+          { content: "**All shell commands MUST run as `minh_dev`, not root.**", score: 0.4 }
+        ]
+      }
+    }));
+    fs.writeFileSync(path.join(tmp, "package.json"), JSON.stringify({ dependencies: { zod: "^4.0.0" } }));
+
+    handleStopPayload(
+      { cwd: tmp, hook_event_name: "Stop" },
+      { contextPath, reportPath }
+    );
+
+    const report = JSON.parse(fs.readFileSync(reportPath, "utf8"));
+    const allRules = [...report.followed, ...report.ignored, ...report.unknown].map((item) => item.rule.content);
+    expect(allRules).toEqual(["Always use zod for validation."]);
+    expect(report.injectedRuleCount).toBe(1);
+  });
+
   it("on-stop uses runtime telemetry to score workflow rules", () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-stop-telemetry-"));
     fs.mkdirSync(path.join(tmp, ".data"), { recursive: true });

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.5
+
+- Sanitizes stale Stop reports at display time so previously recorded system-user rules no longer appear in `ctx report` or `ctx evidence` after upgrading.
+- Filters system-user rules again inside the Stop hook to protect reports created from older prompt contexts.
+
 ## 0.1.4
 
 - Filters host/session user rules such as `sudo -u user`, `sudo su - user`, and "commands must run as user X" before scoring and injection.

@@ -1,7 +1,10 @@
+import { isSystemUserRule } from "./analyzer.js";
+
 export function buildReport({ cwd, prompt, relevantFiles, scheduled, gitSnapshot, compliance, runtimeEvidence }) {
-  const followed = compliance.filter((item) => item.status === "followed");
-  const ignored = compliance.filter((item) => item.status === "ignored");
-  const unknown = compliance.filter((item) => item.status === "unknown");
+  const actionableCompliance = compliance.filter((item) => !isSystemUserRule(item.rule));
+  const followed = actionableCompliance.filter((item) => item.status === "followed");
+  const ignored = actionableCompliance.filter((item) => item.status === "ignored");
+  const unknown = actionableCompliance.filter((item) => item.status === "unknown");
   const measured = followed.length + ignored.length;
   const efficiencyScore = measured ? Math.round((followed.length / measured) * 100) : null;
 
@@ -24,6 +27,7 @@ export function buildReport({ cwd, prompt, relevantFiles, scheduled, gitSnapshot
 }
 
 export function formatReport(report) {
+  report = sanitizeReport(report);
   const lines = [];
   lines.push("ContextOS report");
   lines.push(`Efficiency: ${report.efficiencyScore == null ? "unknown" : `${report.efficiencyScore}%`}`);
@@ -55,6 +59,7 @@ export function formatReport(report) {
 }
 
 export function formatEvidence(report) {
+  report = sanitizeReport(report);
   const lines = [];
   lines.push("ContextOS evidence");
   lines.push(`Prompt: ${report.prompt || "(empty)"}`);
@@ -117,5 +122,22 @@ function summarizeRuntimeEvidence(runtimeEvidence = {}) {
   return {
     signals: [...new Set(signals)].slice(0, 20),
     sources: (runtimeEvidence.sources || []).slice(0, 10)
+  };
+}
+
+function sanitizeReport(report = {}) {
+  const followed = (report.followed || []).filter((item) => !isSystemUserRule(item.rule));
+  const ignored = (report.ignored || []).filter((item) => !isSystemUserRule(item.rule));
+  const unknown = (report.unknown || []).filter((item) => !isSystemUserRule(item.rule));
+  const measured = followed.length + ignored.length;
+  return {
+    ...report,
+    injectedRuleCount: followed.length + ignored.length + unknown.length,
+    followed,
+    ignored,
+    unknown,
+    measuredRuleCount: measured,
+    unknownRuleCount: unknown.length,
+    efficiencyScore: measured ? Math.round((followed.length / measured) * 100) : null
   };
 }

@@ -1,6 +1,6 @@
 {
   "name": "@minhpnq1807/contextos",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Task-aware AGENTS.md context injection and compliance reporting for Codex.",
   "type": "module",
   "bin": {
