@@ -62,6 +62,25 @@ const SYSTEM_USER_RULE_PATTERNS = [
   /\bminh_dev\b/i
 ];
 
+const DOCUMENTATION_HEADING_PATTERNS = [
+  /^mcp\s+tools?\s*:/i,
+  /^key\s+tools?$/i,
+  /^workflow$/i,
+  /^tools?$/i
+];
+
+const TOOL_REFERENCE_TOKENS = new Set([
+  "detect_changes",
+  "get_review_context",
+  "get_impact_radius",
+  "get_affected_flows",
+  "query_graph",
+  "semantic_search_nodes",
+  "get_architecture_overview",
+  "refactor_tool",
+  "list_communities"
+]);
+
 export function tokenize(value) {
   const normalized = String(value || "")
     .toLowerCase()
@@ -155,12 +174,39 @@ export function parseRules(markdown) {
 export function filterActionableRules(rules = []) {
   return rules
     .filter((rule) => !isSystemUserRule(rule))
+    .filter((rule) => !isDocumentationOnlyRule(rule))
     .map((rule, index) => ({ ...rule, id: `r${index + 1}`, originalOrder: index }));
 }
 
 export function isSystemUserRule(rule) {
   const content = typeof rule === "string" ? rule : rule?.content;
   return SYSTEM_USER_RULE_PATTERNS.some((pattern) => pattern.test(String(content || "")));
+}
+
+export function isDocumentationOnlyRule(rule) {
+  const content = String(typeof rule === "string" ? rule : rule?.content || "").trim();
+  const normalized = stripMarkdownEmphasis(content);
+  if (!normalized) return true;
+  if (/^<!--.*-->$/.test(normalized)) return true;
+  if (DOCUMENTATION_HEADING_PATTERNS.some((pattern) => pattern.test(normalized))) return true;
+  if (isMarkdownTableRule(normalized)) return true;
+  return false;
+}
+
+function stripMarkdownEmphasis(content) {
+  return String(content || "")
+    .replace(/^#+\s+/, "")
+    .replace(/^\*\*(.*)\*\*$/, "$1")
+    .trim();
+}
+
+function isMarkdownTableRule(content) {
+  if (!content.includes("|")) return false;
+  const pipeCount = (content.match(/\|/g) || []).length;
+  if (pipeCount < 4) return false;
+  const lower = content.toLowerCase();
+  const toolReferenceCount = [...TOOL_REFERENCE_TOKENS].filter((token) => lower.includes(token)).length;
+  return /\btool\b/.test(lower) && /\buse\s+when\b/.test(lower) && toolReferenceCount >= 2;
 }
 
 function dedupeRules(rules) {

@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { filterActionableRules, findRelevantFiles, isSystemUserRule, parseRules, scoreRules } from "../plugins/ctx/lib/analyzer.js";
+import { filterActionableRules, findRelevantFiles, isDocumentationOnlyRule, isSystemUserRule, parseRules, scoreRules } from "../plugins/ctx/lib/analyzer.js";
 import { buildGraphQueries, mergeRelevantFiles } from "../plugins/ctx/lib/graph-retriever.js";
 
 describe("analyzer", () => {
@@ -50,6 +50,25 @@ Plain paragraph with enough content to become a standalone rule.
     expect(isSystemUserRule("sudo -i -u minh_dev")).toBe(true);
     expect(filterActionableRules(rules).map((rule) => rule.content)).toEqual([
       "Always use zod for validation."
+    ]);
+  });
+
+  it("filters documentation-only headings and tool reference tables", () => {
+    const rules = parseRules(`## Source: /repo/AGENTS.md
+# MCP Tools: code-review-graph
+- <!-- code-review-graph MCP tools -->
+- Key Tools
+- Workflow
+- | Tool | Use when | |------|----------| | \`detect_changes\` | Reviewing code changes | | \`query_graph\` | Tracing relationships |
+- Use \`detect_changes\` for code review.
+- **Exploring code**: \`semantic_search_nodes\` or \`query_graph\` instead of Grep
+`);
+
+    expect(isDocumentationOnlyRule("MCP Tools: code-review-graph")).toBe(true);
+    expect(isDocumentationOnlyRule("Use `detect_changes` for code review.")).toBe(false);
+    expect(filterActionableRules(rules).map((rule) => rule.content)).toEqual([
+      "Use `detect_changes` for code review.",
+      "**Exploring code**: `semantic_search_nodes` or `query_graph` instead of Grep"
     ]);
   });
 

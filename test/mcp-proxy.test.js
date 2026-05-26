@@ -11,7 +11,7 @@ describe("mcp proxy", () => {
     const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-proxy-cwd-"));
     const dataRoot = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-proxy-data-"));
     const childCode = [
-      "process.stdin.on('data', c => process.stdout.write(c));"
+      "process.stdin.once('data', c => { process.stdout.write(c); process.exit(0); });"
     ].join("");
     const proxy = spawn(process.execPath, [
       proxyPath,
@@ -48,19 +48,27 @@ function writeAndCollect(child, input) {
   return new Promise((resolve, reject) => {
     let stdout = "";
     let stderr = "";
+    const timer = setTimeout(() => {
+      child.kill();
+      reject(new Error(`proxy timed out: ${stderr}`));
+    }, 2000);
+    const finish = (callback, value) => {
+      clearTimeout(timer);
+      child.kill();
+      callback(value);
+    };
     child.stdout.on("data", (chunk) => {
       stdout += chunk.toString("utf8");
       if (stdout.includes("\n")) {
-        child.kill();
-        resolve(stdout);
+        finish(resolve, stdout);
       }
     });
     child.stderr.on("data", (chunk) => {
       stderr += chunk.toString("utf8");
     });
-    child.on("error", reject);
+    child.on("error", (error) => finish(reject, error));
     child.on("exit", (code) => {
-      if (!stdout) reject(new Error(`proxy exited ${code}: ${stderr}`));
+      if (!stdout) finish(reject, new Error(`proxy exited ${code}: ${stderr}`));
     });
     child.stdin.write(input);
   });

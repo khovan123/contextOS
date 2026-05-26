@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.7
+
+- Filters documentation-only AGENTS entries such as MCP tool headings, HTML comments, generic "Key Tools" headings, and tool reference tables before scoring.
+- Keeps actionable tool instructions, for example `Use detect_changes for code review`, measurable through MCP telemetry.
+
 ## 0.1.6
 
 - Adds a transparent stdio MCP telemetry proxy that records `tools/call` events while forwarding requests to the original MCP server.
