@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.8
+
+- Limits automatic MCP telemetry wrapping to `code-review-graph` only.
+- Restores older ContextOS proxy wrappers on non-target MCP servers such as `agentmemory`.
+- Skips RTK-managed MCP commands instead of replacing their command entry with the ContextOS proxy.
+
 ## 0.1.7
 
 - Filters documentation-only AGENTS entries such as MCP tool headings, HTML comments, generic "Key Tools" headings, and tool reference tables before scoring.

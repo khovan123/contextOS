@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const DEFAULT_TARGETS = new Set(["code-review-graph", "agentmemory"]);
+const DEFAULT_TARGETS = new Set(["code-review-graph"]);
 
 export function installMcpTelemetryProxies({ codexHome, marketplaceRoot, targets = DEFAULT_TARGETS } = {}) {
   const configPath = path.join(codexHome, "config.toml");
@@ -23,20 +23,39 @@ export function rewriteMcpTelemetryProxies(toml, { proxyPath, targets = DEFAULT_
   const skipped = [];
 
   for (const section of sections.reverse()) {
+    const body = lines.slice(section.start + 1, section.end);
+    const command = findStringValue(body, "command");
+    const args = findArrayValue(body, "args") || [];
+
+    if (command === "node" && args[0] === proxyPath && !targets.has(section.name)) {
+      const original = unwrapProxyArgs(args);
+      if (original) {
+        const nextBody = replaceOrInsertServerField(
+          replaceOrInsertServerField(body, "command", tomlString(original.command)),
+          "args",
+          tomlArray(original.args)
+        );
+        lines.splice(section.start + 1, section.end - section.start - 1, ...nextBody);
+        skipped.push({ name: section.name, reason: "unwrapped-non-target" });
+        continue;
+      }
+    }
+
     if (!targets.has(section.name)) {
       skipped.push({ name: section.name, reason: "not-targeted" });
       continue;
     }
 
-    const body = lines.slice(section.start + 1, section.end);
-    const command = findStringValue(body, "command");
-    const args = findArrayValue(body, "args") || [];
     if (!command) {
       skipped.push({ name: section.name, reason: "missing-command" });
       continue;
     }
     if (command === "node" && args[0] === proxyPath) {
       skipped.push({ name: section.name, reason: "already-wrapped" });
+      continue;
+    }
+    if (command === "rtk") {
+      skipped.push({ name: section.name, reason: "rtk-managed" });
       continue;
     }
 
@@ -50,6 +69,15 @@ export function rewriteMcpTelemetryProxies(toml, { proxyPath, targets = DEFAULT_
   }
 
   return { content: lines.join("\n"), wrapped: wrapped.reverse(), skipped: skipped.reverse() };
+}
+
+function unwrapProxyArgs(args) {
+  const separator = args.indexOf("--");
+  if (separator < 0 || separator >= args.length - 1) return null;
+  return {
+    command: args[separator + 1],
+    args: args.slice(separator + 2)
+  };
 }
 
 function findMcpServerSections(lines) {
