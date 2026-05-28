@@ -12,7 +12,7 @@ describe("stats", () => {
     appendJsonLine(path.join(tmp, "debug.log"), { event: "UserPromptSubmit" });
     appendJsonLine(path.join(tmp, "debug.log"), { event: "Stop" });
     appendJsonLine(path.join(tmp, "prompt-history.jsonl"), {
-      prompt: "fix auth validation",
+      prompt: "Recheck authen flow",
       elapsedMs: 12,
       injected: true,
       relevantFiles: [{ path: "src/auth.ts" }],

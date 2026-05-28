@@ -30,7 +30,7 @@ Plain paragraph with enough content to become a standalone rule.
 - Always use auth guards for login endpoints.
 - Prefer CSS modules for styling.
 `);
-    const scored = scoreRules(rules, "fix auth login bug", []);
+    const scored = scoreRules(rules, "Recheck authen flow", []);
 
     expect(scored[0].content).toContain("auth guards");
     expect(scored[0].score).toBeGreaterThan(0.5);
@@ -81,7 +81,7 @@ Plain paragraph with enough content to become a standalone rule.
     fs.writeFileSync(path.join(tmp, "src", "style.css"), "");
     fs.writeFileSync(path.join(tmp, "node_modules", "auth", "ignored.ts"), "");
 
-    const files = await findRelevantFiles({ cwd: tmp, task: "fix auth login", limit: 3 });
+    const files = await findRelevantFiles({ cwd: tmp, task: "Recheck authen flow", limit: 3 });
 
     expect(files[0].path).toBe(path.join("src", "auth", "login.ts"));
     expect(files.map((file) => file.path)).not.toContain(path.join("node_modules", "auth", "ignored.ts"));

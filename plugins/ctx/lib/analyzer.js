@@ -43,7 +43,10 @@ const SEMANTIC_ALIASES = {
   thong: ["notification", "notify", "message"],
   bao: ["notification", "notify", "message"],
   "thong-bao": ["notification", "notify", "message"],
-  thongbao: ["notification", "notify", "message"]
+  thongbao: ["notification", "notify", "message"],
+  authen: ["auth", "authentication", "login"],
+  authentication: ["auth", "authen", "login"],
+  recheck: ["check", "verify", "review"]
 };
 
 const MODERATION_TOKENS = new Set(["moderation", "moderate", "content-moderation", "approval", "approved", "reject", "rejected", "needs_review"]);

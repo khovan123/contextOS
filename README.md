@@ -331,7 +331,7 @@ npm pack --dry-run
 Smoke test prompt hook:
 
 ```bash
-printf '%s' '{"prompt":"fix auth validation","cwd":"'$PWD'","hook_event_name":"UserPromptSubmit"}' \
+printf '%s' '{"prompt":"Recheck authen flow","cwd":"'$PWD'","hook_event_name":"UserPromptSubmit"}' \
   | node plugins/ctx/bin/on-prompt.js
 ```
 

@@ -5,7 +5,7 @@ import { formatEvidence, formatReport } from "../plugins/ctx/lib/reporter.js";
 describe("reporter evidence", () => {
   it("formats detailed rule evidence", () => {
     const output = formatEvidence({
-      prompt: "fix auth",
+      prompt: "Recheck authen flow",
       efficiencyScore: 50,
       changedFiles: ["src/auth.ts"],
       warnings: ["diff partial"],

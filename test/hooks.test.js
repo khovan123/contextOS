@@ -80,7 +80,7 @@ describe("hook contracts", () => {
     const contextPath = path.join(tmp, ".data", "last-prompt-context.json");
     const reportPath = path.join(tmp, ".data", "last-report.json");
     fs.writeFileSync(contextPath, JSON.stringify({
-      prompt: "fix auth",
+      prompt: "Recheck authen flow",
       rules: [{ content: "Always use auth guards.", score: 1 }],
       relevantFiles: [],
       scheduled: { highRules: [{ content: "Always use auth guards.", score: 1 }], midRules: [] }

@@ -5,7 +5,7 @@ import { benchmarkContext, formatBenchmark } from "../plugins/ctx/lib/benchmark.
 describe("benchmark", () => {
   it("compares baseline middle placement with ContextOS scheduling", () => {
     const result = benchmarkContext({
-      task: "fix auth login",
+      task: "Recheck authen flow",
       markdown: `## Source: /repo/AGENTS.md
 - Prefer CSS modules for styling.
 - Use compact UI spacing.
