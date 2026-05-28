@@ -1,4 +1,5 @@
 import { isSystemUserRule } from "./analyzer.js";
+import { section, table, truncateCell } from "./terminal-ui.js";
 
 export function buildReport({ cwd, prompt, relevantFiles, scheduled, gitSnapshot, compliance, runtimeEvidence }) {
   const actionableCompliance = compliance.filter((item) => !isSystemUserRule(item.rule));
@@ -33,17 +34,33 @@ export function formatReport(report) {
   report = sanitizeReport(report);
   const lines = [];
   lines.push("ContextOS report");
-  lines.push(`Efficiency: ${report.efficiencyScore == null ? "unknown" : `${report.efficiencyScore}%`}`);
-  lines.push(`Injected rules: ${report.injectedRuleCount || 0}`);
-  lines.push(`Rule outcomes: ${report.followed?.length || 0} followed, ${report.ignored?.length || 0} ignored, ${report.unknown?.length || 0} unknown, ${report.unmeasurable?.length || 0} unmeasurable`);
-  lines.push(`Measured rules: ${report.measuredRuleCount ?? ((report.followed?.length || 0) + (report.ignored?.length || 0))}`);
-  lines.push(`Changed files: ${report.changedFiles?.length ? report.changedFiles.join(", ") : "none detected"}`);
+  lines.push(section("Summary"));
+  lines.push(table(["Metric", "Value"], [
+    ["Efficiency", report.efficiencyScore == null ? "unknown" : `${report.efficiencyScore}%`],
+    ["Injected rules", report.injectedRuleCount || 0],
+    ["Measured rules", report.measuredRuleCount ?? ((report.followed?.length || 0) + (report.ignored?.length || 0))],
+    ["Changed files", report.changedFiles?.length ? report.changedFiles.length : "none detected"]
+  ]));
+
+  lines.push(section("Rule Outcomes"));
+  lines.push(table(["Status", "Count"], [
+    ["followed", report.followed?.length || 0],
+    ["ignored", report.ignored?.length || 0],
+    ["unknown", report.unknown?.length || 0],
+    ["unmeasurable", report.unmeasurable?.length || 0]
+  ]));
 
   if (report.relevantFiles?.length) {
-    lines.push(`Suggested files: ${report.relevantFiles.map((file) => file.path).join(", ")}`);
+    lines.push(section("Suggested Files"));
+    lines.push(table(["#", "Path", "Score"], report.relevantFiles.slice(0, 10).map((file, index) => [
+      index + 1,
+      truncateCell(file.path, 90),
+      typeof file.score === "number" ? file.score.toFixed(2) : ""
+    ])));
   }
   if (report.runtimeEvidence?.signals?.length) {
-    lines.push(`Runtime telemetry: ${report.runtimeEvidence.signals.join(", ")}`);
+    lines.push(section("Runtime Telemetry"));
+    lines.push(table(["#", "Signal"], report.runtimeEvidence.signals.map((signal, index) => [index + 1, signal])));
   }
 
   for (const warning of report.warnings || []) lines.push(`Warning: ${warning}`);
@@ -66,9 +83,12 @@ export function formatEvidence(report) {
   report = sanitizeReport(report);
   const lines = [];
   lines.push("ContextOS evidence");
-  lines.push(`Prompt: ${report.prompt || "(empty)"}`);
-  lines.push(`Efficiency: ${report.efficiencyScore == null ? "unknown" : `${report.efficiencyScore}%`}`);
-  lines.push(`Changed files: ${report.changedFiles?.length ? report.changedFiles.join(", ") : "none detected"}`);
+  lines.push(section("Summary"));
+  lines.push(table(["Field", "Value"], [
+    ["Prompt", truncateCell(report.prompt || "(empty)", 100)],
+    ["Efficiency", report.efficiencyScore == null ? "unknown" : `${report.efficiencyScore}%`],
+    ["Changed files", report.changedFiles?.length ? report.changedFiles.join(", ") : "none detected"]
+  ]));
 
   for (const warning of report.warnings || []) lines.push(`Warning: ${warning}`);
 
@@ -85,15 +105,26 @@ export function formatEvidence(report) {
     return lines.join("\n");
   }
 
+  lines.push(section("Evidence Table"));
+  lines.push(table(["#", "Status", "Score", "Kind", "Rule", "Evidence"], items.map((item, index) => [
+    index + 1,
+    item.status.toUpperCase(),
+    typeof item.rule?.score === "number" ? item.rule.score.toFixed(2) : "",
+    item.kind || "",
+    truncateCell(item.rule?.content || "(missing rule)", 46),
+    truncateCell(item.evidence || "(none)", 58)
+  ])));
+
   items.forEach((item, index) => {
-    lines.push("");
-    lines.push(`${index + 1}. ${item.status.toUpperCase()}`);
-    lines.push(`Rule: ${item.rule?.content || "(missing rule)"}`);
-    if (item.rule?.sourcePath) lines.push(`Source: ${item.rule.sourcePath}`);
-    if (typeof item.rule?.score === "number") lines.push(`Score: ${item.rule.score.toFixed(2)}`);
-    if (item.kind) lines.push(`Kind: ${item.kind}`);
-    if (item.keywords?.length) lines.push(`Keywords: ${item.keywords.join(", ")}`);
-    lines.push(`Evidence: ${item.evidence || "(none)"}`);
+    lines.push(section(`${index + 1}. ${item.status.toUpperCase()}`));
+    lines.push(table(["Field", "Value"], [
+      ["Rule", truncateCell(item.rule?.content || "(missing rule)", 120)],
+      ["Source", item.rule?.sourcePath || ""],
+      ["Score", typeof item.rule?.score === "number" ? item.rule.score.toFixed(2) : ""],
+      ["Kind", item.kind || ""],
+      ["Keywords", item.keywords?.length ? truncateCell(item.keywords.join(", "), 120) : ""],
+      ["Evidence", truncateCell(item.evidence || "(none)", 120)]
+    ].filter(([, value]) => value !== "")));
     for (const line of item.matchedLines || []) {
       const where = line.file ? `${line.file}${typeof line.line === "number" ? `:${line.line}` : ""}` : "diff";
       lines.push(`Matched line: ${where} ${truncate(line.content || "", 140)}`);

@@ -99,7 +99,7 @@ describe("hook contracts", () => {
     expect(output).not.toHaveProperty("message");
     expect(output).not.toHaveProperty("hookSpecificOutput");
     expect(output.systemMessage).toContain("ContextOS report");
-    expect(output.systemMessage).toContain("Rule outcomes:");
+    expect(output.systemMessage).toContain("Rule Outcomes");
     expect(fs.existsSync(reportPath)).toBe(true);
   });
 
@@ -194,7 +194,8 @@ describe("hook contracts", () => {
     expect(report.followed).toHaveLength(1);
     expect(report.followed[0]).toMatchObject({ kind: "runtime" });
     expect(report.followed[0].evidence).toContain("runtime telemetry observed code-review-graph");
-    expect(output.systemMessage).toContain("Runtime telemetry: code-review-graph.semantic_search_nodes");
+    expect(output.systemMessage).toContain("Runtime Telemetry");
+    expect(output.systemMessage).toContain("code-review-graph.semantic_search_nodes");
   });
 
   it("keeps diagnostic writes best-effort when data dir is not writable", () => {

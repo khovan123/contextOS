@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.9
+
+- Formats `ctx report`, `ctx evidence`, `ctx stats`, and `ctx benchmark` with sectioned terminal tables for easier scanning and analysis.
+- Adds a small shared terminal table formatter used by report, evidence, stats, and benchmark output.
+
 ## 0.5.8
 
 - Adds explicit `ctx setup` interactive onboarding for installing agents, enabling injection, syncing Ruler rules/MCP servers, and syncing skills through skillshare.

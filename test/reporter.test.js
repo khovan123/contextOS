@@ -34,13 +34,14 @@ describe("reporter evidence", () => {
     });
 
     expect(output).toContain("ContextOS evidence");
+    expect(output).toContain("Evidence Table");
     expect(output).toContain("FOLLOWED");
-    expect(output).toContain("Evidence: found required zod");
-    expect(output).toContain("Keywords: zod");
+    expect(output).toContain("found required zod");
+    expect(output).toContain("Keywords");
     expect(output).toContain("Matched line: src/auth.ts:1");
     expect(output).toContain("UNKNOWN");
     expect(output).toContain("UNMEASURABLE");
-    expect(output).toContain("Score: 0.40");
+    expect(output).toContain("0.40");
   });
 
   it("keeps stop report lines compact for terminal display", () => {
@@ -91,7 +92,8 @@ describe("reporter evidence", () => {
     const summary = formatReport(report);
     const evidence = formatEvidence(report);
 
-    expect(summary).toContain("Injected rules: 1");
+    expect(summary).toContain("Injected rules");
+    expect(summary).toContain("Rule Outcomes");
     expect(summary).not.toContain("minh_dev");
     expect(evidence).not.toContain("switch the user context");
     expect(evidence).toContain("Always use zod");

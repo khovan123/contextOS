@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { safeReadText } from "./fs-utils.js";
+import { section, table, truncateCell } from "./terminal-ui.js";
 
 function readJsonLines(filePath) {
   return safeReadText(filePath)
@@ -81,33 +82,47 @@ export function loadStats(dataDir) {
 export function formatStats(stats) {
   const lines = [];
   lines.push("ContextOS stats");
-  lines.push(`Data dir: ${stats.dataDir}`);
-  lines.push(`Prompts analyzed: ${stats.promptCount}`);
-  lines.push(`Reports generated: ${stats.reportCount}`);
-  lines.push(`Prompt mode: ${stats.injectedCount} injected, ${stats.quietCount} quiet (${stats.injectionRate}% injected)`);
-  lines.push(`Average prompt analysis: ${stats.averagePromptMs == null ? "unknown" : `${stats.averagePromptMs}ms`}`);
-  lines.push(`Average efficiency: ${formatAverageEfficiency(stats)}`);
-  lines.push(`Rule outcomes: ${stats.followed} followed, ${stats.ignored} ignored, ${stats.unknown} unknown, ${stats.unmeasurable || 0} unmeasurable`);
+  lines.push(section("Summary"));
+  lines.push(table(["Metric", "Value"], [
+    ["Data dir", stats.dataDir],
+    ["Prompts analyzed", stats.promptCount],
+    ["Reports generated", stats.reportCount],
+    ["Prompt mode", `${stats.injectedCount} injected, ${stats.quietCount} quiet (${stats.injectionRate}% injected)`],
+    ["Average prompt analysis", stats.averagePromptMs == null ? "unknown" : `${stats.averagePromptMs}ms`],
+    ["Average efficiency", formatAverageEfficiency(stats)]
+  ]));
 
-  const eventSummary = Object.entries(stats.events)
-    .map(([event, count]) => `${event}:${count}`)
-    .join(", ");
-  lines.push(`Hook events: ${eventSummary || "none"}`);
+  lines.push(section("Rule Outcomes"));
+  lines.push(table(["Status", "Count"], [
+    ["followed", stats.followed],
+    ["ignored", stats.ignored],
+    ["unknown", stats.unknown],
+    ["unmeasurable", stats.unmeasurable || 0]
+  ]));
+
+  lines.push(section("Hook Events"));
+  lines.push(Object.keys(stats.events).length
+    ? table(["Event", "Count"], Object.entries(stats.events))
+    : "none");
 
   if (stats.lastPrompt) {
-    lines.push(`Last prompt: ${truncateLine(stats.lastPrompt.prompt || "", 100) || "(empty)"}`);
-    lines.push(`Last scheduled rules: ${scheduledRuleCount(stats.lastPrompt)}`);
-    const files = (stats.lastPrompt.relevantFiles || []).map((file) => file.path).join(", ");
-    if (files) lines.push(`Last suggested files: ${files}`);
+    lines.push(section("Last Prompt"));
+    lines.push(table(["Field", "Value"], [
+      ["Prompt", truncateCell(stats.lastPrompt.prompt || "(empty)", 100)],
+      ["Scheduled rules", scheduledRuleCount(stats.lastPrompt)],
+      ["Suggested files", (stats.lastPrompt.relevantFiles || []).map((file) => file.path).join(", ") || "none"]
+    ]));
   }
 
   if (stats.lastReport) {
-    lines.push(`Last report efficiency: ${stats.lastReport.efficiencyScore == null ? "unknown" : `${stats.lastReport.efficiencyScore}%`}`);
-    lines.push(`Last report measured rules: ${stats.lastReport.measuredRuleCount ?? ((stats.lastReport.followed?.length || 0) + (stats.lastReport.ignored?.length || 0))}`);
-    lines.push(`Last report unknown rules: ${stats.lastReport.unknownRuleCount ?? (stats.lastReport.unknown?.length || 0)}`);
-    lines.push(`Last report unmeasurable rules: ${stats.lastReport.unmeasurableRuleCount ?? (stats.lastReport.unmeasurable?.length || 0)}`);
-    const changed = stats.lastReport.changedFiles?.join(", ");
-    if (changed) lines.push(`Last changed files: ${changed}`);
+    lines.push(section("Last Report"));
+    lines.push(table(["Metric", "Value"], [
+      ["Efficiency", stats.lastReport.efficiencyScore == null ? "unknown" : `${stats.lastReport.efficiencyScore}%`],
+      ["Measured rules", stats.lastReport.measuredRuleCount ?? ((stats.lastReport.followed?.length || 0) + (stats.lastReport.ignored?.length || 0))],
+      ["Unknown rules", stats.lastReport.unknownRuleCount ?? (stats.lastReport.unknown?.length || 0)],
+      ["Unmeasurable rules", stats.lastReport.unmeasurableRuleCount ?? (stats.lastReport.unmeasurable?.length || 0)],
+      ["Changed files", stats.lastReport.changedFiles?.join(", ") || "none"]
+    ]));
   }
 
   return lines.join("\n");
@@ -122,9 +137,4 @@ function formatAverageEfficiency(stats) {
 
 function scheduledRuleCount(prompt) {
   return (prompt.scheduled?.highRules?.length || 0) + (prompt.scheduled?.midRules?.length || 0);
-}
-
-function truncateLine(value, max) {
-  const normalized = String(value).replace(/\s+/g, " ").trim();
-  return normalized.length > max ? `${normalized.slice(0, max - 3)}...` : normalized;
 }

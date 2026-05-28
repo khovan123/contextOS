@@ -21,5 +21,6 @@ describe("benchmark", () => {
     expect(result.baseline.relevantRulesInMiddle).toBeGreaterThan(0);
     expect(result.contextOS.highRules).toBeGreaterThan(0);
     expect(formatBenchmark(result)).toContain("Baseline middle-risk");
+    expect(formatBenchmark(result)).toContain("Top Rules");
   });
 });

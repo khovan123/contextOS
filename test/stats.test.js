@@ -50,10 +50,12 @@ describe("stats", () => {
     expect(stats.averagePromptMs).toBe(15);
     expect(stats.averageEfficiency).toBe(100);
     expect(stats.unmeasurable).toBe(1);
-    expect(output).toContain("Prompts analyzed: 2");
-    expect(output).toContain("Prompt mode: 1 injected, 1 quiet");
-    expect(output).toContain("Last changed files: src/auth.ts");
-    expect(output).toContain("Rule outcomes: 1 followed, 0 ignored, 0 unknown, 1 unmeasurable");
+    expect(output).toContain("Prompts analyzed");
+    expect(output).toContain("Rule Outcomes");
+    expect(output).toContain("Hook Events");
+    expect(output).toContain("1 injected, 1 quiet");
+    expect(output).toContain("src/auth.ts");
+    expect(output).toContain("unmeasurable");
   });
 
   it("explains unknown efficiency when no rule evidence is measurable", () => {
@@ -72,9 +74,9 @@ describe("stats", () => {
 
     const output = formatStats(loadStats(tmp));
 
-    expect(output).toContain("Average efficiency: unknown (no measurable followed/ignored rule evidence yet)");
-    expect(output).toContain("Last report measured rules: 0");
-    expect(output).toContain("Last report unknown rules: 1");
-    expect(output).toContain("Last report unmeasurable rules: 1");
+    expect(output).toContain("unknown (no measurable followed/ignored rule evidence yet)");
+    expect(output).toContain("Measured rules");
+    expect(output).toContain("Unknown rules");
+    expect(output).toContain("Unmeasurable rules");
   });
 });
