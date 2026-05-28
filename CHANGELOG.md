@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.7
+
+- Adds thin passthrough commands `ctx ruler -- <args>` and `ctx skillshare -- <args>` for upstream admin/debug workflows without reimplementing those CLIs.
+- Preserves upstream output and exit status for passthrough commands, with install hints when the upstream binary is missing.
+
 ## 0.5.6
 
 - Adds visible `ctx install` progress from 0-100 so long model/file/skill embedding warmups no longer look stalled.

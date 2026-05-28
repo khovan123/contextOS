@@ -24,6 +24,7 @@ import { installAntigravityMcp } from "../plugins/ctx/lib/antigravity-mcp.js";
 import { syncRules } from "../plugins/ctx/lib/ruler-sync.js";
 import { syncSkills } from "../plugins/ctx/lib/skillshare-sync.js";
 import { scanSkills, warmSkillEmbeddings } from "../plugins/ctx/lib/skill-discoverer.js";
+import { parsePassthroughArgs, runPassthrough } from "../plugins/ctx/lib/passthrough.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
@@ -55,6 +56,8 @@ Usage:
   ctx sync --skills --no-collect
   ctx sync --skills --agents codex,claude,antigravity
   ctx embeddings warm -- "task"
+  ctx ruler -- <ruler args>
+  ctx skillshare -- <skillshare args>
   ctx --version
 `;
 }
@@ -450,6 +453,15 @@ try {
       });
     } else {
       await syncRules({ cwd: process.cwd(), rootDir, args: args.slice(1) });
+    }
+  } else if (command === "ruler" || command === "skillshare") {
+    const passthrough = parsePassthroughArgs(args);
+    const result = runPassthrough(passthrough);
+    if (result.signal) {
+      console.error(`${passthrough.command} terminated by signal ${result.signal}`);
+      process.exitCode = 1;
+    } else {
+      process.exitCode = result.status;
     }
   } else {
     throw new Error(`Unknown command: ${command}\n\n${usage()}`);

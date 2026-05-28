@@ -269,6 +269,20 @@ ctx sync --rules --no-import-codex-mcp
 
 `ctx sync --rules` is project-scoped. It writes `.ruler/ruler.toml` in the current project and lets Ruler generate agent files from that project source of truth. ContextOS runtime history still follows the project-path isolation model described below.
 
+## Upstream Passthrough
+
+ContextOS exposes thin passthrough commands for Ruler and skillshare admin/debug workflows:
+
+```bash
+ctx ruler -- apply --agents codex,claude,antigravity
+ctx ruler -- init
+ctx skillshare -- status
+ctx skillshare -- target list
+ctx skillshare -- doctor
+```
+
+Everything after `--` is forwarded unchanged to the upstream CLI. ContextOS does not reinterpret those args, and it preserves the upstream output and exit status. Use `ctx sync --rules` and `ctx sync --skills` for ContextOS-managed workflows; use passthrough when you need a native Ruler or skillshare command.
+
 ## Troubleshooting
 
 ### `ctx-mcp bridge socket not found`
@@ -324,6 +338,8 @@ This warning comes from a transitive dependency in the local embedding/WASM stac
 | `ctx sync --skills --dry-run` | Previews skillshare sync. | You want to inspect behavior before changing skill directories. | Runs `skillshare sync --dry-run` and skips embedding rebuild. |
 | `ctx sync --skills --no-collect` | Skips collecting existing agent skills into skillshare. | You already manage `~/.config/skillshare/skills` and only want to push it out. | Initializes/syncs skillshare without running `skillshare backup` or `skillshare collect --all`. |
 | `ctx embeddings warm -- "task"` | Prepares local semantic embedding caches. | First install, CI smoke checks, or after changing AGENTS.md/project files/skills. | Loads/downloads `Xenova/all-MiniLM-L6-v2` and writes rule, file-path, and skill vectors to `~/.ctx/contextos/embeddings.db`. |
+| `ctx ruler -- <args>` | Forwards args to the installed `ruler` CLI. | You need native Ruler commands such as `init`, `apply`, or `revert`. | Preserves Ruler stdout/stderr and exit status. |
+| `ctx skillshare -- <args>` | Forwards args to the installed `skillshare` CLI. | You need native skillshare commands such as `status`, `target list`, `doctor`, `push`, or `pull`. | Preserves skillshare stdout/stderr and exit status. |
 | `ctx --version` | Prints the installed ContextOS CLI version. | You want to confirm which npm version is being executed. | Prints the version from package metadata. |
 
 ## Runtime Files
