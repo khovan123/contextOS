@@ -31,14 +31,21 @@ export function workflowSearchRoots({ cwd = process.cwd(), home = os.homedir() }
   return [
     path.join(cwd, ".claude", "workflows"),
     path.join(cwd, ".codex", "workflows"),
+    path.join(cwd, ".gemini", "workflows"),
+    path.join(cwd, ".gemini", "antigravity", "workflows"),
+    path.join(cwd, ".gemini", "antigravity-cli", "workflows"),
     path.join(home, ".claude", "workflows"),
-    path.join(home, ".codex", "workflows")
+    path.join(home, ".codex", "workflows"),
+    path.join(home, ".gemini", "workflows"),
+    path.join(home, ".gemini", "antigravity", "workflows"),
+    path.join(home, ".gemini", "antigravity-cli", "workflows")
   ];
 }
 
 export function scanWorkflows({ cwd = process.cwd(), roots = workflowSearchRoots({ cwd }) } = {}) {
   const workflows = [];
   const seen = new Set();
+  const seenNames = new Set();
   for (const root of roots) {
     let entries = [];
     try {
@@ -53,6 +60,8 @@ export function scanWorkflows({ cwd = process.cwd(), roots = workflowSearchRoots
       if (seen.has(realPath)) continue;
       seen.add(realPath);
       const workflow = parseWorkflowFile(filePath, { cwd, root });
+      if (workflow?.name && seenNames.has(workflow.name)) continue;
+      if (workflow?.name) seenNames.add(workflow.name);
       if (workflow) workflows.push(workflow);
     }
   }

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.11
+
+- Adds Antigravity workflow discovery roots under `.gemini/workflows`, `.gemini/antigravity/workflows`, and `.gemini/antigravity-cli/workflows`.
+
 ## 0.5.10
 
 - Adds workflow discovery for `.claude/workflows/`, `.codex/workflows/`, `~/.claude/workflows/`, and `~/.codex/workflows/`.

@@ -61,6 +61,44 @@ describe("workflow discoverer", () => {
     expect(workflows.map((workflow) => workflow.name)).toEqual(["primary-workflow"]);
   });
 
+  it("scans Antigravity workflow directories", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-agy-workflows-"));
+    const workflowsRoot = path.join(tmp, ".gemini", "antigravity", "workflows");
+    writeWorkflow(workflowsRoot, "primary-workflow", [
+      "# Primary Workflow",
+      "",
+      "Feature implementation workflow for Antigravity.",
+      "",
+      "#### Code Implementation",
+      "Use `planner`, `tester`, and `code-reviewer`."
+    ].join("\n"));
+
+    const workflows = scanWorkflows({ cwd: tmp, roots: [workflowsRoot] });
+
+    expect(workflows.map((workflow) => workflow.name)).toContain("primary-workflow");
+  });
+
+  it("deduplicates workflows by name across agent roots", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-workflow-dedupe-"));
+    const claudeRoot = path.join(tmp, ".claude", "workflows");
+    const codexRoot = path.join(tmp, ".codex", "workflows");
+    const content = [
+      "# Primary Workflow",
+      "",
+      "Feature implementation workflow.",
+      "",
+      "#### Code Implementation",
+      "Use `planner`, `tester`, and `code-reviewer`."
+    ].join("\n");
+    writeWorkflow(claudeRoot, "primary-workflow", content);
+    writeWorkflow(codexRoot, "primary-workflow", content);
+
+    const workflows = scanWorkflows({ cwd: tmp, roots: [claudeRoot, codexRoot] });
+
+    expect(workflows.map((workflow) => workflow.name)).toEqual(["primary-workflow"]);
+    expect(workflows[0].root).toBe(claudeRoot);
+  });
+
   it("suggests the implementation workflow for feature prompts", async () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-workflow-score-"));
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-workflow-data-"));

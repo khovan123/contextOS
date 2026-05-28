@@ -227,8 +227,14 @@ It scans project workflows first, then global workflows:
 ```text
 .claude/workflows/
 .codex/workflows/
+.gemini/workflows/
+.gemini/antigravity/workflows/
+.gemini/antigravity-cli/workflows/
 ~/.claude/workflows/
 ~/.codex/workflows/
+~/.gemini/workflows/
+~/.gemini/antigravity/workflows/
+~/.gemini/antigravity-cli/workflows/
 ```
 
 Workflow files do not need YAML frontmatter. ContextOS reads the top `#` heading, section headings, and referenced agent names such as `planner`, `tester`, `code-reviewer`, and `docs-manager`, then warms semantic embeddings. Prompt hooks inject a `Suggested workflow for this task` section only when a workflow is relevant enough.
