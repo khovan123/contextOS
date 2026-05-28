@@ -4,6 +4,7 @@ import { readAgentsChain } from "./reader.js";
 import { filterActionableRules, parseRules, scoreRules, findRelevantFiles } from "./analyzer.js";
 import { enhanceRuleScoresWithEmbeddings } from "./embedding-scorer.js";
 import { scanSkills, suggestSkills } from "./skill-discoverer.js";
+import { scanWorkflows, suggestWorkflows } from "./workflow-discoverer.js";
 
 export async function scoreContext({
   cwd = process.cwd(),
@@ -12,7 +13,9 @@ export async function scoreContext({
   dataDir,
   maxFiles = 5,
   maxSkills = 3,
+  maxWorkflows = 2,
   skills = null,
+  workflows = null,
   embeddingTimeoutMs = 5000,
   fileEmbeddingTimeoutMs = Number(process.env.CONTEXTOS_FILE_EMBEDDING_TIMEOUT_MS || 80)
 } = {}) {
@@ -46,6 +49,13 @@ export async function scoreContext({
     dataDir,
     limit: maxSkills
   });
+  const workflowCatalog = Array.isArray(workflows) ? workflows : scanWorkflows({ cwd });
+  const suggestedWorkflows = await suggestWorkflows({
+    prompt,
+    workflows: workflowCatalog,
+    dataDir,
+    limit: maxWorkflows
+  });
 
   return {
     cwd,
@@ -53,6 +63,7 @@ export async function scoreContext({
     scoredRules,
     suggestedFiles,
     suggestedSkills,
+    suggestedWorkflows,
     telemetry: {
       elapsedMs: Date.now() - started,
       modelStatus: embedding.status,
@@ -64,6 +75,8 @@ export async function scoreContext({
       filesSuggested: suggestedFiles.length,
       skillsScanned: skillCatalog.length,
       skillsSuggested: suggestedSkills.length,
+      workflowsScanned: workflowCatalog.length,
+      workflowsSuggested: suggestedWorkflows.length,
       sources: merged.sources.map((source) => path.relative(cwd, source))
     }
   };

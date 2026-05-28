@@ -28,6 +28,7 @@ import { syncSkills } from "../plugins/ctx/lib/skillshare-sync.js";
 import { scanSkills, warmSkillEmbeddings } from "../plugins/ctx/lib/skill-discoverer.js";
 import { parsePassthroughArgs, runPassthrough } from "../plugins/ctx/lib/passthrough.js";
 import { parseAgentList, parseSetupArgs, setupSummaryLines } from "../plugins/ctx/lib/setup-wizard.js";
+import { syncWorkflows, warmWorkflowEmbeddings } from "../plugins/ctx/lib/workflow-discoverer.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
@@ -61,6 +62,7 @@ Usage:
   ctx sync --rules --dry-run
   ctx sync --rules --no-import-codex-mcp
   ctx sync --skills
+  ctx sync --workflows
   ctx sync --skills --dry-run
   ctx sync --skills --no-collect
   ctx sync --skills --agents codex,claude,antigravity
@@ -186,6 +188,7 @@ async function install({ copy = false, inject = true, agent = "codex" } = {}) {
       console.log(`Embedding vectors cache: ${warmResult.cachePath}`);
       console.log(`File path embeddings warmed: ${warmResult.fileCount || 0}`);
       console.log(`Skill embeddings warmed: ${warmResult.skillCount || 0}`);
+      console.log(`Workflow embeddings warmed: ${warmResult.workflowCount || 0}`);
       console.log(`Prompt context injection: ${inject ? "enabled" : "quiet logging only"}`);
       console.log("Restart Claude Code if it was already running, then submit a task to trigger ContextOS.");
       return;
@@ -209,6 +212,7 @@ async function install({ copy = false, inject = true, agent = "codex" } = {}) {
       console.log(`Embedding vectors cache: ${warmResult.cachePath}`);
       console.log(`File path embeddings warmed: ${warmResult.fileCount || 0}`);
       console.log(`Skill embeddings warmed: ${warmResult.skillCount || 0}`);
+      console.log(`Workflow embeddings warmed: ${warmResult.workflowCount || 0}`);
       console.log(`Prompt context injection: ${inject ? "enabled" : "quiet logging only"}`);
       console.log("Restart Antigravity or agy if it was already running, then submit a task to trigger ContextOS.");
       return;
@@ -247,6 +251,7 @@ async function install({ copy = false, inject = true, agent = "codex" } = {}) {
     console.log(`Embedding vectors cache: ${warmResult.cachePath}`);
     console.log(`File path embeddings warmed: ${warmResult.fileCount || 0}`);
     console.log(`Skill embeddings warmed: ${warmResult.skillCount || 0}`);
+    console.log(`Workflow embeddings warmed: ${warmResult.workflowCount || 0}`);
     console.log(`Prompt context injection: ${inject ? "enabled" : "quiet logging only"}`);
     console.log("Restart Codex if it was already running, then submit a task to trigger ContextOS.");
   } catch (error) {
@@ -282,7 +287,12 @@ async function warmInstallEmbeddings() {
     dataDir,
     allowRemote: !modelReady
   });
-  return { ...result, modelAlreadyCached: modelReady, fileCount: fileResult.count, skillCount: skillResult.count };
+  const workflowResult = await warmWorkflowEmbeddings({
+    cwd: process.cwd(),
+    dataDir,
+    allowRemote: !modelReady
+  });
+  return { ...result, modelAlreadyCached: modelReady, fileCount: fileResult.count, skillCount: skillResult.count, workflowCount: workflowResult.count };
 }
 
 function tryRunCodex(args) {
@@ -340,7 +350,8 @@ async function debug(task) {
   const rules = scored.scoredRules;
   const relevantFiles = scored.suggestedFiles.slice(0, 3);
   const suggestedSkills = (scored.suggestedSkills || []).slice(0, 3);
-  const scheduled = scheduleContext({ rules, relevantFiles, suggestedSkills });
+  const suggestedWorkflows = (scored.suggestedWorkflows || []).slice(0, 2);
+  const scheduled = scheduleContext({ rules, relevantFiles, suggestedSkills, suggestedWorkflows });
 
   console.log("ContextOS debug");
   console.log(`cwd: ${cwd}`);
@@ -372,6 +383,15 @@ async function debug(task) {
   }
   if (!suggestedSkills.length) console.log("(none)");
   console.log("");
+  console.log("Suggested workflows:");
+  for (const workflow of suggestedWorkflows) {
+    const score = Number(workflow.score || 0).toFixed(2);
+    const chain = workflow.chain?.length ? ` chain:${workflow.chain.join(" -> ")}` : "";
+    const location = workflow.relativePath || workflow.path ? ` path:${workflow.relativePath || workflow.path}` : "";
+    console.log(`${score}  ${workflow.title || workflow.name}${chain}${location}`);
+  }
+  if (!suggestedWorkflows.length) console.log("(none)");
+  console.log("");
   console.log("Final additionalContext:");
   console.log(scheduled.additionalContext || "(empty)");
 }
@@ -397,9 +417,15 @@ async function warmEmbeddings(task) {
     dataDir: contextOSDataDir(),
     allowRemote: true
   });
+  const workflowResult = await warmWorkflowEmbeddings({
+    cwd,
+    dataDir: contextOSDataDir(),
+    allowRemote: true
+  });
   console.log(`Warmed ${result.count} embeddings`);
   console.log(`Warmed ${fileResult.count} file path embeddings`);
   console.log(`Warmed ${skillResult.count} skill embeddings`);
+  console.log(`Warmed ${workflowResult.count} workflow embeddings`);
   console.log(`Cache: ${result.cachePath}`);
 }
 
@@ -541,7 +567,13 @@ try {
     if (!task.trim()) throw new Error('Usage: ctx benchmark -- "task"');
     console.log(formatBenchmark(benchmarkWorkspace({ cwd: process.cwd(), task })));
   } else if (command === "sync") {
-    if (args.includes("--skills")) {
+    if (args.includes("--workflows")) {
+      await syncWorkflows({
+        cwd: process.cwd(),
+        dataDir: contextOSDataDir(),
+        allowRemote: !isModelCacheReady(contextOSDataDir())
+      });
+    } else if (args.includes("--skills")) {
       await syncSkills({
         cwd: process.cwd(),
         args: args.slice(1),

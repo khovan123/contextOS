@@ -70,7 +70,9 @@ async function handleBridgeRequest(socket, raw) {
       dataDir,
       maxFiles: payload.maxFiles || 5,
       maxSkills: payload.maxSkills || 3,
-      skills: payload.skills
+      maxWorkflows: payload.maxWorkflows || 2,
+      skills: payload.skills,
+      workflows: payload.workflows
     });
     socket.end(JSON.stringify(result));
   } catch (error) {
@@ -79,6 +81,7 @@ async function handleBridgeRequest(socket, raw) {
       scoredRules: [],
       suggestedFiles: [],
       suggestedSkills: [],
+      suggestedWorkflows: [],
       telemetry: { elapsedMs: 0, modelStatus: "error" }
     }));
   }

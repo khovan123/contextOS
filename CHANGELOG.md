@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.10
+
+- Adds workflow discovery for `.claude/workflows/`, `.codex/workflows/`, `~/.claude/workflows/`, and `~/.codex/workflows/`.
+- Adds `ctx sync --workflows` to parse markdown workflow headings, agent chains, and warm workflow embeddings.
+- Injects prompt-relevant workflow hints into ContextOS prompt context and shows them in `ctx debug`.
+
 ## 0.5.9
 
 - Formats `ctx report`, `ctx evidence`, `ctx stats`, and `ctx benchmark` with sectioned terminal tables for easier scanning and analysis.

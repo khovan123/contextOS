@@ -214,6 +214,25 @@ ctx sync --skills --agents codex,claude,agy
 
 After this, `ctx debug -- "task"` and prompt hooks can suggest skills from `~/.config/skillshare/skills/` plus agent-specific skill folders.
 
+## Workflow Discovery
+
+ContextOS can also index Claude/Codex workflow markdown files and suggest the right workflow for the current task:
+
+```bash
+ctx sync --workflows
+```
+
+It scans project workflows first, then global workflows:
+
+```text
+.claude/workflows/
+.codex/workflows/
+~/.claude/workflows/
+~/.codex/workflows/
+```
+
+Workflow files do not need YAML frontmatter. ContextOS reads the top `#` heading, section headings, and referenced agent names such as `planner`, `tester`, `code-reviewer`, and `docs-manager`, then warms semantic embeddings. Prompt hooks inject a `Suggested workflow for this task` section only when a workflow is relevant enough.
+
 ## Modes
 
 Injection mode is the default:
@@ -359,7 +378,8 @@ This warning comes from a transitive dependency in the local embedding/WASM stac
 | `ctx sync --skills --agents <list>` | Syncs skills only for selected agents. | You want to target a subset such as `codex,claude` or `codex,claude,agy`. | Runs `skillshare sync --agents <list>` with `agy` normalized to `antigravity`, then refreshes skill embeddings. |
 | `ctx sync --skills --dry-run` | Previews skillshare sync. | You want to inspect behavior before changing skill directories. | Runs `skillshare sync --dry-run` and skips embedding rebuild. |
 | `ctx sync --skills --no-collect` | Skips collecting existing agent skills into skillshare. | You already manage `~/.config/skillshare/skills` and only want to push it out. | Initializes/syncs skillshare without running `skillshare backup` or `skillshare collect --all`. |
-| `ctx embeddings warm -- "task"` | Prepares local semantic embedding caches. | First install, CI smoke checks, or after changing AGENTS.md/project files/skills. | Loads/downloads `Xenova/all-MiniLM-L6-v2` and writes rule, file-path, and skill vectors to `~/.ctx/contextos/embeddings.db`. |
+| `ctx sync --workflows` | Indexes agent workflow markdown files for prompt-time workflow suggestions. | You use `.claude/workflows/` or `.codex/workflows/` and want ContextOS to suggest the best workflow chain for each task. | Scans project/global workflow folders, parses headings and agent chain mentions, warms workflow embeddings, and makes `ctx debug`/prompt hooks show relevant workflow hints. |
+| `ctx embeddings warm -- "task"` | Prepares local semantic embedding caches. | First install, CI smoke checks, or after changing AGENTS.md/project files/skills/workflows. | Loads/downloads `Xenova/all-MiniLM-L6-v2` and writes rule, file-path, skill, and workflow vectors to `~/.ctx/contextos/embeddings.db`. |
 | `ctx ruler -- <args>` | Forwards args to the installed `ruler` CLI. | You need native Ruler commands such as `init`, `apply`, or `revert`. | Preserves Ruler stdout/stderr and exit status. |
 | `ctx skillshare -- <args>` | Forwards args to the installed `skillshare` CLI. | You need native skillshare commands such as `status`, `target list`, `doctor`, `push`, or `pull`. | Preserves skillshare stdout/stderr and exit status. |
 | `ctx --version` | Prints the installed ContextOS CLI version. | You want to confirm which npm version is being executed. | Prints the version from package metadata. |

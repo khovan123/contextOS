@@ -1,6 +1,6 @@
 const MAX_CONTEXT_CHARS = 4000;
 
-export function scheduleContext({ rules = [], relevantFiles = [], suggestedSkills = [], maxChars = MAX_CONTEXT_CHARS } = {}) {
+export function scheduleContext({ rules = [], relevantFiles = [], suggestedSkills = [], suggestedWorkflows = [], maxChars = MAX_CONTEXT_CHARS } = {}) {
   const high = rules.filter((rule) => rule.score >= 0.5);
   const mid = rules.filter((rule) => rule.score >= 0.1 && rule.score < 0.5);
   const dropped = rules.filter((rule) => rule.score < 0.1);
@@ -14,6 +14,9 @@ export function scheduleContext({ rules = [], relevantFiles = [], suggestedSkill
   }
   if (suggestedSkills.length) {
     sections.push(section("Skills to activate for this task", suggestedSkills.map(formatSkill)));
+  }
+  if (suggestedWorkflows.length) {
+    sections.push(section("Suggested workflow for this task", suggestedWorkflows.map(formatWorkflow)));
   }
   if (mid.length) {
     sections.push(section("Additional relevant rules", mid.slice(0, 8).map(formatRule)));
@@ -29,6 +32,7 @@ export function scheduleContext({ rules = [], relevantFiles = [], suggestedSkill
     droppedRules: dropped,
     relevantFiles,
     suggestedSkills,
+    suggestedWorkflows,
     additionalContext
   };
 }
@@ -47,6 +51,15 @@ function formatSkill(skill) {
   const description = skill.description ? `: ${skill.description}` : "";
   const location = skill.path ? ` (${skill.path})` : "";
   return `- ${skill.name}${description}${location}`;
+}
+
+function formatWorkflow(workflow) {
+  const name = workflow.title || workflow.name;
+  const hint = workflow.hint ? `: ${workflow.hint}` : "";
+  const chain = workflow.chain?.length ? `\n  chain: ${workflow.chain.join(" -> ")}` : "";
+  const location = workflow.relativePath || workflow.path;
+  const source = location ? `\n  see: ${location}` : "";
+  return `- ${name}${hint}${chain}${source}`;
 }
 
 function trimToLimit(value, maxChars) {

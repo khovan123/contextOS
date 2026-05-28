@@ -11,7 +11,14 @@ describe("scheduler", () => {
         { id: "r3", content: "Unrelated deployment note.", sourcePath: "/repo/AGENTS.md", score: 0 }
       ],
       relevantFiles: [{ path: "src/auth/login.ts" }],
-      suggestedSkills: [{ name: "zod-validator", description: "Use for validation tasks.", path: ".codex/skills/zod-validator/SKILL.md" }]
+      suggestedSkills: [{ name: "zod-validator", description: "Use for validation tasks.", path: ".codex/skills/zod-validator/SKILL.md" }],
+      suggestedWorkflows: [{
+        name: "primary-workflow",
+        title: "Primary Workflow",
+        hint: "use for feature implementation, testing, review, and debugging",
+        chain: ["planner", "tester", "code-reviewer"],
+        relativePath: ".claude/workflows/primary-workflow.md"
+      }]
     });
 
     expect(scheduled.highRules).toHaveLength(1);
@@ -23,6 +30,9 @@ describe("scheduler", () => {
     expect(scheduled.additionalContext).toContain("- src/auth/login.ts");
     expect(scheduled.additionalContext).toContain("## Skills to activate for this task");
     expect(scheduled.additionalContext).toContain("zod-validator");
+    expect(scheduled.additionalContext).toContain("## Suggested workflow for this task");
+    expect(scheduled.additionalContext).toContain("Primary Workflow");
+    expect(scheduled.additionalContext).toContain("planner -> tester -> code-reviewer");
   });
 
   it("trims output to max chars", () => {

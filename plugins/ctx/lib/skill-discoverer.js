@@ -8,6 +8,9 @@ const DEFAULT_LIMIT = 3;
 const DEFAULT_MAX_SKILLS = 2000;
 const DEFAULT_EMBEDDING_CANDIDATES = 120;
 const DEFAULT_SEMANTIC_CATALOG_LIMIT = 300;
+const SCAN_CACHE_TTL_MS = 5 * 60 * 1000;
+
+const scanCache = new Map();
 
 export function skillSearchRoots({ cwd = process.cwd(), home = os.homedir() } = {}) {
   return [
@@ -60,6 +63,12 @@ function firstParagraph(body) {
 }
 
 export function scanSkills({ cwd = process.cwd(), roots = skillSearchRoots({ cwd }), maxSkills = DEFAULT_MAX_SKILLS } = {}) {
+  const cacheKey = `${path.resolve(cwd)}\0${maxSkills}\0${roots.map((root) => path.resolve(root)).join("\0")}`;
+  const cached = scanCache.get(cacheKey);
+  if (cached && Date.now() - cached.createdAt < SCAN_CACHE_TTL_MS) {
+    return cached.skills;
+  }
+
   const skills = [];
   const seen = new Set();
   for (const root of roots) {
@@ -87,6 +96,7 @@ export function scanSkills({ cwd = process.cwd(), roots = skillSearchRoots({ cwd
       });
     }
   }
+  scanCache.set(cacheKey, { createdAt: Date.now(), skills });
   return skills;
 }
 
