@@ -11,16 +11,23 @@ export function createContextOSMcpServer({ dataDir }) {
 
   server.registerTool("ctx_score_context", {
     title: "Score ContextOS prompt context",
-    description: "Scores AGENTS.md rules and suggests files for a Codex prompt.",
+    description: "Scores AGENTS.md rules and suggests files/skills for an agent prompt.",
     inputSchema: {
       cwd: z.string().optional(),
       prompt: z.string(),
       openFiles: z.array(z.string()).optional(),
-      maxFiles: z.number().int().positive().max(20).optional()
+      maxFiles: z.number().int().positive().max(20).optional(),
+      maxSkills: z.number().int().positive().max(10).optional(),
+      skills: z.array(z.object({
+        name: z.string(),
+        description: z.string(),
+        path: z.string().optional()
+      })).optional()
     },
     outputSchema: {
       scoredRules: z.array(z.any()),
       suggestedFiles: z.array(z.any()),
+      suggestedSkills: z.array(z.any()),
       telemetry: z.record(z.string(), z.any())
     }
   }, async (args) => {
@@ -29,7 +36,9 @@ export function createContextOSMcpServer({ dataDir }) {
       prompt: args.prompt || "",
       openFiles: args.openFiles || [],
       dataDir,
-      maxFiles: args.maxFiles || 5
+      maxFiles: args.maxFiles || 5,
+      maxSkills: args.maxSkills || 3,
+      skills: args.skills
     });
     return {
       content: [
@@ -41,6 +50,7 @@ export function createContextOSMcpServer({ dataDir }) {
       structuredContent: {
         scoredRules: result.scoredRules,
         suggestedFiles: result.suggestedFiles,
+        suggestedSkills: result.suggestedSkills,
         telemetry: result.telemetry
       }
     };

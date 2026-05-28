@@ -1,6 +1,6 @@
 const MAX_CONTEXT_CHARS = 4000;
 
-export function scheduleContext({ rules = [], relevantFiles = [], maxChars = MAX_CONTEXT_CHARS } = {}) {
+export function scheduleContext({ rules = [], relevantFiles = [], suggestedSkills = [], maxChars = MAX_CONTEXT_CHARS } = {}) {
   const high = rules.filter((rule) => rule.score >= 0.5);
   const mid = rules.filter((rule) => rule.score >= 0.1 && rule.score < 0.5);
   const dropped = rules.filter((rule) => rule.score < 0.1);
@@ -11,6 +11,9 @@ export function scheduleContext({ rules = [], relevantFiles = [], maxChars = MAX
   }
   if (relevantFiles.length) {
     sections.push(section("Suggested files to check", relevantFiles.map((file) => `- ${file.path}`)));
+  }
+  if (suggestedSkills.length) {
+    sections.push(section("Skills to activate for this task", suggestedSkills.map(formatSkill)));
   }
   if (mid.length) {
     sections.push(section("Additional relevant rules", mid.slice(0, 8).map(formatRule)));
@@ -25,6 +28,7 @@ export function scheduleContext({ rules = [], relevantFiles = [], maxChars = MAX
     midRules: mid,
     droppedRules: dropped,
     relevantFiles,
+    suggestedSkills,
     additionalContext
   };
 }
@@ -37,6 +41,12 @@ function section(title, lines) {
 function formatRule(rule) {
   const source = rule.sourcePath && rule.sourcePath !== "unknown" ? ` (${rule.sourcePath})` : "";
   return `- ${rule.content}${source}`;
+}
+
+function formatSkill(skill) {
+  const description = skill.description ? `: ${skill.description}` : "";
+  const location = skill.path ? ` (${skill.path})` : "";
+  return `- ${skill.name}${description}${location}`;
 }
 
 function trimToLimit(value, maxChars) {

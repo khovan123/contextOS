@@ -68,7 +68,9 @@ async function handleBridgeRequest(socket, raw) {
       prompt: payload.prompt || "",
       openFiles: payload.openFiles || [],
       dataDir,
-      maxFiles: payload.maxFiles || 5
+      maxFiles: payload.maxFiles || 5,
+      maxSkills: payload.maxSkills || 3,
+      skills: payload.skills
     });
     socket.end(JSON.stringify(result));
   } catch (error) {
@@ -76,6 +78,7 @@ async function handleBridgeRequest(socket, raw) {
       error: error?.message || String(error),
       scoredRules: [],
       suggestedFiles: [],
+      suggestedSkills: [],
       telemetry: { elapsedMs: 0, modelStatus: "error" }
     }));
   }

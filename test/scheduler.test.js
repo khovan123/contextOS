@@ -10,7 +10,8 @@ describe("scheduler", () => {
         { id: "r2", content: "Prefer compact CSS.", sourcePath: "/repo/AGENTS.md", score: 0.2 },
         { id: "r3", content: "Unrelated deployment note.", sourcePath: "/repo/AGENTS.md", score: 0 }
       ],
-      relevantFiles: [{ path: "src/auth/login.ts" }]
+      relevantFiles: [{ path: "src/auth/login.ts" }],
+      suggestedSkills: [{ name: "zod-validator", description: "Use for validation tasks.", path: ".codex/skills/zod-validator/SKILL.md" }]
     });
 
     expect(scheduled.highRules).toHaveLength(1);
@@ -20,6 +21,8 @@ describe("scheduler", () => {
     expect(scheduled.additionalContext).toContain("## ContextOS reminders");
     expect(scheduled.additionalContext.match(/Always use zod/g)).toHaveLength(2);
     expect(scheduled.additionalContext).toContain("- src/auth/login.ts");
+    expect(scheduled.additionalContext).toContain("## Skills to activate for this task");
+    expect(scheduled.additionalContext).toContain("zod-validator");
   });
 
   it("trims output to max chars", () => {

@@ -11,12 +11,14 @@ function mockScoreContext({ rules = [{ content: "Always use zod for validation."
   return async () => ({
     scoredRules: rules,
     suggestedFiles: [],
+    suggestedSkills: [{ name: "zod-validator", description: "Use for validation tasks.", path: ".codex/skills/zod-validator/SKILL.md", score: 0.9 }],
     telemetry: {
       elapsedMs: 3,
       modelStatus: "mock",
       rulesParsed: rules.length,
       rulesInjected: rules.length,
-      filesSuggested: 0
+      filesSuggested: 0,
+      skillsSuggested: 1
     }
   });
 }
@@ -36,9 +38,11 @@ describe("hook contracts", () => {
     expect(output.suppressOutput).toBe(true);
     expect(output.hookSpecificOutput.hookEventName).toBe("UserPromptSubmit");
     expect(output.hookSpecificOutput.additionalContext).toContain("zod");
+    expect(output.hookSpecificOutput.additionalContext).toContain("zod-validator");
     expect(fs.existsSync(dataPath)).toBe(true);
     expect(JSON.parse(fs.readFileSync(dataPath, "utf8")).injected).toBe(true);
     expect(JSON.parse(fs.readFileSync(dataPath, "utf8")).scheduled.additionalContext).toContain("zod");
+    expect(JSON.parse(fs.readFileSync(dataPath, "utf8")).suggestedSkills).toHaveLength(1);
   });
 
   it("on-prompt handler can run quiet when disabled", async () => {

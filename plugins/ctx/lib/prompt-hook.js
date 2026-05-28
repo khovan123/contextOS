@@ -34,7 +34,8 @@ export async function handlePromptPayload(
   if (scored.error) throw new Error(scored.error);
   const scoredRules = scored.scoredRules || [];
   const relevantFiles = (scored.suggestedFiles || []).slice(0, 3);
-  const scheduled = scheduleContext({ rules: scoredRules, relevantFiles });
+  const suggestedSkills = (scored.suggestedSkills || []).slice(0, 3);
+  const scheduled = scheduleContext({ rules: scoredRules, relevantFiles, suggestedSkills });
 
   const runtime = {
     at: now.toISOString(),
@@ -46,10 +47,12 @@ export async function handlePromptPayload(
       mcp: scored.telemetry || {}
     },
     relevantFiles,
+    suggestedSkills,
     telemetry: {
       ...(scored.telemetry || {}),
       rulesInjected: (scheduled.highRules?.length || 0) + (scheduled.midRules?.length || 0),
-      filesSuggested: relevantFiles.length
+      filesSuggested: relevantFiles.length,
+      skillsSuggested: suggestedSkills.length
     },
     scheduled,
     injected: injectContext,

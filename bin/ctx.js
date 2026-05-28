@@ -22,6 +22,7 @@ import { installClaudeMcp } from "../plugins/ctx/lib/claude-mcp.js";
 import { installAntigravityHooks } from "../plugins/ctx/lib/antigravity-hooks.js";
 import { installAntigravityMcp } from "../plugins/ctx/lib/antigravity-mcp.js";
 import { syncRules } from "../plugins/ctx/lib/ruler-sync.js";
+import { warmSkillEmbeddings } from "../plugins/ctx/lib/skill-discoverer.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
@@ -96,6 +97,7 @@ async function install({ copy = false, inject = true, agent = "codex" } = {}) {
     console.log(`Embedding model cache: ${modelCacheDir(contextOSDataDir())}`);
     console.log(`Embedding vectors cache: ${warmResult.cachePath}`);
     console.log(`File path embeddings warmed: ${warmResult.fileCount || 0}`);
+    console.log(`Skill embeddings warmed: ${warmResult.skillCount || 0}`);
     console.log(`Prompt context injection: ${inject ? "enabled" : "quiet logging only"}`);
     console.log("Restart Claude Code if it was already running, then submit a task to trigger ContextOS.");
     return;
@@ -113,6 +115,7 @@ async function install({ copy = false, inject = true, agent = "codex" } = {}) {
     console.log(`Embedding model cache: ${modelCacheDir(contextOSDataDir())}`);
     console.log(`Embedding vectors cache: ${warmResult.cachePath}`);
     console.log(`File path embeddings warmed: ${warmResult.fileCount || 0}`);
+    console.log(`Skill embeddings warmed: ${warmResult.skillCount || 0}`);
     console.log(`Prompt context injection: ${inject ? "enabled" : "quiet logging only"}`);
     console.log("Restart Antigravity or agy if it was already running, then submit a task to trigger ContextOS.");
     return;
@@ -143,6 +146,7 @@ async function install({ copy = false, inject = true, agent = "codex" } = {}) {
   console.log(`Embedding model cache: ${modelCacheDir(contextOSDataDir())}`);
   console.log(`Embedding vectors cache: ${warmResult.cachePath}`);
   console.log(`File path embeddings warmed: ${warmResult.fileCount || 0}`);
+  console.log(`Skill embeddings warmed: ${warmResult.skillCount || 0}`);
   console.log(`Prompt context injection: ${inject ? "enabled" : "quiet logging only"}`);
   console.log("Restart Codex if it was already running, then submit a task to trigger ContextOS.");
 }
@@ -169,7 +173,12 @@ async function warmInstallEmbeddings() {
     dataDir,
     allowRemote: !modelReady
   });
-  return { ...result, modelAlreadyCached: modelReady, fileCount: fileResult.count };
+  const skillResult = await warmSkillEmbeddings({
+    cwd: process.cwd(),
+    dataDir,
+    allowRemote: !modelReady
+  });
+  return { ...result, modelAlreadyCached: modelReady, fileCount: fileResult.count, skillCount: skillResult.count };
 }
 
 function tryRunCodex(args) {
@@ -226,7 +235,8 @@ async function debug(task) {
   });
   const rules = scored.scoredRules;
   const relevantFiles = scored.suggestedFiles.slice(0, 3);
-  const scheduled = scheduleContext({ rules, relevantFiles });
+  const suggestedSkills = (scored.suggestedSkills || []).slice(0, 3);
+  const scheduled = scheduleContext({ rules, relevantFiles, suggestedSkills });
 
   console.log("ContextOS debug");
   console.log(`cwd: ${cwd}`);
@@ -250,6 +260,14 @@ async function debug(task) {
   }
   if (!relevantFiles.length) console.log("(none)");
   console.log("");
+  console.log("Suggested skills:");
+  for (const skill of suggestedSkills) {
+    const score = Number(skill.score || 0).toFixed(2);
+    const location = skill.path ? ` path:${skill.path}` : "";
+    console.log(`${score}  ${skill.name}${location}`);
+  }
+  if (!suggestedSkills.length) console.log("(none)");
+  console.log("");
   console.log("Final additionalContext:");
   console.log(scheduled.additionalContext || "(empty)");
 }
@@ -270,8 +288,14 @@ async function warmEmbeddings(task) {
     dataDir: contextOSDataDir(),
     allowRemote: true
   });
+  const skillResult = await warmSkillEmbeddings({
+    cwd,
+    dataDir: contextOSDataDir(),
+    allowRemote: true
+  });
   console.log(`Warmed ${result.count} embeddings`);
   console.log(`Warmed ${fileResult.count} file path embeddings`);
+  console.log(`Warmed ${skillResult.count} skill embeddings`);
   console.log(`Cache: ${result.cachePath}`);
 }
 

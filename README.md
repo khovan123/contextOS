@@ -77,6 +77,7 @@ With ContextOS, each prompt gets a compact block:
 - Registers a `ctx-mcp` MCP server that owns model loading and semantic scoring.
 - Reads the active `AGENTS.md` chain for the current workspace.
 - Scores rules by relevance to the user prompt.
+- Scans project/global `.codex/skills` and `.claude/skills`, ranks skill descriptions by task relevance, and injects top skill hints.
 - Filters host/session setup rules such as "run commands as user X" or `sudo -u user` because they are environment instructions, not project guidance.
 - Finds likely relevant files with a hybrid retriever:
   - first, local prompt/file heuristics create seed candidates;
@@ -287,7 +288,7 @@ This warning comes from a transitive dependency in the local embedding/WASM stac
 | `ctx sync --rules --dry-run` | Previews Ruler sync without writing files or running apply. | You want to inspect behavior before changing project config. | Prints the same flow with dry-run status. |
 | `ctx sync --rules --force` | Rewrites ContextOS-owned Ruler sections. | You changed the ContextOS install path or need to refresh `ctx-mcp`. | Removes and re-adds ContextOS-owned `mcp`, `mcp_servers.ctx-mcp`, and selected agent sections. |
 | `ctx sync --rules --no-import-codex-mcp` | Skips Codex MCP import. | You only want ContextOS' own `ctx-mcp` in Ruler. | Does not read `~/.codex/config.toml`. |
-| `ctx embeddings warm -- "task"` | Prepares local semantic embedding caches. | First install, CI smoke checks, or after changing AGENTS.md/project files. | Loads/downloads `Xenova/all-MiniLM-L6-v2` and writes vectors to `~/.ctx/contextos/embeddings.db`. |
+| `ctx embeddings warm -- "task"` | Prepares local semantic embedding caches. | First install, CI smoke checks, or after changing AGENTS.md/project files/skills. | Loads/downloads `Xenova/all-MiniLM-L6-v2` and writes rule, file-path, and skill vectors to `~/.ctx/contextos/embeddings.db`. |
 | `ctx --version` | Prints the installed ContextOS CLI version. | You want to confirm which npm version is being executed. | Prints the version from package metadata. |
 
 ## Runtime Files

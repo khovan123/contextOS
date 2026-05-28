@@ -28,4 +28,30 @@ describe("score context", () => {
     ]);
     expect(result.telemetry.rulesFiltered).toBeGreaterThanOrEqual(2);
   });
+
+  it("suggests relevant skills from project skill catalog", async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-score-skills-"));
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-score-skills-data-"));
+    fs.writeFileSync(path.join(tmp, "AGENTS.md"), "- Prefer focused skills for specialized tasks.\n");
+    const skillDir = path.join(tmp, ".codex", "skills", "payment-integration");
+    fs.mkdirSync(skillDir, { recursive: true });
+    fs.writeFileSync(path.join(skillDir, "SKILL.md"), [
+      "---",
+      "name: payment-integration",
+      "description: Use when creating payment checkout sessions and billing webhooks.",
+      "---"
+    ].join("\n"));
+
+    const result = await scoreContext({
+      cwd: tmp,
+      prompt: "create payment checkout webhook integration",
+      dataDir,
+      embeddingTimeoutMs: 20,
+      fileEmbeddingTimeoutMs: 1
+    });
+
+    expect(result.suggestedSkills[0].name).toBe("payment-integration");
+    expect(result.telemetry.skillsScanned).toBeGreaterThanOrEqual(1);
+    expect(result.telemetry.skillsSuggested).toBeGreaterThanOrEqual(1);
+  });
 });

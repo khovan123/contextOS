@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0
+
+- Adds prompt-aware skill discovery to `ctx_score_context`, returning `suggestedSkills` alongside rules and files.
+- Scans project/global `.codex/skills` and `.claude/skills` catalogs, ranks skill `name` + `description`, and injects top skill hints into prompt context.
+- Warms skill embeddings during `ctx install` and `ctx embeddings warm`.
+
 ## 0.3.0
 
 - Adds `ctx sync --rules` for Ruler-backed project rule/MCP sync across Codex, Claude Code, and Antigravity.
