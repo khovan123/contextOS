@@ -11,10 +11,25 @@ Published package: [`@minhpnq1807/contextos`](https://www.npmjs.com/package/@min
 ```bash
 npm install -g @minhpnq1807/contextos
 ctx --version
-ctx install
+ctx setup
 ```
 
-Restart Codex after installing, then use Codex normally. ContextOS runs through Codex hooks and the `ctx-mcp` MCP server.
+`ctx setup` is the recommended first-run flow. It asks which agents to configure, whether prompt context injection should be enabled, whether to sync project rules/MCP through Ruler, and whether to sync skills through skillshare. It only runs when you explicitly invoke it; npm install does not run setup automatically.
+
+For scriptable installs, use:
+
+```bash
+ctx setup --yes
+ctx setup --yes --agents codex,claude,agy
+```
+
+Restart your agent after setup, then use it normally. ContextOS runs through agent hooks and the `ctx-mcp` MCP server.
+
+Codex-only install is still available:
+
+```bash
+ctx install
+```
 
 Claude Code and Antigravity are supported through their native hook systems:
 
@@ -27,6 +42,7 @@ You can also run without a global install:
 
 ```bash
 npx @minhpnq1807/contextos@latest install
+npx @minhpnq1807/contextos@latest setup
 npx @minhpnq1807/contextos@latest install claude
 npx @minhpnq1807/contextos@latest install agy
 ```
@@ -323,6 +339,12 @@ This warning comes from a transitive dependency in the local embedding/WASM stac
 | `ctx install --quiet` | Installs ContextOS in measurement-only mode. | You want reports and stats but do not want visible injected context. | Installs the same hooks, but prompt hooks return empty context. |
 | `ctx install --inject` | Installs ContextOS with explicit injection mode. | You want to be explicit in scripts or docs. | Same runtime behavior as the default install mode; if combined with `--quiet`, `--inject` wins. |
 | `ctx install --copy` | Copies only the plugin payload to `$CODEX_HOME/plugins/ctx`. | Local development or manual plugin experiments. | Does not register marketplace, MCP, or global hooks. |
+| `ctx setup` | Runs the first-run setup wizard. | You want the recommended onboarding flow after `npm install -g @minhpnq1807/contextos`. | Installs selected agents, optionally syncs Ruler rules/MCP and skillshare skills, then prints next steps. |
+| `ctx setup --yes` | Runs setup with defaults non-interactively. | You want scriptable all-agent setup. | Uses `codex,claude,agy`, enables injection, syncs rules, syncs skills, and passes `--yes` to dependency setup prompts. |
+| `ctx setup --agents <list>` | Runs setup for selected agents. | You want only part of the default set. | Accepts comma-separated `codex`, `claude`, `agy`, or `antigravity`. |
+| `ctx setup --no-rules` | Skips Ruler sync during setup. | You only want hooks/MCP install and maybe skill sync. | Does not run `ctx sync --rules`. |
+| `ctx setup --no-skills` | Skips skillshare sync during setup. | You do not want shared skills configured. | Does not run `ctx sync --skills`. |
+| `ctx setup --quiet` | Runs setup in measurement-only mode. | You want reports/stats without visible injected prompt context. | Installs hooks with prompt context injection disabled. |
 | `ctx debug -- "task"` | Runs the scheduler locally for a fake prompt. | You want to see which AGENTS.md rules and files ContextOS would inject before using Codex. | Prints rule scores, scoring reasons, suggested files, and final `additionalContext`. |
 | `ctx report` | Shows the last Stop-hook compliance report for the current workspace. | An agent task has finished and you want the summary again. | Reads `~/.ctx/contextos/workspaces/<workspace-id>/last-report.json`. |
 | `ctx evidence` | Shows detailed evidence behind the last report for the current workspace. | You want to inspect why a rule was marked `followed`, `ignored`, or `unknown`. | Prints rule text, source file, score, status, and evidence reason. |

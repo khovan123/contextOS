@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import fs from "node:fs";
 import path from "node:path";
+import readline from "node:readline/promises";
+import { stdin as input, stdout as output } from "node:process";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 
@@ -25,6 +27,7 @@ import { syncRules } from "../plugins/ctx/lib/ruler-sync.js";
 import { syncSkills } from "../plugins/ctx/lib/skillshare-sync.js";
 import { scanSkills, warmSkillEmbeddings } from "../plugins/ctx/lib/skill-discoverer.js";
 import { parsePassthroughArgs, runPassthrough } from "../plugins/ctx/lib/passthrough.js";
+import { parseAgentList, parseSetupArgs, setupSummaryLines } from "../plugins/ctx/lib/setup-wizard.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
@@ -42,6 +45,12 @@ Usage:
   ctx install --quiet
   ctx install --inject
   ctx install --copy
+  ctx setup
+  ctx setup --yes
+  ctx setup --agents codex,claude,agy
+  ctx setup --no-rules
+  ctx setup --no-skills
+  ctx setup --quiet
   ctx debug -- "task"
   ctx report
   ctx evidence
@@ -394,6 +403,96 @@ async function warmEmbeddings(task) {
   console.log(`Cache: ${result.cachePath}`);
 }
 
+function printSetupBanner() {
+  console.log("");
+  console.log("╭─ ContextOS setup ─────────────────────────────────────────╮");
+  console.log("│ Task-aware rules, MCP sync, and skill discovery for agents │");
+  console.log("╰───────────────────────────────────────────────────────────╯");
+  console.log("");
+}
+
+async function askSetupQuestion(rl, question, defaultValue) {
+  const suffix = defaultValue ? ` (${defaultValue})` : "";
+  const answer = await rl.question(`◇ ${question}${suffix}: `);
+  return answer.trim() || defaultValue;
+}
+
+async function askSetupYesNo(rl, question, defaultValue = true) {
+  const suffix = defaultValue ? "Y/n" : "y/N";
+  const answer = await askSetupQuestion(rl, question, suffix);
+  if (!answer || answer === suffix) return defaultValue;
+  return !/^n(o)?$/i.test(answer.trim());
+}
+
+async function setup({ args = [], cwd = process.cwd() } = {}) {
+  const options = parseSetupArgs(args);
+  const interactive = !options.yes && process.stdin.isTTY;
+
+  printSetupBanner();
+  console.log(`◇ Installation directory:\n│  ${cwd}`);
+
+  if (interactive) {
+    const rl = readline.createInterface({ input, output });
+    try {
+      const proceed = await askSetupYesNo(rl, "Install to this directory?", true);
+      if (!proceed) {
+        console.log("Setup cancelled.");
+        return;
+      }
+      const agents = await askSetupQuestion(rl, "Install for agents? comma-separated", options.agents.join(","));
+      options.agents = parseAgentList(agents);
+      options.inject = await askSetupYesNo(rl, "Enable prompt context injection?", options.inject);
+      options.syncRules = await askSetupYesNo(rl, "Sync project rules and MCP servers through Ruler?", options.syncRules);
+      options.syncSkills = await askSetupYesNo(rl, "Sync skills through skillshare?", options.syncSkills);
+    } finally {
+      rl.close();
+    }
+  }
+
+  console.log("");
+  console.log("◇ Ready to setup:");
+  for (const line of setupSummaryLines({ cwd, ...options })) console.log(`│  ${line}`);
+  console.log("");
+
+  if (!options.agents.length) throw new Error("No agents selected. Use --agents codex,claude,agy.");
+
+  for (const agent of options.agents) {
+    console.log(`● Setting up ${agent}...`);
+    await install({ agent, inject: options.inject, copy: false });
+  }
+
+  if (options.syncRules) {
+    console.log("● Syncing project rules and MCP servers...");
+    const syncAgents = options.agents.map((agent) => agent === "agy" ? "antigravity" : agent).join(",");
+    const syncArgs = ["--rules", "--agents", syncAgents];
+    if (options.yes) syncArgs.push("--yes");
+    await syncRules({ cwd, rootDir, args: syncArgs });
+  }
+
+  if (options.syncSkills) {
+    console.log("● Syncing skills...");
+    const skillAgents = options.agents.map((agent) => agent === "agy" ? "antigravity" : agent).join(",");
+    const syncArgs = ["--skills", "--agents", skillAgents];
+    if (options.yes) syncArgs.push("--yes");
+    await syncSkills({
+      cwd,
+      args: syncArgs,
+      rebuildSkillEmbeddings: async ({ cwd: skillCwd, sourceDir }) => warmSkillEmbeddings({
+        cwd: skillCwd,
+        dataDir: contextOSDataDir(),
+        allowRemote: !isModelCacheReady(contextOSDataDir()),
+        skills: scanSkills({ cwd: skillCwd, roots: [sourceDir] })
+      })
+    });
+  }
+
+  console.log("");
+  console.log("╭─ ContextOS is ready ───────────────────────────────────────╮");
+  console.log("│ Next: restart/open your agent from this project directory. │");
+  console.log("│ Try: ctx debug -- \"Recheck authen flow\"                  │");
+  console.log("╰───────────────────────────────────────────────────────────╯");
+}
+
 const args = process.argv.slice(2);
 const command = args[0];
 
@@ -415,6 +514,8 @@ try {
       inject: args.includes("--inject") || !args.includes("--quiet"),
       agent: installAgentFromArgs(args)
     });
+  } else if (command === "setup") {
+    await setup({ args: args.slice(1), cwd: process.cwd() });
   } else if (command === "debug") {
     const marker = args.indexOf("--");
     const task = marker >= 0 ? args.slice(marker + 1).join(" ") : args.slice(1).join(" ");

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.8
+
+- Adds explicit `ctx setup` interactive onboarding for installing agents, enabling injection, syncing Ruler rules/MCP servers, and syncing skills through skillshare.
+- Adds non-interactive setup flags: `--yes`, `--agents`, `--no-rules`, `--no-skills`, `--quiet`, and `--no-inject`.
+- Keeps npm install lifecycle clean; setup only runs when the user explicitly invokes `ctx setup`.
+
 ## 0.5.7
 
 - Adds thin passthrough commands `ctx ruler -- <args>` and `ctx skillshare -- <args>` for upstream admin/debug workflows without reimplementing those CLIs.
