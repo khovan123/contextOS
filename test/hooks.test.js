@@ -120,8 +120,8 @@ describe("hook contracts", () => {
     );
 
     const report = JSON.parse(fs.readFileSync(reportPath, "utf8"));
-    expect(report.unknown).toHaveLength(1);
-    expect(report.unknown[0].rule.content).toContain("code-review-graph");
+    expect(report.unmeasurable).toHaveLength(1);
+    expect(report.unmeasurable[0].rule.content).toContain("code-review-graph");
   });
 
   it("on-stop filters system-user rules from stale scheduled context", () => {
@@ -151,7 +151,7 @@ describe("hook contracts", () => {
     );
 
     const report = JSON.parse(fs.readFileSync(reportPath, "utf8"));
-    const allRules = [...report.followed, ...report.ignored, ...report.unknown].map((item) => item.rule.content);
+    const allRules = [...report.followed, ...report.ignored, ...report.unknown, ...report.unmeasurable].map((item) => item.rule.content);
     expect(allRules).toEqual(["Always use zod for validation."]);
     expect(report.injectedRuleCount).toBe(1);
   });

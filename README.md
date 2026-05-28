@@ -190,6 +190,7 @@ This warning comes from a transitive dependency in the local embedding/WASM stac
 | `ctx report` | Shows the last Stop-hook compliance report for the current workspace. | A Codex task has finished and you want the summary again. | Reads `~/.ctx/contextos/workspaces/<workspace-id>/last-report.json`. |
 | `ctx evidence` | Shows detailed evidence behind the last report for the current workspace. | You want to inspect why a rule was marked `followed`, `ignored`, or `unknown`. | Prints rule text, source file, score, status, and evidence reason. |
 | `ctx stats` | Shows aggregate runtime metrics for the current workspace. | You want to know whether ContextOS is active and useful over time. | Prints prompt count, report count, injected/quiet ratio, average prompt analysis time, efficiency, rule outcomes, hook events, and last suggested files for the current workspace only. |
+| `ctx benchmark -- "task"` | Compares baseline AGENTS.md ordering with ContextOS task-aware scheduling. | You want a before/after signal for lost-in-the-middle risk. | Prints parsed/actionable/filtered rule counts, relevant rules in the middle of the original file, scheduled high/mid rules, and top scored rules. |
 | `ctx embeddings warm -- "task"` | Prepares local semantic embedding caches. | First install, CI smoke checks, or after changing AGENTS.md/project files. | Loads/downloads `Xenova/all-MiniLM-L6-v2` and writes vectors to `~/.ctx/contextos/embeddings.db`. |
 | `ctx --version` | Prints the installed ContextOS CLI version. | You want to confirm which npm version is being executed. | Prints the version from package metadata. |
 
@@ -286,6 +287,7 @@ ContextOS uses heuristic evidence collection from git diff/status plus local run
 followed = evidence in the diff suggests the rule was applied
 ignored  = evidence in the diff suggests the rule was violated
 unknown  = the rule was relevant, but the diff does not prove either way
+unmeasurable = ContextOS lacks the required evidence source, such as git diff lines or runtime telemetry
 ```
 
 For runtime-only rules, ContextOS also checks `telemetry.jsonl` for hook-visible tool names, MCP server names, and command metadata. A rule like "use code-review-graph before reading files" can be marked `followed` when telemetry contains a matching `code-review-graph` signal.

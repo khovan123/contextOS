@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.0
+
+- Adds `ctx benchmark -- "task"` to compare baseline AGENTS.md ordering with ContextOS scheduling and estimate lost-in-the-middle risk.
+- Improves AGENTS.md rule filtering for generic headings and non-actionable sections.
+- Splits Stop reports into `followed`, `ignored`, `unknown`, and `unmeasurable` so efficiency only reflects rules with evidence.
+
 ## 0.1.9
 
 - Proxies all configured MCP servers except ContextOS' own `ctx-mcp` server.

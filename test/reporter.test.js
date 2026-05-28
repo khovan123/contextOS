@@ -24,6 +24,12 @@ describe("reporter evidence", () => {
           rule: { content: "Use code-review-graph.", sourcePath: "AGENTS.md", score: 0.4 },
           evidence: "expected keyword not visible in diff"
         }
+      ],
+      unmeasurable: [
+        {
+          rule: { content: "Use runtime telemetry.", sourcePath: "AGENTS.md", score: 0.3 },
+          evidence: "no runtime telemetry source observed"
+        }
       ]
     });
 
@@ -33,6 +39,7 @@ describe("reporter evidence", () => {
     expect(output).toContain("Keywords: zod");
     expect(output).toContain("Matched line: src/auth.ts:1");
     expect(output).toContain("UNKNOWN");
+    expect(output).toContain("UNMEASURABLE");
     expect(output).toContain("Score: 0.40");
   });
 

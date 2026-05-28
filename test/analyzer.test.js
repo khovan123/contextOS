@@ -22,6 +22,7 @@ Plain paragraph with enough content to become a standalone rule.
       content: "Backend"
     });
     expect(rules[1].content).toBe("Always use zod for validation.");
+    expect(filterActionableRules(rules).map((rule) => rule.content)).not.toContain("Backend");
   });
 
   it("scores auth rules above styling rules for auth tasks", () => {

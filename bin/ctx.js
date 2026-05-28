@@ -15,6 +15,7 @@ import { warmFileEmbeddings } from "../plugins/ctx/lib/file-embedding-retriever.
 import { scoreContext } from "../plugins/ctx/lib/score-context.js";
 import { defaultDataRoot, workspaceDataDir, workspaceMarkerPath } from "../plugins/ctx/lib/workspace-data.js";
 import { installMcpTelemetryProxies } from "../plugins/ctx/lib/mcp-proxy-install.js";
+import { benchmarkWorkspace, formatBenchmark } from "../plugins/ctx/lib/benchmark.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
@@ -32,6 +33,7 @@ Usage:
   ctx report
   ctx evidence
   ctx stats
+  ctx benchmark -- "task"
   ctx embeddings warm -- "task"
   ctx --version
 `;
@@ -272,6 +274,11 @@ try {
     console.log(formatEvidence(loadLastReport()));
   } else if (command === "stats") {
     console.log(formatStats(loadStats(contextOSWorkspaceDataDir())));
+  } else if (command === "benchmark") {
+    const marker = args.indexOf("--");
+    const task = marker >= 0 ? args.slice(marker + 1).join(" ") : args.slice(1).join(" ");
+    if (!task.trim()) throw new Error('Usage: ctx benchmark -- "task"');
+    console.log(formatBenchmark(benchmarkWorkspace({ cwd: process.cwd(), task })));
   } else {
     throw new Error(`Unknown command: ${command}\n\n${usage()}`);
   }

@@ -81,6 +81,11 @@ const TOOL_REFERENCE_TOKENS = new Set([
   "list_communities"
 ]);
 
+const ACTION_TOKENS = new Set([
+  "add", "avoid", "call", "check", "derive", "ensure", "filter", "follow", "prefer", "run",
+  "use", "validate", "verify", "write", "never", "always", "must", "should", "do"
+]);
+
 export function tokenize(value) {
   const normalized = String(value || "")
     .toLowerCase()
@@ -190,6 +195,7 @@ export function isDocumentationOnlyRule(rule) {
   if (/^<!--.*-->$/.test(normalized)) return true;
   if (DOCUMENTATION_HEADING_PATTERNS.some((pattern) => pattern.test(normalized))) return true;
   if (isMarkdownTableRule(normalized)) return true;
+  if (isGenericHeading(normalized)) return true;
   return false;
 }
 
@@ -207,6 +213,13 @@ function isMarkdownTableRule(content) {
   const lower = content.toLowerCase();
   const toolReferenceCount = [...TOOL_REFERENCE_TOKENS].filter((token) => lower.includes(token)).length;
   return /\btool\b/.test(lower) && /\buse\s+when\b/.test(lower) && toolReferenceCount >= 2;
+}
+
+function isGenericHeading(content) {
+  if (content.length > 80 || /[`.:;]/.test(content)) return false;
+  const tokens = tokenize(content);
+  if (tokens.length > 4) return false;
+  return !tokens.some((token) => ACTION_TOKENS.has(token));
 }
 
 function dedupeRules(rules) {

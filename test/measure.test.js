@@ -49,11 +49,11 @@ describe("measure", () => {
       ]
     });
 
-    expect(results[0]).toMatchObject({ status: "unknown" });
+    expect(results[0]).toMatchObject({ status: "unmeasurable" });
     expect(results[0].evidence).not.toContain("this");
   });
 
-  it("marks runtime-only workflow rules as unknown with a concrete reason", () => {
+  it("marks runtime-only workflow rules unmeasurable without telemetry source", () => {
     const results = checkCompliance({
       rules: [
         { content: "Always use `code-review-graph` before reading files.", score: 1 }
@@ -64,10 +64,33 @@ describe("measure", () => {
     });
 
     expect(results[0]).toMatchObject({
-      status: "unknown",
+      status: "unmeasurable",
       kind: "runtime"
     });
     expect(results[0].evidence).toContain("runtime/tool-call telemetry");
+  });
+
+  it("marks runtime-only workflow rules unknown when telemetry exists but does not match", () => {
+    const results = checkCompliance({
+      rules: [
+        { content: "Always use `code-review-graph` before reading files.", score: 1 }
+      ],
+      addedLines: [
+        { file: "src/user.ts", line: 10, content: "const user = await repo.findUser();" }
+      ],
+      runtimeEvidence: {
+        sources: [{ event: "McpToolCall" }],
+        toolSignals: ["agentmemory.memory_recall"],
+        commandSignals: [],
+        signals: ["agentmemory"]
+      }
+    });
+
+    expect(results[0]).toMatchObject({
+      status: "unknown",
+      kind: "runtime"
+    });
+    expect(results[0].evidence).toContain("no matching runtime signal");
   });
 
   it("marks runtime-only workflow rules followed when telemetry has tool signals", () => {

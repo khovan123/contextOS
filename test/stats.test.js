@@ -30,6 +30,7 @@ describe("stats", () => {
       followed: [{ rule: { content: "Use zod" } }],
       ignored: [],
       unknown: [],
+      unmeasurable: [{ rule: { content: "Needs runtime telemetry" } }],
       changedFiles: ["src/auth.ts"]
     });
     writeJsonFile(path.join(tmp, "last-report.json"), {
@@ -48,9 +49,11 @@ describe("stats", () => {
     expect(stats.injectedCount).toBe(1);
     expect(stats.averagePromptMs).toBe(15);
     expect(stats.averageEfficiency).toBe(100);
+    expect(stats.unmeasurable).toBe(1);
     expect(output).toContain("Prompts analyzed: 2");
     expect(output).toContain("Prompt mode: 1 injected, 1 quiet");
     expect(output).toContain("Last changed files: src/auth.ts");
+    expect(output).toContain("Rule outcomes: 1 followed, 0 ignored, 0 unknown, 1 unmeasurable");
   });
 
   it("explains unknown efficiency when no rule evidence is measurable", () => {
@@ -60,7 +63,9 @@ describe("stats", () => {
       followed: [],
       ignored: [],
       unknown: [{ rule: { content: "Use code-review-graph before reading files." } }],
+      unmeasurable: [{ rule: { content: "Needs runtime telemetry." } }],
       unknownRuleCount: 1,
+      unmeasurableRuleCount: 1,
       measuredRuleCount: 0,
       changedFiles: []
     });
@@ -70,5 +75,6 @@ describe("stats", () => {
     expect(output).toContain("Average efficiency: unknown (no measurable followed/ignored rule evidence yet)");
     expect(output).toContain("Last report measured rules: 0");
     expect(output).toContain("Last report unknown rules: 1");
+    expect(output).toContain("Last report unmeasurable rules: 1");
   });
 });

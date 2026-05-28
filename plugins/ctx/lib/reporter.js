@@ -5,6 +5,7 @@ export function buildReport({ cwd, prompt, relevantFiles, scheduled, gitSnapshot
   const followed = actionableCompliance.filter((item) => item.status === "followed");
   const ignored = actionableCompliance.filter((item) => item.status === "ignored");
   const unknown = actionableCompliance.filter((item) => item.status === "unknown");
+  const unmeasurable = actionableCompliance.filter((item) => item.status === "unmeasurable");
   const measured = followed.length + ignored.length;
   const efficiencyScore = measured ? Math.round((followed.length / measured) * 100) : null;
 
@@ -20,8 +21,10 @@ export function buildReport({ cwd, prompt, relevantFiles, scheduled, gitSnapshot
     followed,
     ignored,
     unknown,
+    unmeasurable,
     measuredRuleCount: measured,
     unknownRuleCount: unknown.length,
+    unmeasurableRuleCount: unmeasurable.length,
     efficiencyScore
   };
 }
@@ -32,7 +35,7 @@ export function formatReport(report) {
   lines.push("ContextOS report");
   lines.push(`Efficiency: ${report.efficiencyScore == null ? "unknown" : `${report.efficiencyScore}%`}`);
   lines.push(`Injected rules: ${report.injectedRuleCount || 0}`);
-  lines.push(`Rule outcomes: ${report.followed?.length || 0} followed, ${report.ignored?.length || 0} ignored, ${report.unknown?.length || 0} unknown`);
+  lines.push(`Rule outcomes: ${report.followed?.length || 0} followed, ${report.ignored?.length || 0} ignored, ${report.unknown?.length || 0} unknown, ${report.unmeasurable?.length || 0} unmeasurable`);
   lines.push(`Measured rules: ${report.measuredRuleCount ?? ((report.followed?.length || 0) + (report.ignored?.length || 0))}`);
   lines.push(`Changed files: ${report.changedFiles?.length ? report.changedFiles.join(", ") : "none detected"}`);
 
@@ -48,6 +51,7 @@ export function formatReport(report) {
   appendBucket(lines, "Followed", report.followed);
   appendBucket(lines, "Ignored", report.ignored);
   appendBucket(lines, "Unknown", report.unknown);
+  appendBucket(lines, "Unmeasurable", report.unmeasurable);
 
   if (report.ignored?.length) {
     lines.push(`Suggestion: fix ignored rule evidence first: ${truncate(report.ignored[0].rule?.content || "", 70)}`);
@@ -71,7 +75,8 @@ export function formatEvidence(report) {
   const items = [
     ...(report.followed || []).map((item) => ({ ...item, status: "followed" })),
     ...(report.ignored || []).map((item) => ({ ...item, status: "ignored" })),
-    ...(report.unknown || []).map((item) => ({ ...item, status: "unknown" }))
+    ...(report.unknown || []).map((item) => ({ ...item, status: "unknown" })),
+    ...(report.unmeasurable || []).map((item) => ({ ...item, status: "unmeasurable" }))
   ];
 
   if (!items.length) {
@@ -129,15 +134,18 @@ function sanitizeReport(report = {}) {
   const followed = (report.followed || []).filter((item) => !isSystemUserRule(item.rule));
   const ignored = (report.ignored || []).filter((item) => !isSystemUserRule(item.rule));
   const unknown = (report.unknown || []).filter((item) => !isSystemUserRule(item.rule));
+  const unmeasurable = (report.unmeasurable || []).filter((item) => !isSystemUserRule(item.rule));
   const measured = followed.length + ignored.length;
   return {
     ...report,
-    injectedRuleCount: followed.length + ignored.length + unknown.length,
+    injectedRuleCount: followed.length + ignored.length + unknown.length + unmeasurable.length,
     followed,
     ignored,
     unknown,
+    unmeasurable,
     measuredRuleCount: measured,
     unknownRuleCount: unknown.length,
+    unmeasurableRuleCount: unmeasurable.length,
     efficiencyScore: measured ? Math.round((followed.length / measured) * 100) : null
   };
 }

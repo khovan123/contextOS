@@ -183,23 +183,31 @@ export function checkCompliance({ rules = [], addedLines = [], runtimeEvidence =
     if (!keywords.length || !addedLines.length) {
       results.push({
         rule,
-        status: "unknown",
+        status: isRuntimeOnly || !addedLines.length || !keywords.length ? "unmeasurable" : "unknown",
         kind: isRuntimeOnly ? "runtime" : kind,
         keywords,
         evidence: isRuntimeOnly
-          ? "requires runtime/tool-call telemetry; no matching runtime signal observed"
+          ? "requires runtime/tool-call telemetry; no runtime telemetry source observed"
           : (!addedLines.length ? "no added lines in git diff" : "no concrete compliance keywords found")
       });
       continue;
     }
 
     if (isRuntimeOnly) {
+      const hasRuntimeSource = Boolean(
+        runtimeEvidence.sources?.length ||
+        runtimeEvidence.signals?.length ||
+        runtimeEvidence.toolSignals?.length ||
+        runtimeEvidence.commandSignals?.length
+      );
       results.push({
         rule,
-        status: "unknown",
+        status: hasRuntimeSource ? "unknown" : "unmeasurable",
         kind: "runtime",
         keywords,
-        evidence: "requires runtime/tool-call telemetry; no matching runtime signal observed"
+        evidence: hasRuntimeSource
+          ? "requires runtime/tool-call telemetry; no matching runtime signal observed"
+          : "requires runtime/tool-call telemetry; no runtime telemetry source observed"
       });
       continue;
     }

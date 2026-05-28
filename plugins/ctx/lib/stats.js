@@ -57,6 +57,7 @@ export function loadStats(dataDir) {
   const followed = reports.reduce((sum, report) => sum + (report.followed?.length || 0), 0);
   const ignored = reports.reduce((sum, report) => sum + (report.ignored?.length || 0), 0);
   const unknown = reports.reduce((sum, report) => sum + (report.unknown?.length || 0), 0);
+  const unmeasurable = reports.reduce((sum, report) => sum + (report.unmeasurable?.length || 0), 0);
 
   return {
     dataDir,
@@ -71,6 +72,7 @@ export function loadStats(dataDir) {
     followed,
     ignored,
     unknown,
+    unmeasurable,
     lastPrompt: analyzedPrompts.at(-1) || null,
     lastReport: reports.at(-1) || null
   };
@@ -85,7 +87,7 @@ export function formatStats(stats) {
   lines.push(`Prompt mode: ${stats.injectedCount} injected, ${stats.quietCount} quiet (${stats.injectionRate}% injected)`);
   lines.push(`Average prompt analysis: ${stats.averagePromptMs == null ? "unknown" : `${stats.averagePromptMs}ms`}`);
   lines.push(`Average efficiency: ${formatAverageEfficiency(stats)}`);
-  lines.push(`Rule outcomes: ${stats.followed} followed, ${stats.ignored} ignored, ${stats.unknown} unknown`);
+  lines.push(`Rule outcomes: ${stats.followed} followed, ${stats.ignored} ignored, ${stats.unknown} unknown, ${stats.unmeasurable || 0} unmeasurable`);
 
   const eventSummary = Object.entries(stats.events)
     .map(([event, count]) => `${event}:${count}`)
@@ -103,6 +105,7 @@ export function formatStats(stats) {
     lines.push(`Last report efficiency: ${stats.lastReport.efficiencyScore == null ? "unknown" : `${stats.lastReport.efficiencyScore}%`}`);
     lines.push(`Last report measured rules: ${stats.lastReport.measuredRuleCount ?? ((stats.lastReport.followed?.length || 0) + (stats.lastReport.ignored?.length || 0))}`);
     lines.push(`Last report unknown rules: ${stats.lastReport.unknownRuleCount ?? (stats.lastReport.unknown?.length || 0)}`);
+    lines.push(`Last report unmeasurable rules: ${stats.lastReport.unmeasurableRuleCount ?? (stats.lastReport.unmeasurable?.length || 0)}`);
     const changed = stats.lastReport.changedFiles?.join(", ");
     if (changed) lines.push(`Last changed files: ${changed}`);
   }
