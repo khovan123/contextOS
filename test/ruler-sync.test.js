@@ -214,6 +214,7 @@ describe("ruler sync", () => {
     const tomlPath = path.join(tmp, ".ruler", "ruler.toml");
     const appPath = path.join(tmp, "antigravity", "mcp_config.json");
     const cliPath = path.join(tmp, "antigravity-cli", "mcp_config.json");
+    const legacyEditorPath = path.join(tmp, "config", "mcp_config.json");
     fs.mkdirSync(path.dirname(tomlPath), { recursive: true });
     fs.writeFileSync(tomlPath, [
       "[mcp_servers.ctx-mcp]",
@@ -228,11 +229,11 @@ describe("ruler sync", () => {
 
     const result = syncAntigravityMcpFromRuler({
       tomlPath,
-      configPaths: [appPath, cliPath]
+      configPaths: [appPath, cliPath, legacyEditorPath]
     });
 
     expect(result.servers).toEqual(["ctx-mcp", "agentmemory"]);
-    for (const filePath of [appPath, cliPath]) {
+    for (const filePath of [appPath, cliPath, legacyEditorPath]) {
       const config = JSON.parse(fs.readFileSync(filePath, "utf8"));
       expect(config.mcpServers["ctx-mcp"].command).toBe("node");
       expect(config.mcpServers.agentmemory.args).toEqual(["-y", "@agentmemory/mcp"]);

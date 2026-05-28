@@ -123,13 +123,14 @@ describe("agent hook installers", () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-agy-mcp-"));
     const appPath = path.join(tmp, "antigravity", "mcp_config.json");
     const cliPath = path.join(tmp, "antigravity-cli", "mcp_config.json");
+    const legacyEditorPath = path.join(tmp, "config", "mcp_config.json");
 
     const written = installAntigravityMcp({
-      configPaths: [appPath, cliPath],
+      configPaths: [appPath, cliPath, legacyEditorPath],
       installRoot: "/tmp/contextos"
     });
 
-    expect(written).toEqual([appPath, cliPath]);
+    expect(written).toEqual([appPath, cliPath, legacyEditorPath]);
     for (const filePath of written) {
       const config = JSON.parse(fs.readFileSync(filePath, "utf8"));
       expect(config.mcpServers["ctx-mcp"].args[0]).toBe("/tmp/contextos/plugins/ctx/mcp/server.js");

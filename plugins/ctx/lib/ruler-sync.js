@@ -234,7 +234,8 @@ function antigravityMcpConfigPaths() {
   const home = process.env.HOME || process.cwd();
   return [
     path.join(home, ".gemini", "antigravity", "mcp_config.json"),
-    path.join(home, ".gemini", "antigravity-cli", "mcp_config.json")
+    path.join(home, ".gemini", "antigravity-cli", "mcp_config.json"),
+    path.join(home, ".gemini", "config", "mcp_config.json")
   ];
 }
 
