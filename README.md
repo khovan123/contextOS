@@ -145,7 +145,12 @@ Restart Claude Code after installing.
 
 ### Antigravity
 
-`ctx install agy` copies this package into `~/.ctx/contextos/agents/agy/contextos` and writes a `contextos` hook group into `~/.gemini/config/hooks.json`.
+`ctx install agy` copies this package into `~/.ctx/contextos/agents/agy/contextos`, writes a `contextos` hook group into `~/.gemini/config/hooks.json`, and registers `ctx-mcp` in both Antigravity MCP config locations:
+
+```text
+~/.gemini/antigravity/mcp_config.json
+~/.gemini/antigravity-cli/mcp_config.json
+```
 
 Antigravity does not use `UserPromptSubmit`; ContextOS injects context through `PreInvocation` as an `ephemeralMessage`. The `Stop` adapter stores the report locally, so use `ctx report` or `ctx evidence` after the task to inspect outcomes.
 
@@ -227,7 +232,7 @@ This warning comes from a transitive dependency in the local embedding/WASM stac
 | `ctx install` | Installs ContextOS into Codex with prompt context injection enabled. | Normal Codex setup after installing the npm package. | Same as `ctx install codex`. |
 | `ctx install codex` | Installs ContextOS into Codex. | You use the `codex` CLI. | Copies the plugin into `$CODEX_HOME/marketplaces/contextos`, registers `ctx@contextos`, registers `ctx-mcp`, installs global hooks, downloads the embedding model, and warms caches. |
 | `ctx install claude` | Installs ContextOS into Claude Code. | You use the `claude` CLI. | Copies a stable package root to `~/.ctx/contextos/agents/claude/contextos` and merges hooks into `~/.claude/settings.json`. |
-| `ctx install agy` | Installs ContextOS into Antigravity. | You use the `agy` CLI or Antigravity app. | Copies a stable package root to `~/.ctx/contextos/agents/agy/contextos` and writes a `contextos` hook group into `~/.gemini/config/hooks.json`. |
+| `ctx install agy` | Installs ContextOS into Antigravity. | You use the `agy` CLI or Antigravity app. | Copies a stable package root to `~/.ctx/contextos/agents/agy/contextos`, writes hooks to `~/.gemini/config/hooks.json`, and registers `ctx-mcp` in `~/.gemini/antigravity/mcp_config.json` plus `~/.gemini/antigravity-cli/mcp_config.json`. |
 | `ctx install --agent <name>` | Installs for a named agent. | You prefer explicit scripts. | Accepts `codex`, `claude`, or `agy`. |
 | `ctx install --quiet` | Installs ContextOS in measurement-only mode. | You want reports and stats but do not want visible injected context. | Installs the same hooks, but prompt hooks return empty context. |
 | `ctx install --inject` | Installs ContextOS with explicit injection mode. | You want to be explicit in scripts or docs. | Same runtime behavior as the default install mode. |

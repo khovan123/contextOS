@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import { installClaudeHooks } from "../plugins/ctx/lib/claude-hooks.js";
 import { buildAntigravityHooksConfig, installAntigravityHooks } from "../plugins/ctx/lib/antigravity-hooks.js";
+import { buildAntigravityMcpConfig, installAntigravityMcp } from "../plugins/ctx/lib/antigravity-mcp.js";
 import { antigravityCwd, extractPromptFromAntigravityPayload } from "../plugins/ctx/lib/antigravity-adapter.js";
 
 describe("agent hook installers", () => {
@@ -62,6 +63,40 @@ describe("agent hook installers", () => {
     const hooks = JSON.parse(fs.readFileSync(hooksPath, "utf8"));
     expect(hooks.contextos.enabled).toBe(true);
     expect(hooks.contextos.PreInvocation[0].command).toContain("on-antigravity-preinvocation.js");
+  });
+
+  it("builds Antigravity MCP config without dropping existing servers", () => {
+    const config = buildAntigravityMcpConfig({
+      mcpServers: {
+        github: {
+          command: "npx",
+          args: ["-y", "@modelcontextprotocol/server-github"]
+        }
+      }
+    }, {
+      installRoot: "/tmp/contextos"
+    });
+
+    expect(config.mcpServers.github.command).toBe("npx");
+    expect(config.mcpServers["ctx-mcp"].command).toBe("node");
+    expect(config.mcpServers["ctx-mcp"].args[0]).toBe("/tmp/contextos/plugins/ctx/mcp/server.js");
+  });
+
+  it("installs Antigravity MCP config for app and CLI config paths", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-agy-mcp-"));
+    const appPath = path.join(tmp, "antigravity", "mcp_config.json");
+    const cliPath = path.join(tmp, "antigravity-cli", "mcp_config.json");
+
+    const written = installAntigravityMcp({
+      configPaths: [appPath, cliPath],
+      installRoot: "/tmp/contextos"
+    });
+
+    expect(written).toEqual([appPath, cliPath]);
+    for (const filePath of written) {
+      const config = JSON.parse(fs.readFileSync(filePath, "utf8"));
+      expect(config.mcpServers["ctx-mcp"].args[0]).toBe("/tmp/contextos/plugins/ctx/mcp/server.js");
+    }
   });
 
   it("normalizes Antigravity cwd and prompt from transcript payloads", () => {

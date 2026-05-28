@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.2
+
+- Registers `ctx-mcp` for Antigravity app and `agy` CLI by writing `~/.gemini/antigravity/mcp_config.json` and `~/.gemini/antigravity-cli/mcp_config.json`.
+
 ## 0.2.1
 
 - Adds `ctx install claude` for Claude Code hooks in `~/.claude/settings.json`.
