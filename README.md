@@ -34,13 +34,13 @@ codex
 Prompt Codex:
 
 ```text
-kiểm tra flow kiểm duyệt upload
+Recheck authen flow
 ```
 
 Expected result:
 
 - `UserPromptSubmit` injects relevant AGENTS.md rules.
-- ContextOS suggests upload/moderation files.
+- ContextOS suggests auth/authentication files.
 - `Stop` prints a ContextOS report with rule outcomes.
 - `ctx evidence` shows the specific evidence behind the last report.
 
@@ -53,11 +53,11 @@ With ContextOS, each prompt gets a compact block:
 ```text
 ## Critical ContextOS rules
 - Use code-review-graph before reading files.
-- Check upload moderation flows before editing approval code.
+- Recheck authentication flow before editing auth code.
 
 ## Suggested files to check
-- services/content-service/src/infrastructure/services/content-moderation.service.ts
-- webapp/src/features/dashboard/components/moderation-status-badge.tsx
+- services/auth-service/src/auth.controller.ts
+- services/auth-service/src/auth.service.ts
 ```
 
 ## What It Does
@@ -115,7 +115,7 @@ Verify the published package in any project:
 
 ```bash
 npm exec --yes --package=@minhpnq1807/contextos@latest -- ctx --version
-npm exec --yes --package=@minhpnq1807/contextos@latest -- ctx debug -- "fix upload moderation flow"
+npm exec --yes --package=@minhpnq1807/contextos@latest -- ctx debug -- "Recheck authen flow"
 ```
 
 ## Modes
@@ -161,7 +161,7 @@ Restart Codex after `ctx install`. The bridge socket is owned by the long-runnin
 Run:
 
 ```bash
-ctx embeddings warm -- "kiểm tra flow kiểm duyệt upload"
+ctx embeddings warm -- "Recheck authen flow"
 ```
 
 Then restart Codex.
