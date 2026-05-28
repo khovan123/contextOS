@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.3
+
+- Skips project MCP imports whose command is an absolute path that does not exist, preventing placeholder paths such as `/home/user/.cargo/bin/mcp-rtk` from reaching Antigravity.
+- Sanitizes Antigravity MCP config files during `ctx sync --rules` by removing existing MCP entries with missing absolute command paths.
+
 ## 0.5.2
 
 - Recovers automatically from malformed `embeddings.db` files by moving the corrupt cache aside and recreating it.

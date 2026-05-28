@@ -138,14 +138,25 @@ describe("ruler sync", () => {
     expect(content).toContain("[mcp_servers.code-review-graph]");
   });
 
-  it("reads project .mcp.json servers such as mcp-rtk", () => {
+  it("reads project .mcp.json servers and skips missing absolute commands", () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-project-mcp-json-"));
+    const rtkPath = path.join(tmp, "bin", "mcp-rtk");
+    fs.mkdirSync(path.dirname(rtkPath), { recursive: true });
+    fs.writeFileSync(rtkPath, "#!/bin/sh\n");
     fs.writeFileSync(path.join(tmp, ".mcp.json"), JSON.stringify({
       mcpServers: {
         "mcp-rtk": {
-          command: "/home/user/.cargo/bin/mcp-rtk",
+          command: rtkPath,
           args: ["--", "code-review-graph", "serve"],
           type: "stdio"
+        },
+        "missing-rtk": {
+          command: "/home/user/.cargo/bin/mcp-rtk",
+          args: ["--", "code-review-graph", "serve"]
+        },
+        "path-binary": {
+          command: "mcp-rtk",
+          args: ["--", "code-review-graph", "serve"]
         },
         "ctx-mcp": {
           command: "node",
@@ -157,7 +168,12 @@ describe("ruler sync", () => {
     expect(readProjectMcpJsonServers({ cwd: tmp })).toEqual([
       {
         name: "mcp-rtk",
-        command: "/home/user/.cargo/bin/mcp-rtk",
+        command: rtkPath,
+        args: ["--", "code-review-graph", "serve"]
+      },
+      {
+        name: "path-binary",
+        command: "mcp-rtk",
         args: ["--", "code-review-graph", "serve"]
       },
       {
@@ -170,9 +186,16 @@ describe("ruler sync", () => {
 
   it("imports project .mcp.json servers during full sync", async () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-ruler-sync-project-mcp-"));
+    const rtkPath = path.join(tmp, "bin", "mcp-rtk");
+    fs.mkdirSync(path.dirname(rtkPath), { recursive: true });
+    fs.writeFileSync(rtkPath, "#!/bin/sh\n");
     fs.writeFileSync(path.join(tmp, ".mcp.json"), JSON.stringify({
       mcpServers: {
         "mcp-rtk": {
+          command: rtkPath,
+          args: ["--", "code-review-graph", "serve"]
+        },
+        "missing-rtk": {
           command: "/home/user/.cargo/bin/mcp-rtk",
           args: ["--", "code-review-graph", "serve"]
         }
@@ -197,7 +220,9 @@ describe("ruler sync", () => {
 
     const content = fs.readFileSync(path.join(tmp, ".ruler", "ruler.toml"), "utf8");
     expect(content).toContain("[mcp_servers.mcp-rtk]");
-    expect(content).toContain("/home/user/.cargo/bin/mcp-rtk");
+    expect(content).toContain(rtkPath);
+    expect(content).not.toContain("[mcp_servers.missing-rtk]");
+    expect(content).not.toContain("/home/user/.cargo/bin/mcp-rtk");
   });
 
   it("verifies generated configs per project path", () => {
@@ -216,10 +241,23 @@ describe("ruler sync", () => {
     const cliPath = path.join(tmp, "antigravity-cli", "mcp_config.json");
     const legacyEditorPath = path.join(tmp, "config", "mcp_config.json");
     fs.mkdirSync(path.dirname(tomlPath), { recursive: true });
+    fs.mkdirSync(path.dirname(appPath), { recursive: true });
+    fs.writeFileSync(appPath, JSON.stringify({
+      mcpServers: {
+        "mcp-rtk": {
+          command: "/home/user/.cargo/bin/mcp-rtk",
+          args: ["--", "code-review-graph", "serve"]
+        }
+      }
+    }));
     fs.writeFileSync(tomlPath, [
       "[mcp_servers.ctx-mcp]",
       'command = "node"',
       'args = ["/tmp/contextos/plugins/ctx/mcp/server.js"]',
+      "",
+      "[mcp_servers.missing-rtk]",
+      'command = "/home/user/.cargo/bin/mcp-rtk"',
+      'args = ["--", "code-review-graph", "serve"]',
       "",
       "[mcp_servers.agentmemory]",
       'command = "npx"',
@@ -233,10 +271,14 @@ describe("ruler sync", () => {
     });
 
     expect(result.servers).toEqual(["ctx-mcp", "agentmemory"]);
+    expect(result.skipped).toEqual(["missing-rtk"]);
+    expect(result.removed).toEqual(["mcp-rtk"]);
     for (const filePath of [appPath, cliPath, legacyEditorPath]) {
       const config = JSON.parse(fs.readFileSync(filePath, "utf8"));
       expect(config.mcpServers["ctx-mcp"].command).toBe("node");
       expect(config.mcpServers.agentmemory.args).toEqual(["-y", "@agentmemory/mcp"]);
+      expect(config.mcpServers["missing-rtk"]).toBeUndefined();
+      expect(config.mcpServers["mcp-rtk"]).toBeUndefined();
     }
   });
 

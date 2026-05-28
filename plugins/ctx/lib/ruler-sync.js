@@ -196,11 +196,17 @@ export function readProjectMcpJsonServers({ cwd = process.cwd(), configPath = pa
   const mcpServers = config.mcpServers && typeof config.mcpServers === "object" ? config.mcpServers : {};
   return Object.entries(mcpServers)
     .filter(([, server]) => server && typeof server.command === "string")
+    .filter(([, server]) => isRunnableMcpCommand(server.command))
     .map(([name, server]) => ({
       name,
       command: server.command,
       args: Array.isArray(server.args) ? server.args : []
     }));
+}
+
+function isRunnableMcpCommand(command) {
+  if (!path.isAbsolute(command)) return true;
+  return fs.existsSync(command);
 }
 
 function mergeMcpServers(...groups) {
@@ -253,12 +259,21 @@ function writeJsonFile(filePath, value) {
 }
 
 export function syncAntigravityMcpFromRuler({ tomlPath, configPaths = antigravityMcpConfigPaths(), dryRun = false } = {}) {
-  const servers = readRulerMcpServers({ tomlPath });
-  if (!servers.length) return { changed: false, servers: [], configPaths };
+  const allServers = readRulerMcpServers({ tomlPath });
+  const servers = allServers.filter((server) => isRunnableMcpCommand(server.command));
+  const skipped = allServers.filter((server) => !isRunnableMcpCommand(server.command)).map((server) => server.name);
+  if (!servers.length && !skipped.length) return { changed: false, servers: [], skipped, removed: [], configPaths };
 
+  const removed = [];
   for (const configPath of configPaths) {
     const config = readJsonFile(configPath, {});
     if (!config.mcpServers || typeof config.mcpServers !== "object") config.mcpServers = {};
+    for (const [name, server] of Object.entries(config.mcpServers)) {
+      if (server?.command && !isRunnableMcpCommand(server.command)) {
+        delete config.mcpServers[name];
+        removed.push(name);
+      }
+    }
     for (const server of servers) {
       config.mcpServers[server.name] = {
         command: server.command,
@@ -268,7 +283,7 @@ export function syncAntigravityMcpFromRuler({ tomlPath, configPaths = antigravit
     if (!dryRun) writeJsonFile(configPath, config);
   }
 
-  return { changed: true, servers: servers.map((server) => server.name), configPaths };
+  return { changed: true, servers: servers.map((server) => server.name), skipped, removed: [...new Set(removed)], configPaths };
 }
 
 export function buildCtxMcpToml({ mcpServerPath, agents = DEFAULT_AGENTS } = {}) {
