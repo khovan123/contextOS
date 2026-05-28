@@ -197,6 +197,43 @@ ctx install --copy
 
 Copies only the plugin payload into `$CODEX_HOME/plugins/ctx`. This is mostly for local experiments.
 
+## Ruler Sync
+
+Use Ruler when the project wants one rule/MCP source of truth for multiple agents:
+
+```bash
+ctx sync --rules
+```
+
+Default agents are `codex`, `claude`, and `antigravity`. You can target a subset:
+
+```bash
+ctx sync --rules --agents codex
+ctx sync --rules --agents codex,claude
+```
+
+What it does:
+
+1. Checks that `ruler` is installed. If it is missing, ContextOS asks before running `npm install -g @intellectronica/ruler`; use `--yes` for non-interactive installs.
+2. Runs `ruler init` when `.ruler/ruler.toml` is missing.
+3. Adds `ctx-mcp` to `.ruler/ruler.toml` under `[mcp_servers.ctx-mcp]`.
+4. Imports existing MCP servers from Codex `~/.codex/config.toml` and project `.mcp.json`, such as `code-review-graph`, `agentmemory`, and `mcp-rtk`, into `.ruler/ruler.toml`.
+5. Adds enabled Ruler agent entries for Codex, Claude Code, and Antigravity using merge strategy.
+6. Runs `ruler apply --agents ...`.
+7. Mirrors the Ruler MCP server list into Antigravity app/CLI MCP configs because current Ruler versions do not emit every Antigravity MCP file consistently.
+8. Verifies that generated agent config contains `ctx-mcp`.
+
+Useful flags:
+
+```bash
+ctx sync --rules --dry-run
+ctx sync --rules --force
+ctx sync --rules --yes
+ctx sync --rules --no-import-codex-mcp
+```
+
+`ctx sync --rules` is project-scoped. It writes `.ruler/ruler.toml` in the current project and lets Ruler generate agent files from that project source of truth. ContextOS runtime history still follows the project-path isolation model described below.
+
 ## Troubleshooting
 
 ### `ctx-mcp bridge socket not found`
@@ -242,6 +279,11 @@ This warning comes from a transitive dependency in the local embedding/WASM stac
 | `ctx evidence` | Shows detailed evidence behind the last report for the current workspace. | You want to inspect why a rule was marked `followed`, `ignored`, or `unknown`. | Prints rule text, source file, score, status, and evidence reason. |
 | `ctx stats` | Shows aggregate runtime metrics for the current workspace. | You want to know whether ContextOS is active and useful over time. | Prints prompt count, report count, injected/quiet ratio, average prompt analysis time, efficiency, rule outcomes, hook events, and last suggested files for the current workspace only. |
 | `ctx benchmark -- "task"` | Compares baseline AGENTS.md ordering with ContextOS task-aware scheduling. | You want a before/after signal for lost-in-the-middle risk. | Prints parsed/actionable/filtered rule counts, relevant rules in the middle of the original file, scheduled high/mid rules, and top scored rules. |
+| `ctx sync --rules` | Syncs project rules and MCP servers through Ruler. | You want Codex, Claude Code, and Antigravity to share one project rule/MCP source of truth. | Ensures `.ruler/ruler.toml`, injects `ctx-mcp`, imports existing MCP servers from Codex and project `.mcp.json`, runs `ruler apply --agents codex,claude,antigravity`, mirrors MCP servers to Antigravity MCP configs, and verifies generated config. |
+| `ctx sync --rules --agents <list>` | Syncs only selected agents through Ruler. | You want to update one or two agents without touching the others. | Accepts comma-separated values such as `codex`, `claude`, `antigravity`, or `codex,claude`. |
+| `ctx sync --rules --dry-run` | Previews Ruler sync without writing files or running apply. | You want to inspect behavior before changing project config. | Prints the same flow with dry-run status. |
+| `ctx sync --rules --force` | Rewrites ContextOS-owned Ruler sections. | You changed the ContextOS install path or need to refresh `ctx-mcp`. | Removes and re-adds ContextOS-owned `mcp`, `mcp_servers.ctx-mcp`, and selected agent sections. |
+| `ctx sync --rules --no-import-codex-mcp` | Skips Codex MCP import. | You only want ContextOS' own `ctx-mcp` in Ruler. | Does not read `~/.codex/config.toml`. |
 | `ctx embeddings warm -- "task"` | Prepares local semantic embedding caches. | First install, CI smoke checks, or after changing AGENTS.md/project files. | Loads/downloads `Xenova/all-MiniLM-L6-v2` and writes vectors to `~/.ctx/contextos/embeddings.db`. |
 | `ctx --version` | Prints the installed ContextOS CLI version. | You want to confirm which npm version is being executed. | Prints the version from package metadata. |
 

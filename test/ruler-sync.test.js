@@ -1,0 +1,274 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { describe, expect, it } from "vitest";
+
+import {
+  buildCtxMcpToml,
+  injectCtxMcp,
+  injectMcpServers,
+  parseSyncRulesArgs,
+  readCodexMcpServers,
+  readProjectMcpJsonServers,
+  syncAntigravityMcpFromRuler,
+  syncRules,
+  verifySync
+} from "../plugins/ctx/lib/ruler-sync.js";
+
+describe("ruler sync", () => {
+  it("parses sync --rules flags", () => {
+    expect(parseSyncRulesArgs(["--rules"])).toMatchObject({
+      rules: true,
+      agents: ["codex", "claude", "antigravity"],
+      dryRun: false,
+      force: false
+    });
+    expect(parseSyncRulesArgs(["--rules", "--agents", "codex,claude", "--dry-run", "--force"]).agents).toEqual(["codex", "claude"]);
+  });
+
+  it("builds ctx-mcp Ruler TOML for selected agents", () => {
+    const toml = buildCtxMcpToml({
+      mcpServerPath: "/tmp/contextos/plugins/ctx/mcp/server.js",
+      agents: ["codex", "claude"]
+    });
+
+    expect(toml).toContain("[mcp_servers.ctx-mcp]");
+    expect(toml).toContain('command = "node"');
+    expect(toml).toContain('args = ["/tmp/contextos/plugins/ctx/mcp/server.js"]');
+    expect(toml).toContain("[agents.codex]");
+    expect(toml).toContain('output_path = "AGENTS.md"');
+    expect(toml).toContain("[agents.claude]");
+    expect(toml).toContain('output_path = "CLAUDE.md"');
+  });
+
+  it("injects ctx-mcp idempotently without removing user entries", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-ruler-"));
+    const tomlPath = path.join(tmp, ".ruler", "ruler.toml");
+    fs.mkdirSync(path.dirname(tomlPath), { recursive: true });
+    fs.writeFileSync(tomlPath, [
+      "[mcp_servers.github]",
+      'command = "npx"',
+      'args = ["-y", "github-mcp"]',
+      ""
+    ].join("\n"));
+
+    const first = injectCtxMcp({
+      tomlPath,
+      mcpServerPath: "/tmp/contextos/plugins/ctx/mcp/server.js",
+      agents: ["codex"]
+    });
+    const second = injectCtxMcp({
+      tomlPath,
+      mcpServerPath: "/tmp/contextos/plugins/ctx/mcp/server.js",
+      agents: ["codex"]
+    });
+    const content = fs.readFileSync(tomlPath, "utf8");
+
+    expect(first.changed).toBe(true);
+    expect(second.changed).toBe(false);
+    expect(content).toContain("[mcp_servers.github]");
+    expect(content.match(/\[mcp_servers\.ctx-mcp\]/g)).toHaveLength(1);
+  });
+
+  it("force reinjects ctx-mcp with a new server path", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-ruler-force-"));
+    const tomlPath = path.join(tmp, ".ruler", "ruler.toml");
+    fs.mkdirSync(path.dirname(tomlPath), { recursive: true });
+    fs.writeFileSync(tomlPath, buildCtxMcpToml({
+      mcpServerPath: "/old/server.js",
+      agents: ["codex"]
+    }));
+
+    injectCtxMcp({
+      tomlPath,
+      mcpServerPath: "/new/server.js",
+      agents: ["codex"],
+      force: true
+    });
+
+    const content = fs.readFileSync(tomlPath, "utf8");
+    expect(content).not.toContain("/old/server.js");
+    expect(content).toContain("/new/server.js");
+    expect(content.match(/\[mcp_servers\.ctx-mcp\]/g)).toHaveLength(1);
+  });
+
+  it("reads Codex MCP servers and unwraps ContextOS telemetry proxy commands", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-codex-mcp-"));
+    const configPath = path.join(tmp, "config.toml");
+    fs.writeFileSync(configPath, [
+      "[mcp_servers.code-review-graph]",
+      'command = "node"',
+      'args = ["/home/me/.ctx/contextos/plugins/ctx/mcp/proxy.js", "--name", "code-review-graph", "--", "npx", "-y", "code-review-graph"]',
+      "",
+      "[mcp_servers.agentmemory]",
+      'command = "npx"',
+      'args = ["-y", "@agentmemory/mcp"]',
+      ""
+    ].join("\n"));
+
+    expect(readCodexMcpServers({ configPath })).toEqual([
+      { name: "code-review-graph", command: "npx", args: ["-y", "code-review-graph"] },
+      { name: "agentmemory", command: "npx", args: ["-y", "@agentmemory/mcp"] }
+    ]);
+  });
+
+  it("imports Codex MCP servers into ruler.toml without duplicating existing entries", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-ruler-import-mcp-"));
+    const tomlPath = path.join(tmp, ".ruler", "ruler.toml");
+    fs.mkdirSync(path.dirname(tomlPath), { recursive: true });
+    fs.writeFileSync(tomlPath, [
+      "[mcp_servers.agentmemory]",
+      'command = "npx"',
+      'args = ["-y", "@agentmemory/mcp"]',
+      ""
+    ].join("\n"));
+
+    const result = injectMcpServers({
+      tomlPath,
+      servers: [
+        { name: "agentmemory", command: "npx", args: ["-y", "@agentmemory/mcp"] },
+        { name: "code-review-graph", command: "npx", args: ["-y", "code-review-graph"] }
+      ]
+    });
+    const content = fs.readFileSync(tomlPath, "utf8");
+
+    expect(result.added).toEqual(["code-review-graph"]);
+    expect(result.skipped).toEqual(["agentmemory"]);
+    expect(content.match(/\[mcp_servers\.agentmemory\]/g)).toHaveLength(1);
+    expect(content).toContain("[mcp_servers.code-review-graph]");
+  });
+
+  it("reads project .mcp.json servers such as mcp-rtk", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-project-mcp-json-"));
+    fs.writeFileSync(path.join(tmp, ".mcp.json"), JSON.stringify({
+      mcpServers: {
+        "mcp-rtk": {
+          command: "/home/user/.cargo/bin/mcp-rtk",
+          args: ["--", "code-review-graph", "serve"],
+          type: "stdio"
+        },
+        "ctx-mcp": {
+          command: "node",
+          args: ["/tmp/contextos/plugins/ctx/mcp/server.js"]
+        }
+      }
+    }));
+
+    expect(readProjectMcpJsonServers({ cwd: tmp })).toEqual([
+      {
+        name: "mcp-rtk",
+        command: "/home/user/.cargo/bin/mcp-rtk",
+        args: ["--", "code-review-graph", "serve"]
+      },
+      {
+        name: "ctx-mcp",
+        command: "node",
+        args: ["/tmp/contextos/plugins/ctx/mcp/server.js"]
+      }
+    ]);
+  });
+
+  it("imports project .mcp.json servers during full sync", async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-ruler-sync-project-mcp-"));
+    fs.writeFileSync(path.join(tmp, ".mcp.json"), JSON.stringify({
+      mcpServers: {
+        "mcp-rtk": {
+          command: "/home/user/.cargo/bin/mcp-rtk",
+          args: ["--", "code-review-graph", "serve"]
+        }
+      }
+    }));
+    const run = (command, args) => {
+      if (command === "ruler" && args[0] === "--version") return { stdout: "ruler 0.3.0\n" };
+      if (command === "ruler" && args[0] === "init") {
+        fs.mkdirSync(path.join(tmp, ".ruler"), { recursive: true });
+        fs.writeFileSync(path.join(tmp, ".ruler", "ruler.toml"), "");
+      }
+      return { stdout: "" };
+    };
+
+    await syncRules({
+      cwd: tmp,
+      rootDir: "/tmp/contextos",
+      args: ["--rules", "--agents", "antigravity"],
+      run,
+      logger: () => {}
+    });
+
+    const content = fs.readFileSync(path.join(tmp, ".ruler", "ruler.toml"), "utf8");
+    expect(content).toContain("[mcp_servers.mcp-rtk]");
+    expect(content).toContain("/home/user/.cargo/bin/mcp-rtk");
+  });
+
+  it("verifies generated configs per project path", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-ruler-verify-"));
+    fs.mkdirSync(path.join(tmp, ".codex"), { recursive: true });
+    fs.writeFileSync(path.join(tmp, ".codex", "config.toml"), "[mcp_servers.ctx-mcp]\n");
+
+    const checks = verifySync({ cwd: tmp, agents: ["codex"] });
+    expect(checks).toEqual([{ agent: "codex", ok: true, filePath: path.join(tmp, ".codex", "config.toml") }]);
+  });
+
+  it("syncs all Ruler MCP servers into Antigravity app and CLI config files", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-ruler-agy-mcp-"));
+    const tomlPath = path.join(tmp, ".ruler", "ruler.toml");
+    const appPath = path.join(tmp, "antigravity", "mcp_config.json");
+    const cliPath = path.join(tmp, "antigravity-cli", "mcp_config.json");
+    fs.mkdirSync(path.dirname(tomlPath), { recursive: true });
+    fs.writeFileSync(tomlPath, [
+      "[mcp_servers.ctx-mcp]",
+      'command = "node"',
+      'args = ["/tmp/contextos/plugins/ctx/mcp/server.js"]',
+      "",
+      "[mcp_servers.agentmemory]",
+      'command = "npx"',
+      'args = ["-y", "@agentmemory/mcp"]',
+      ""
+    ].join("\n"));
+
+    const result = syncAntigravityMcpFromRuler({
+      tomlPath,
+      configPaths: [appPath, cliPath]
+    });
+
+    expect(result.servers).toEqual(["ctx-mcp", "agentmemory"]);
+    for (const filePath of [appPath, cliPath]) {
+      const config = JSON.parse(fs.readFileSync(filePath, "utf8"));
+      expect(config.mcpServers["ctx-mcp"].command).toBe("node");
+      expect(config.mcpServers.agentmemory.args).toEqual(["-y", "@agentmemory/mcp"]);
+    }
+  });
+
+  it("runs full sync with mocked Ruler commands", async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-ruler-sync-"));
+    const calls = [];
+    const run = (command, args) => {
+      calls.push([command, args]);
+      if (command === "ruler" && args[0] === "--version") return { stdout: "ruler 0.3.0\n" };
+      if (command === "ruler" && args[0] === "init") {
+        fs.mkdirSync(path.join(tmp, ".ruler"), { recursive: true });
+        fs.writeFileSync(path.join(tmp, ".ruler", "ruler.toml"), "");
+        return { stdout: "" };
+      }
+      if (command === "ruler" && args[0] === "apply") {
+        fs.mkdirSync(path.join(tmp, ".codex"), { recursive: true });
+        fs.writeFileSync(path.join(tmp, ".codex", "config.toml"), "[mcp_servers.ctx-mcp]\n");
+        return { stdout: "" };
+      }
+      return { stdout: "" };
+    };
+
+    const result = await syncRules({
+      cwd: tmp,
+      rootDir: "/tmp/contextos",
+      args: ["--rules", "--agents", "codex"],
+      run,
+      logger: () => {}
+    });
+
+    expect(result.checks[0].ok).toBe(true);
+    expect(calls).toContainEqual(["ruler", ["init"]]);
+    expect(calls).toContainEqual(["ruler", ["apply", "--agents", "codex"]]);
+    expect(fs.readFileSync(path.join(tmp, ".ruler", "ruler.toml"), "utf8")).toContain("[mcp_servers.ctx-mcp]");
+  });
+});

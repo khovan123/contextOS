@@ -21,6 +21,7 @@ import { installClaudeHooks } from "../plugins/ctx/lib/claude-hooks.js";
 import { installClaudeMcp } from "../plugins/ctx/lib/claude-mcp.js";
 import { installAntigravityHooks } from "../plugins/ctx/lib/antigravity-hooks.js";
 import { installAntigravityMcp } from "../plugins/ctx/lib/antigravity-mcp.js";
+import { syncRules } from "../plugins/ctx/lib/ruler-sync.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
@@ -43,6 +44,10 @@ Usage:
   ctx evidence
   ctx stats
   ctx benchmark -- "task"
+  ctx sync --rules
+  ctx sync --rules --agents codex,claude,antigravity
+  ctx sync --rules --dry-run
+  ctx sync --rules --no-import-codex-mcp
   ctx embeddings warm -- "task"
   ctx --version
 `;
@@ -314,6 +319,8 @@ try {
     const task = marker >= 0 ? args.slice(marker + 1).join(" ") : args.slice(1).join(" ");
     if (!task.trim()) throw new Error('Usage: ctx benchmark -- "task"');
     console.log(formatBenchmark(benchmarkWorkspace({ cwd: process.cwd(), task })));
+  } else if (command === "sync") {
+    await syncRules({ cwd: process.cwd(), rootDir, args: args.slice(1) });
   } else {
     throw new Error(`Unknown command: ${command}\n\n${usage()}`);
   }
