@@ -15,6 +15,22 @@ export function writeJson(value) {
   process.stdout.write(`${JSON.stringify(value)}\n`);
 }
 
+export function resolveHookCwd(payload = {}) {
+  return payload.cwd
+    || payload.working_directory
+    || payload.workspacePath
+    || payload.workspace_path
+    || payload.workspaceRoot
+    || payload.workspace_root
+    || payload.projectDir
+    || payload.project_dir
+    || payload.workspacePaths?.[0]
+    || payload.workspace_paths?.[0]
+    || process.env.CLAUDE_PROJECT_DIR
+    || process.env.PWD
+    || process.cwd();
+}
+
 export function pluginDataDir(fileName = "", cwd = process.cwd()) {
   let root;
   try {

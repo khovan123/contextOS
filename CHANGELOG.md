@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.4
+
+- Hardens workspace isolation for Claude Code, Codex, and Antigravity hooks by normalizing project cwd from hook payloads, `workspacePath(s)`, and `CLAUDE_PROJECT_DIR` before writing prompt/report telemetry.
+
 ## 0.2.3
 
 - Registers `ctx-mcp` for Claude Code by writing a user-scoped MCP server into `~/.claude.json`.

@@ -5,9 +5,10 @@ import { readGitSnapshot, checkCompliance } from "./measure.js";
 import { buildReport, formatReport } from "./reporter.js";
 import { loadRuntimeEvidence } from "./telemetry.js";
 import { filterActionableRules } from "./analyzer.js";
+import { resolveHookCwd } from "./hook-io.js";
 
 export function handleStopPayload(payload, { contextPath, reportPath, historyPath, telemetryPath } = {}) {
-  const cwd = payload.cwd || payload.working_directory || process.cwd();
+  const cwd = resolveHookCwd(payload);
   const promptContext = contextPath && fs.existsSync(contextPath) ? readJsonFile(contextPath) : null;
   const rawScheduledRules = [
     ...(promptContext?.scheduled?.highRules || []),

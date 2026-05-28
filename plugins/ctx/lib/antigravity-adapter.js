@@ -1,11 +1,12 @@
 import fs from "node:fs";
+import { resolveHookCwd } from "./hook-io.js";
 
 export function antigravityCwd(payload) {
   return payload.cwd
     || payload.working_directory
     || payload.workspacePath
     || payload.workspacePaths?.[0]
-    || process.cwd();
+    || resolveHookCwd(payload);
 }
 
 function textFromValue(value) {

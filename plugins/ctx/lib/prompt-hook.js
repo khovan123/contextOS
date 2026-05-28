@@ -1,6 +1,7 @@
 import { scheduleContext } from "./scheduler.js";
 import { appendJsonLine, writeJsonFile } from "./fs-utils.js";
 import { callCtxScoreContext } from "./ctx-mcp-client.js";
+import { resolveHookCwd } from "./hook-io.js";
 import path from "node:path";
 
 export async function handlePromptPayload(
@@ -16,7 +17,7 @@ export async function handlePromptPayload(
   } = {}
 ) {
   const prompt = payload.prompt || payload.message || payload.user_prompt || "";
-  const cwd = payload.cwd || payload.working_directory || process.cwd();
+  const cwd = resolveHookCwd(payload);
   const openFiles = payload.openFiles || payload.open_files || payload.files || [];
   const dataDir = dataPath ? path.dirname(dataPath) : undefined;
 

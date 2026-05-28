@@ -279,6 +279,8 @@ The workspace id is stored in the target repo at:
 
 ContextOS also adds `.contextos/` to the repo `.gitignore` so the local marker is not pushed. If the marker cannot be written, ContextOS falls back to a deterministic id generated from the workspace real path.
 
+Codex, Claude Code, and Antigravity all write prompt context, reports, evidence, stats, and telemetry through this same workspace id. The same project shares one ContextOS runtime history across agents; different project paths get different workspace directories. Claude Code hooks also use `CLAUDE_PROJECT_DIR` when the hook payload does not include `cwd`, and Antigravity uses `workspacePath` / `workspacePaths` when present.
+
 These files are local telemetry only. Hooks do not make network calls.
 
 ## Project Understanding
