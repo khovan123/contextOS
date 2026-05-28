@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.1
+
+- Adds `ctx install claude` for Claude Code hooks in `~/.claude/settings.json`.
+- Adds `ctx install agy` for Antigravity hooks in `~/.gemini/config/hooks.json`.
+- Adds Antigravity `PreInvocation` and `Stop` adapters so prompt context can be injected through `ephemeralMessage` and reports remain available through `ctx report` / `ctx evidence`.
+
 ## 0.2.0
 
 - Adds `ctx benchmark -- "task"` to compare baseline AGENTS.md ordering with ContextOS scheduling and estimate lost-in-the-middle risk.

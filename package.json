@@ -1,7 +1,7 @@
 {
   "name": "@minhpnq1807/contextos",
-  "version": "0.2.0",
-  "description": "Task-aware AGENTS.md context injection and compliance reporting for Codex.",
+  "version": "0.2.1",
+  "description": "Task-aware AGENTS.md context injection and compliance reporting for Codex, Claude Code, and Antigravity.",
   "type": "module",
   "bin": {
     "ctx": "bin/ctx.js"
@@ -29,6 +29,9 @@
   },
   "keywords": [
     "codex",
+    "claude-code",
+    "antigravity",
+    "agy",
     "plugin",
     "agents",
     "context",

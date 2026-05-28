@@ -1,6 +1,6 @@
 # ContextOS
 
-ContextOS (`ctx`) is a Codex companion plugin for task-aware project context.
+ContextOS (`ctx`) is an agent companion for task-aware project context.
 
 It reads `AGENTS.md` guidance, scores the rules against the current prompt, suggests relevant files, records what context would have been injected, and reports lightweight compliance evidence after the task finishes.
 
@@ -16,10 +16,19 @@ ctx install
 
 Restart Codex after installing, then use Codex normally. ContextOS runs through Codex hooks and the `ctx-mcp` MCP server.
 
+Claude Code and Antigravity are supported through their native hook systems:
+
+```bash
+ctx install claude
+ctx install agy
+```
+
 You can also run without a global install:
 
 ```bash
 npx @minhpnq1807/contextos@latest install
+npx @minhpnq1807/contextos@latest install claude
+npx @minhpnq1807/contextos@latest install agy
 ```
 
 ## Demo Flow
@@ -31,7 +40,7 @@ ctx install
 codex
 ```
 
-Prompt Codex:
+Prompt the agent:
 
 ```text
 Recheck authen flow
@@ -63,6 +72,8 @@ With ContextOS, each prompt gets a compact block:
 ## What It Does
 
 - Hooks into Codex `UserPromptSubmit`, `SessionStart`, and `Stop`.
+- Hooks into Claude Code `UserPromptSubmit`, `SessionStart`, and `Stop`.
+- Hooks into Antigravity `PreInvocation` and `Stop` through the `agy` adapter.
 - Registers a `ctx-mcp` MCP server that owns model loading and semantic scoring.
 - Reads the active `AGENTS.md` chain for the current workspace.
 - Scores rules by relevance to the user prompt.
@@ -98,7 +109,22 @@ From this repository during local development:
 node bin/ctx.js install
 ```
 
-`ctx install` does three things:
+Agent-specific installers:
+
+```bash
+ctx install codex
+ctx install claude
+ctx install agy
+ctx install --agent codex
+ctx install --agent claude
+ctx install --agent agy
+```
+
+`ctx install` defaults to `ctx install codex`.
+
+### Codex
+
+`ctx install codex` does these things:
 
 1. Copies this package into `$CODEX_HOME/marketplaces/contextos`.
 2. Registers and installs `ctx@contextos` through Codex plugin marketplace commands.
@@ -108,6 +134,22 @@ node bin/ctx.js install
 6. Wraps configured local MCP servers, except ContextOS' own `ctx-mcp`, with a transparent telemetry proxy so `tools/call` events can be measured. The original MCP command is preserved after the proxy separator and executed unchanged.
 
 Restart Codex after installing.
+
+### Claude Code
+
+`ctx install claude` copies this package into `~/.ctx/contextos/agents/claude/contextos` and merges ContextOS hooks into `~/.claude/settings.json`.
+
+Claude Code receives prompt context through `UserPromptSubmit` using `hookSpecificOutput.additionalContext`, then ContextOS writes the same local workspace report files used by `ctx report`, `ctx evidence`, and `ctx stats`.
+
+Restart Claude Code after installing.
+
+### Antigravity
+
+`ctx install agy` copies this package into `~/.ctx/contextos/agents/agy/contextos` and writes a `contextos` hook group into `~/.gemini/config/hooks.json`.
+
+Antigravity does not use `UserPromptSubmit`; ContextOS injects context through `PreInvocation` as an `ephemeralMessage`. The `Stop` adapter stores the report locally, so use `ctx report` or `ctx evidence` after the task to inspect outcomes.
+
+Restart Antigravity or `agy` after installing.
 
 The embedding model is mandatory. `ctx install` intentionally fails if the model cannot be prepared, because otherwise the first prompt hook would have to cold-load or download the model.
 
@@ -182,12 +224,16 @@ This warning comes from a transitive dependency in the local embedding/WASM stac
 
 | Command | Meaning | Use when | Output / side effect |
 | --- | --- | --- | --- |
-| `ctx install` | Installs ContextOS into Codex with prompt context injection enabled. | Normal setup after installing the npm package. | Copies the plugin into `$CODEX_HOME/marketplaces/contextos`, registers `ctx@contextos`, registers `ctx-mcp`, installs global hooks, downloads the embedding model, and warms caches. |
-| `ctx install --quiet` | Installs ContextOS in measurement-only mode. | You want reports and stats but do not want a visible `hook context` block in Codex. | Installs the same plugin/hooks, but prompt hooks return empty `additionalContext`. |
-| `ctx install --inject` | Installs ContextOS with explicit injection mode. | You want to be explicit in scripts or docs. | Same runtime behavior as `ctx install`. |
+| `ctx install` | Installs ContextOS into Codex with prompt context injection enabled. | Normal Codex setup after installing the npm package. | Same as `ctx install codex`. |
+| `ctx install codex` | Installs ContextOS into Codex. | You use the `codex` CLI. | Copies the plugin into `$CODEX_HOME/marketplaces/contextos`, registers `ctx@contextos`, registers `ctx-mcp`, installs global hooks, downloads the embedding model, and warms caches. |
+| `ctx install claude` | Installs ContextOS into Claude Code. | You use the `claude` CLI. | Copies a stable package root to `~/.ctx/contextos/agents/claude/contextos` and merges hooks into `~/.claude/settings.json`. |
+| `ctx install agy` | Installs ContextOS into Antigravity. | You use the `agy` CLI or Antigravity app. | Copies a stable package root to `~/.ctx/contextos/agents/agy/contextos` and writes a `contextos` hook group into `~/.gemini/config/hooks.json`. |
+| `ctx install --agent <name>` | Installs for a named agent. | You prefer explicit scripts. | Accepts `codex`, `claude`, or `agy`. |
+| `ctx install --quiet` | Installs ContextOS in measurement-only mode. | You want reports and stats but do not want visible injected context. | Installs the same hooks, but prompt hooks return empty context. |
+| `ctx install --inject` | Installs ContextOS with explicit injection mode. | You want to be explicit in scripts or docs. | Same runtime behavior as the default install mode. |
 | `ctx install --copy` | Copies only the plugin payload to `$CODEX_HOME/plugins/ctx`. | Local development or manual plugin experiments. | Does not register marketplace, MCP, or global hooks. |
 | `ctx debug -- "task"` | Runs the scheduler locally for a fake prompt. | You want to see which AGENTS.md rules and files ContextOS would inject before using Codex. | Prints rule scores, scoring reasons, suggested files, and final `additionalContext`. |
-| `ctx report` | Shows the last Stop-hook compliance report for the current workspace. | A Codex task has finished and you want the summary again. | Reads `~/.ctx/contextos/workspaces/<workspace-id>/last-report.json`. |
+| `ctx report` | Shows the last Stop-hook compliance report for the current workspace. | An agent task has finished and you want the summary again. | Reads `~/.ctx/contextos/workspaces/<workspace-id>/last-report.json`. |
 | `ctx evidence` | Shows detailed evidence behind the last report for the current workspace. | You want to inspect why a rule was marked `followed`, `ignored`, or `unknown`. | Prints rule text, source file, score, status, and evidence reason. |
 | `ctx stats` | Shows aggregate runtime metrics for the current workspace. | You want to know whether ContextOS is active and useful over time. | Prints prompt count, report count, injected/quiet ratio, average prompt analysis time, efficiency, rule outcomes, hook events, and last suggested files for the current workspace only. |
 | `ctx benchmark -- "task"` | Compares baseline AGENTS.md ordering with ContextOS task-aware scheduling. | You want a before/after signal for lost-in-the-middle risk. | Prints parsed/actionable/filtered rule counts, relevant rules in the middle of the original file, scheduled high/mid rules, and top scored rules. |
@@ -367,9 +413,10 @@ contextos-plan.jsx                 implementation plan/reference
 
 ## Limitations
 
-- Codex CLI only.
+- Codex and Claude Code get prompt context through `additionalContext`; Antigravity gets prompt context through `PreInvocation` `ephemeralMessage`.
+- Antigravity Stop hooks store reports locally, but they do not display the full report inline unless Antigravity adds a non-continuing Stop message surface.
 - Local marketplace plugin hooks may not fire reliably in current Codex builds, so `ctx install` also installs global hooks.
-- Injection mode may show a visible `hook context` block in Codex.
+- Injection mode may show a visible hook context block in some agents.
 - Quiet mode does not inject context into the model; it only records and measures.
 - Compliance is heuristic and mostly based on git diff/status.
 - Some rules can only be `unknown` unless ContextOS records richer telemetry such as tool calls or shell command metadata.

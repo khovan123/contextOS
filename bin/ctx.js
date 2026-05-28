@@ -16,6 +16,9 @@ import { scoreContext } from "../plugins/ctx/lib/score-context.js";
 import { defaultDataRoot, workspaceDataDir, workspaceMarkerPath } from "../plugins/ctx/lib/workspace-data.js";
 import { installMcpTelemetryProxies } from "../plugins/ctx/lib/mcp-proxy-install.js";
 import { benchmarkWorkspace, formatBenchmark } from "../plugins/ctx/lib/benchmark.js";
+import { copyDir, copyPackageRoot } from "../plugins/ctx/lib/package-install.js";
+import { installClaudeHooks } from "../plugins/ctx/lib/claude-hooks.js";
+import { installAntigravityHooks } from "../plugins/ctx/lib/antigravity-hooks.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
@@ -26,6 +29,10 @@ function usage() {
 
 Usage:
   ctx install
+  ctx install codex
+  ctx install claude
+  ctx install agy
+  ctx install --agent codex|claude|agy
   ctx install --quiet
   ctx install --inject
   ctx install --copy
@@ -52,31 +59,6 @@ function codexHome() {
   return process.env.CODEX_HOME || path.join(process.env.HOME || process.cwd(), ".codex");
 }
 
-function copyDir(src, dest) {
-  fs.mkdirSync(dest, { recursive: true });
-  for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
-    const srcPath = path.join(src, entry.name);
-    const destPath = path.join(dest, entry.name);
-    if (entry.isDirectory()) {
-      copyDir(srcPath, destPath);
-    } else if (entry.isFile()) {
-      fs.copyFileSync(srcPath, destPath);
-      fs.chmodSync(destPath, fs.statSync(srcPath).mode);
-    }
-  }
-}
-
-function copyPath(src, dest) {
-  const stat = fs.statSync(src);
-  if (stat.isDirectory()) {
-    copyDir(src, dest);
-  } else {
-    fs.mkdirSync(path.dirname(dest), { recursive: true });
-    fs.copyFileSync(src, dest);
-    fs.chmodSync(dest, stat.mode);
-  }
-}
-
 function copyInstall() {
   const target = path.join(codexHome(), "plugins", "ctx");
   fs.rmSync(target, { recursive: true, force: true });
@@ -85,18 +67,54 @@ function copyInstall() {
   console.log("Restart Codex if it was already running, then submit a task to trigger ContextOS.");
 }
 
-async function install({ copy = false, inject = true } = {}) {
+function agentInstallRoot(agent) {
+  return path.join(contextOSDataDir(), "agents", agent, "contextos");
+}
+
+async function install({ copy = false, inject = true, agent = "codex" } = {}) {
   if (copy) {
     copyInstall();
     return;
   }
 
-  const marketplaceRoot = path.join(codexHome(), "marketplaces", "contextos");
-  fs.rmSync(marketplaceRoot, { recursive: true, force: true });
-  for (const entry of [".agents", "bin", "plugins", "package.json", "package-lock.json", "README.md", "LICENSE", "node_modules"]) {
-    const src = path.join(rootDir, entry);
-    if (fs.existsSync(src)) copyPath(src, path.join(marketplaceRoot, entry));
+  if (agent === "claude") {
+    const installRoot = copyPackageRoot({ rootDir, targetRoot: agentInstallRoot("claude") });
+    const hooksPath = installClaudeHooks({ installRoot, injectPromptContext: inject });
+    console.log("Preparing required local embedding model...");
+    const warmResult = await warmInstallEmbeddings();
+    console.log("Installed ctx hooks for Claude Code.");
+    console.log(`Stable install root: ${installRoot}`);
+    console.log(`Installed ContextOS hooks to ${hooksPath}`);
+    console.log(`Embedding model cache: ${modelCacheDir(contextOSDataDir())}`);
+    console.log(`Embedding vectors cache: ${warmResult.cachePath}`);
+    console.log(`File path embeddings warmed: ${warmResult.fileCount || 0}`);
+    console.log(`Prompt context injection: ${inject ? "enabled" : "quiet logging only"}`);
+    console.log("Restart Claude Code if it was already running, then submit a task to trigger ContextOS.");
+    return;
   }
+
+  if (agent === "agy") {
+    const installRoot = copyPackageRoot({ rootDir, targetRoot: agentInstallRoot("agy") });
+    const hooksPath = installAntigravityHooks({ installRoot, injectPromptContext: inject });
+    console.log("Preparing required local embedding model...");
+    const warmResult = await warmInstallEmbeddings();
+    console.log("Installed ctx hooks for Antigravity.");
+    console.log(`Stable install root: ${installRoot}`);
+    console.log(`Installed ContextOS hooks to ${hooksPath}`);
+    console.log(`Embedding model cache: ${modelCacheDir(contextOSDataDir())}`);
+    console.log(`Embedding vectors cache: ${warmResult.cachePath}`);
+    console.log(`File path embeddings warmed: ${warmResult.fileCount || 0}`);
+    console.log(`Prompt context injection: ${inject ? "enabled" : "quiet logging only"}`);
+    console.log("Restart Antigravity or agy if it was already running, then submit a task to trigger ContextOS.");
+    return;
+  }
+
+  if (agent !== "codex") {
+    throw new Error(`Unknown agent '${agent}'. Expected codex, claude, or agy.`);
+  }
+
+  const marketplaceRoot = path.join(codexHome(), "marketplaces", "contextos");
+  copyPackageRoot({ rootDir, targetRoot: marketplaceRoot });
 
   tryRunCodex(["plugin", "remove", "ctx@contextos"]);
   tryRunCodex(["plugin", "marketplace", "remove", "contextos"]);
@@ -248,13 +266,24 @@ async function warmEmbeddings(task) {
 const args = process.argv.slice(2);
 const command = args[0];
 
+function installAgentFromArgs(args) {
+  const agentFlag = args.indexOf("--agent");
+  if (agentFlag >= 0) return args[agentFlag + 1] || "";
+  const firstValue = args.slice(1).find((arg) => !arg.startsWith("--"));
+  return firstValue || "codex";
+}
+
 try {
   if (!command || command === "--help" || command === "-h") {
     console.log(usage());
   } else if (command === "--version" || command === "-v") {
     console.log(packageVersion());
   } else if (command === "install") {
-    await install({ copy: args.includes("--copy"), inject: !args.includes("--quiet") });
+    await install({
+      copy: args.includes("--copy"),
+      inject: !args.includes("--quiet"),
+      agent: installAgentFromArgs(args)
+    });
   } else if (command === "debug") {
     const marker = args.indexOf("--");
     const task = marker >= 0 ? args.slice(marker + 1).join(" ") : args.slice(1).join(" ");

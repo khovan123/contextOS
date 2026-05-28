@@ -1,0 +1,27 @@
+import fs from "node:fs";
+import path from "node:path";
+
+import { buildGlobalHooksConfig } from "./global-hooks.js";
+
+function readJsonFile(filePath, fallback) {
+  if (!fs.existsSync(filePath)) return fallback;
+  const raw = fs.readFileSync(filePath, "utf8").trim();
+  if (!raw) return fallback;
+  return JSON.parse(raw);
+}
+
+export function claudeHome() {
+  return process.env.CLAUDE_HOME || path.join(process.env.HOME || process.cwd(), ".claude");
+}
+
+export function installClaudeHooks({ claudeHome: home = claudeHome(), installRoot, injectPromptContext = true } = {}) {
+  const settingsPath = path.join(home, "settings.json");
+  const existing = readJsonFile(settingsPath, {});
+  const next = buildGlobalHooksConfig(existing, {
+    marketplaceRoot: installRoot,
+    injectPromptContext
+  });
+  fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
+  fs.writeFileSync(settingsPath, `${JSON.stringify(next, null, 2)}\n`, "utf8");
+  return settingsPath;
+}
