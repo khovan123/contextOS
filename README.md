@@ -169,6 +169,32 @@ npm exec --yes --package=@minhpnq1807/contextos@latest -- ctx --version
 npm exec --yes --package=@minhpnq1807/contextos@latest -- ctx debug -- "Recheck authen flow"
 ```
 
+## Skill Sync
+
+Use skillshare when you want Codex, Claude Code, and Antigravity to share one skills catalog:
+
+```bash
+ctx sync --skills
+```
+
+ContextOS checks for `skillshare`, initializes it when needed, backs up existing skills before collection, runs `skillshare collect --all` unless `--no-collect` is provided, then runs `skillshare sync`. After sync, ContextOS rebuilds skill embeddings so prompt-time skill discovery can rank the shared source immediately.
+
+The shared source is:
+
+```text
+~/.config/skillshare/skills/
+```
+
+Useful variants:
+
+```bash
+ctx sync --skills --dry-run
+ctx sync --skills --no-collect
+ctx sync --skills --agents codex,claude
+```
+
+After this, `ctx debug -- "task"` and prompt hooks can suggest skills from `~/.config/skillshare/skills/` plus agent-specific skill folders.
+
 ## Modes
 
 Injection mode is the default:
