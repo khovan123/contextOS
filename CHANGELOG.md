@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.4
+
+- Bridges legacy Antigravity skill directories (`~/.gemini/antigravity/skills` and `~/.gemini/antigravity-cli/skills`) into the skillshare source before `ctx sync --skills`.
+- Reads custom `sources.skills` from `~/.config/skillshare/config.yaml` so ContextOS writes to the actual skillshare source path.
+
 ## 0.5.3
 
 - Skips project MCP imports whose command is an absolute path that does not exist, preventing placeholder paths such as `/home/user/.cargo/bin/mcp-rtk` from reaching Antigravity.

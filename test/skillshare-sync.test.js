@@ -4,6 +4,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
+  collectAntigravityLegacySkills,
   detectExistingSkills,
   detectOS,
   parseSyncSkillsArgs,
@@ -85,6 +86,69 @@ describe("skillshare sync", () => {
     expect(result.syncedCount).toBe(1);
     expect(result.embeddings.count).toBe(1);
     expect(logs.join("\n")).toContain("Rebuilding skill embeddings");
+  });
+
+  it("copies Antigravity legacy skills into the skillshare source before sync", async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-skillshare-agy-"));
+    const home = path.join(tmp, "home");
+    const cwd = path.join(tmp, "repo");
+    fs.mkdirSync(skillshareSourceDir({ home }), { recursive: true });
+    writeSkill(path.join(home, ".gemini", "antigravity", "skills", "payment-integration"), "payment-integration");
+    writeSkill(path.join(home, ".gemini", "skills", "visible-to-skillshare"), "visible-to-skillshare");
+
+    const result = collectAntigravityLegacySkills({ cwd, home });
+
+    expect(result.copied).toContain("payment-integration");
+    expect(fs.existsSync(path.join(skillshareSourceDir({ home }), "payment-integration", "SKILL.md"))).toBe(true);
+    expect(result.copied).not.toContain("visible-to-skillshare");
+  });
+
+  it("uses custom skillshare source path from config.yaml", async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-skillshare-source-"));
+    const home = path.join(tmp, "home");
+    const customSource = path.join(tmp, "agent-skills");
+    fs.mkdirSync(path.join(home, ".config", "skillshare"), { recursive: true });
+    fs.writeFileSync(path.join(home, ".config", "skillshare", "config.yaml"), [
+      "sources:",
+      `  skills: ${customSource}`
+    ].join("\n"));
+    writeSkill(path.join(home, ".gemini", "antigravity", "skills", "payments"), "payments");
+
+    collectAntigravityLegacySkills({ cwd: tmp, home });
+
+    expect(skillshareSourceDir({ home })).toBe(customSource);
+    expect(fs.existsSync(path.join(customSource, "payments", "SKILL.md"))).toBe(true);
+  });
+
+  it("bridges Antigravity legacy skills during sync even when skillshare is already initialized", async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-skillshare-flow-agy-"));
+    const home = path.join(tmp, "home");
+    const cwd = path.join(tmp, "repo");
+    fs.mkdirSync(skillshareSourceDir({ home }), { recursive: true });
+    writeSkill(path.join(home, ".gemini", "antigravity", "skills", "payment-integration"), "payment-integration");
+    const calls = [];
+
+    const run = (command, args) => {
+      calls.push([command, args]);
+      if (command === "skillshare" && args[0] === "--version") return { stdout: "skillshare 0.19.24\n" };
+      return { stdout: "" };
+    };
+
+    const result = await syncSkills({
+      cwd,
+      home,
+      args: ["--skills", "--agents", "codex,claude"],
+      run,
+      logger: () => {},
+      rebuildSkillEmbeddings: async ({ sourceDir }) => ({ count: countSkillFiles(sourceDir), cachePath: "/tmp/embeddings.db" })
+    });
+
+    expect(calls.map(([command, args]) => `${command} ${args.join(" ")}`)).toEqual([
+      "skillshare --version",
+      "skillshare sync --agents codex,claude"
+    ]);
+    expect(result.syncedCount).toBe(1);
+    expect(fs.existsSync(path.join(skillshareSourceDir({ home }), "payment-integration", "SKILL.md"))).toBe(true);
   });
 
   it("does not collect or rebuild embeddings in dry-run mode", async () => {

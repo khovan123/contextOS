@@ -50,7 +50,22 @@ export function skillshareConfigDir({ home = os.homedir() } = {}) {
 }
 
 export function skillshareSourceDir({ home = os.homedir() } = {}) {
-  return path.join(skillshareConfigDir({ home }), "skills");
+  return readSkillshareSourceDir({ home }) || path.join(skillshareConfigDir({ home }), "skills");
+}
+
+function readSkillshareSourceDir({ home = os.homedir() } = {}) {
+  const configPath = path.join(skillshareConfigDir({ home }), "config.yaml");
+  if (!fs.existsSync(configPath)) return null;
+  const content = fs.readFileSync(configPath, "utf8");
+  const match = content.match(/^\s{2}skills:\s*(.+?)\s*$/m);
+  if (!match) return null;
+  return expandHome(match[1].replace(/^["']|["']$/g, ""), home);
+}
+
+function expandHome(value, home) {
+  if (value === "~") return home;
+  if (value.startsWith("~/")) return path.join(home, value.slice(2));
+  return value;
 }
 
 export function checkSkillshareInstalled({ run = runCommand } = {}) {
@@ -119,6 +134,15 @@ function skillRoots({ cwd, home }) {
   ];
 }
 
+function antigravityLegacyRoots({ cwd, home }) {
+  return [
+    path.join(home, ".gemini", "antigravity", "skills"),
+    path.join(home, ".gemini", "antigravity-cli", "skills"),
+    path.join(cwd, ".gemini", "antigravity", "skills"),
+    path.join(cwd, ".gemini", "antigravity-cli", "skills")
+  ];
+}
+
 function countSkillFiles(root) {
   return findSkillFiles(root).length;
 }
@@ -156,6 +180,57 @@ function safeStat(filePath) {
   } catch {
     return null;
   }
+}
+
+function safeRealpath(filePath) {
+  try {
+    return fs.realpathSync(filePath);
+  } catch {
+    return null;
+  }
+}
+
+function copyDirectory(sourceDir, targetDir) {
+  fs.mkdirSync(targetDir, { recursive: true });
+  for (const entry of fs.readdirSync(sourceDir, { withFileTypes: true })) {
+    const source = path.join(sourceDir, entry.name);
+    const target = path.join(targetDir, entry.name);
+    if (entry.isDirectory()) {
+      copyDirectory(source, target);
+    } else if (entry.isSymbolicLink()) {
+      const link = fs.readlinkSync(source);
+      fs.symlinkSync(link, target);
+    } else if (entry.isFile()) {
+      fs.copyFileSync(source, target);
+    }
+  }
+}
+
+export function collectAntigravityLegacySkills({
+  cwd = process.cwd(),
+  home = os.homedir(),
+  sourceDir = skillshareSourceDir({ home }),
+  dryRun = false
+} = {}) {
+  const sourceReal = safeRealpath(sourceDir);
+  const copied = [];
+  const skipped = [];
+  for (const root of antigravityLegacyRoots({ cwd, home })) {
+    const rootReal = safeRealpath(root);
+    if (!rootReal || rootReal === sourceReal) continue;
+    for (const skillFile of findSkillFiles(root)) {
+      const skillDir = path.dirname(skillFile);
+      const name = path.basename(skillDir);
+      const targetDir = path.join(sourceDir, name);
+      if (fs.existsSync(targetDir)) {
+        skipped.push(name);
+        continue;
+      }
+      if (!dryRun) copyDirectory(skillDir, targetDir);
+      copied.push(name);
+    }
+  }
+  return { copied: [...new Set(copied)], skipped: [...new Set(skipped)], sourceDir };
 }
 
 export function isSkillshareInitialized({ home = os.homedir() } = {}) {
@@ -212,6 +287,16 @@ export async function syncSkills({
       run("skillshare", ["collect", "--all"], { cwd, stdio: "inherit", dryRun: options.dryRun });
       const collected = countSkillFiles(skillshareSourceDir({ home }));
       logger(statusLine("Collecting from all agents...", options.dryRun ? "dry-run" : `✓ ${collected} skills collected`));
+    }
+  }
+
+  if (!options.noCollect) {
+    const legacy = collectAntigravityLegacySkills({ cwd, home, dryRun: options.dryRun });
+    if (legacy.copied.length || legacy.skipped.length) {
+      const value = options.dryRun
+        ? `dry-run (${legacy.copied.length} would copy, ${legacy.skipped.length} already present)`
+        : `✓ ${legacy.copied.length} copied, ${legacy.skipped.length} already present`;
+      logger(statusLine("Collecting Antigravity legacy skills...", value));
     }
   }
 
