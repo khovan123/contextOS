@@ -1,24 +1,42 @@
 # ContextOS Demo Script
 
-Use this script to record the README demo GIF or terminal clip.
+Use this to record the README GIF or a short terminal clip.
+
+## Goal
+
+Show one thing clearly:
+
+```text
+AGENTS.md rule buried in a long file -> ContextOS injects the relevant rule -> ctx report proves whether it was followed
+```
 
 ## Setup
 
 ```bash
 npm install -g @minhpnq1807/contextos
-ctx install
+ctx setup --yes --agents codex
 ```
 
-Restart Codex after install.
+Restart Codex after setup.
+
+## Fixture Rule
+
+Use a repo whose `AGENTS.md` contains a rule like:
+
+```text
+IMPORTANT: This project has a knowledge graph. Always use code-review-graph MCP tools before Grep/Glob/Read.
+```
+
+The rule should be somewhere below the first screen of `AGENTS.md` so the demo makes the lost-in-the-middle problem obvious.
 
 ## Recording Flow
 
-1. Open a project with an `AGENTS.md`.
-2. Start Codex.
+1. Show the rule in `AGENTS.md`.
+2. Start Codex in the project.
 3. Submit:
 
 ```text
-kiểm tra flow kiểm duyệt upload
+Recheck authen flow
 ```
 
 4. Show the `hook context` block:
@@ -28,30 +46,45 @@ kiểm tra flow kiểm duyệt upload
 ...
 ## Suggested files to check
 ...
+## Suggested workflow for this task
+...
 ```
 
-5. Let the task finish so the Stop hook runs.
+5. Let the task finish so the Stop hook writes the report.
 6. Show:
 
 ```bash
+ctx report
 ctx evidence
 ctx stats
 ```
 
-## Expected Talking Points
+## Side-By-Side Clip
 
-- ContextOS does not replace Codex or wrap the CLI.
-- It runs as a Codex plugin with hooks plus `ctx-mcp`.
+Record two short terminal panes:
+
+| Left | Right |
+| --- | --- |
+| Codex without ContextOS. | Codex with ContextOS. |
+| Agent starts by reading random files or grepping. | Hook context shows the relevant rule before work starts. |
+| No evidence report. | `ctx report` shows followed/ignored/unknown. |
+
+## Talking Points
+
+- ContextOS does not replace Codex, Claude Code, or Antigravity.
+- It runs through native hooks plus a local `ctx-mcp` MCP server.
 - It uses local embeddings to bridge vocabulary mismatch such as `kiểm duyệt` and `moderation`.
-- It reports `followed`, `ignored`, and `unknown` outcomes after the task.
+- Runtime history is isolated by project path and shared across supported agents.
+- It reports what happened after the task instead of only hoping the agent remembered rules.
 
-## Current Release Checks
+## Release Checks
 
-Run before recording:
+Run before recording or posting:
 
 ```bash
 npm run validate:plugin
 npm test
 npm run test:mcp
 npm pack --dry-run
+npm view @minhpnq1807/contextos version
 ```

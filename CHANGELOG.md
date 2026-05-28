@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.13
+
+- Reworks the README for launch: demo-first positioning, fear hook, one-line install, before/after, and quick command table.
+- Adds a launch kit and concrete demo recording script for HN/X/GitHub/npm launch prep.
+- Adds `ctx-codex` as a bin alias for npm package execution flows.
+
 ## 0.5.12
 
 - Makes `ctx sync --workflows` synchronize unique workflow files to global Claude, Codex, and Antigravity workflow roots.

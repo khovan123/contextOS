@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" role="img" aria-labelledby="title desc">
+  <title id="title">ContextOS demo placeholder</title>
+  <desc id="desc">A terminal-style before and after preview for ContextOS.</desc>
+  <rect width="1280" height="720" fill="#101418"/>
+  <rect x="64" y="54" width="1152" height="612" rx="14" fill="#161c22" stroke="#303944"/>
+  <text x="96" y="105" fill="#f4f1e8" font-family="Inter, Arial, sans-serif" font-size="38" font-weight="700">ContextOS</text>
+  <text x="96" y="142" fill="#a7b0ba" font-family="Inter, Arial, sans-serif" font-size="20">Codex ignores the middle of AGENTS.md. ContextOS moves the right rules into the prompt.</text>
+
+  <rect x="96" y="190" width="520" height="356" rx="10" fill="#1d252d" stroke="#3a4552"/>
+  <text x="126" y="232" fill="#ffcf70" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="700">Before</text>
+  <text x="126" y="278" fill="#cbd5df" font-family="SFMono-Regular, Consolas, monospace" font-size="18">AGENTS.md loaded as a long blob</text>
+  <text x="126" y="316" fill="#7f8b97" font-family="SFMono-Regular, Consolas, monospace" font-size="18">... rule buried in the middle ...</text>
+  <text x="126" y="354" fill="#e97979" font-family="SFMono-Regular, Consolas, monospace" font-size="18">agent starts with grep/read</text>
+  <text x="126" y="392" fill="#e97979" font-family="SFMono-Regular, Consolas, monospace" font-size="18">repo contract missed</text>
+
+  <rect x="664" y="190" width="520" height="356" rx="10" fill="#1d252d" stroke="#3a4552"/>
+  <text x="694" y="232" fill="#8ed8a3" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="700">After</text>
+  <text x="694" y="278" fill="#cbd5df" font-family="SFMono-Regular, Consolas, monospace" font-size="18">prompt -&gt; score rules</text>
+  <text x="694" y="316" fill="#cbd5df" font-family="SFMono-Regular, Consolas, monospace" font-size="18">inject critical context</text>
+  <text x="694" y="354" fill="#8ed8a3" font-family="SFMono-Regular, Consolas, monospace" font-size="18">suggest files + workflow</text>
+  <text x="694" y="392" fill="#8ed8a3" font-family="SFMono-Regular, Consolas, monospace" font-size="18">report followed / ignored / unknown</text>
+
+  <rect x="96" y="588" width="1088" height="44" rx="8" fill="#0f151a" stroke="#303944"/>
+  <text x="120" y="616" fill="#f4f1e8" font-family="SFMono-Regular, Consolas, monospace" font-size="18">npm install -g @minhpnq1807/contextos &amp;&amp; ctx setup</text>
+</svg>

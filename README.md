@@ -1,111 +1,155 @@
 # ContextOS
 
-ContextOS (`ctx`) is an agent companion for task-aware project context.
+Codex ignores the middle of your `AGENTS.md`. ContextOS fixes that.
 
-It reads `AGENTS.md` guidance, scores the rules against the current prompt, suggests relevant files, records what context would have been injected, and reports lightweight compliance evidence after the task finishes.
+It ranks your project rules against the current prompt, injects the right ones at the moment the agent starts work, suggests relevant files/skills/workflows, and reports what the agent actually followed after the task.
+
+```text
+WITHOUT ContextOS
+  AGENTS.md is a long static blob
+  important rules drift into the middle
+  agent starts by grepping files and misses the repo contract
+
+WITH ContextOS
+  prompt -> score relevant AGENTS.md rules
+         -> inject critical rules at top and bottom
+         -> suggest files, skills, workflows
+         -> report followed / ignored / unknown
+```
 
 Published package: [`@minhpnq1807/contextos`](https://www.npmjs.com/package/@minhpnq1807/contextos)
 
-## Quick Start
+## Demo
 
-```bash
-npm install -g @minhpnq1807/contextos
-ctx --version
-ctx setup
+![ContextOS demo GIF placeholder](docs/contextos-demo-placeholder.svg)
+
+Example hook context injected before the agent works:
+
+```text
+## Critical ContextOS rules
+- IMPORTANT: This project has a knowledge graph. ALWAYS use code-review-graph MCP tools before Grep/Glob/Read.
+- Use `query_graph` pattern="tests_for" to check coverage.
+
+## Suggested files to check
+- services/content-service/test/unit/creator-only.policy.unit-spec.ts
+- services/content-service/test/integration/resource-upload.integration-spec.ts
+
+## Suggested workflow for this task
+- Primary Workflow: use for feature implementation, testing, review, and debugging
+  chain: planner -> tester -> code-reviewer
 ```
 
-`ctx setup` is the recommended first-run flow. It asks which agents to configure, whether prompt context injection should be enabled, whether to sync project rules/MCP through Ruler, and whether to sync skills through skillshare. It only runs when you explicitly invoke it; npm install does not run setup automatically.
+After the task:
 
-For scriptable installs, use:
+```text
+ContextOS report
+Efficiency: 100%
+Injected rules: 8
+Rule outcomes: 8 followed, 0 ignored, 0 unknown
+Runtime telemetry: code-review-graph, code-review-graph.query_graph_tool
+```
+
+## Install In One Line
+
+```bash
+npm install -g @minhpnq1807/contextos && ctx setup
+```
+
+No postinstall surprise: `npm install` only installs the CLI. Setup runs only when you call `ctx setup`.
+
+Scriptable setup:
 
 ```bash
 ctx setup --yes
 ctx setup --yes --agents codex,claude,agy
 ```
 
-Restart your agent after setup, then use it normally. ContextOS runs through agent hooks and the `ctx-mcp` MCP server.
+No global install:
 
-Codex-only install is still available:
+```bash
+npm exec --yes --package=@minhpnq1807/contextos@latest -- ctx setup
+npm exec --yes --package=@minhpnq1807/contextos@latest -- ctx-codex install
+```
+
+Codex-only:
 
 ```bash
 ctx install
 ```
 
-Claude Code and Antigravity are supported through their native hook systems:
+Claude Code and Antigravity:
 
 ```bash
 ctx install claude
 ctx install agy
 ```
 
-You can also run without a global install:
+Restart the agent after setup. Then use the agent normally.
 
-```bash
-npx @minhpnq1807/contextos@latest install
-npx @minhpnq1807/contextos@latest setup
-npx @minhpnq1807/contextos@latest install claude
-npx @minhpnq1807/contextos@latest install agy
+## Why
+
+Developers put real operating instructions in `AGENTS.md`: use this graph tool before reading files, run these tests, follow this architecture boundary, avoid this migration path.
+
+The problem is not that agents cannot read `AGENTS.md`. The problem is that large context windows bury the important rule in the middle, where attention is weak. ContextOS turns a static rules file into task-aware runtime context.
+
+## What ContextOS Does
+
+| Layer | What happens |
+| --- | --- |
+| Hooks | Codex, Claude Code, and Antigravity hooks run before/after each task. |
+| Scoring | Local MiniLM embeddings plus heuristics rank AGENTS.md rules by the prompt. |
+| Injection | Critical rules are placed with primacy + recency, not buried in the middle. |
+| Discovery | Relevant files, skills, and workflows are suggested before work starts. |
+| Sync | Rules/MCP via Ruler, skills via skillshare, workflows via ContextOS. |
+| Evidence | Stop hooks report `followed`, `ignored`, `unknown`, and runtime telemetry. |
+
+## Quick Commands
+
+| Command | Use it for |
+| --- | --- |
+| `ctx setup` | Recommended first-run install flow. |
+| `ctx debug -- "Recheck authen flow"` | Preview what ContextOS would inject. |
+| `ctx report` | Show the last task's compliance summary. |
+| `ctx evidence` | Show why each rule was marked followed/ignored/unknown. |
+| `ctx stats` | Show workspace-level usage and effectiveness metrics. |
+| `ctx benchmark -- "task"` | Compare raw AGENTS.md ordering vs ContextOS scheduling. |
+| `ctx sync --rules` | Sync AGENTS/Ruler/MCP config across agents. |
+| `ctx sync --skills` | Sync skills across agents through skillshare. |
+| `ctx sync --workflows` | Sync workflow markdown across Claude/Codex/Antigravity. |
+
+## 60-Second Demo Script
+
+1. Start in a repo with an `AGENTS.md` that contains a rule like:
+
+```text
+Always use code-review-graph MCP tools before reading files.
 ```
 
-## Demo Flow
-
-Use this flow for a 60-second demo recording:
+2. Install:
 
 ```bash
-ctx install
-codex
+npm install -g @minhpnq1807/contextos
+ctx setup --yes --agents codex
 ```
 
-Prompt the agent:
+3. Restart Codex and submit:
 
 ```text
 Recheck authen flow
 ```
 
-Expected result:
+4. Show the injected `hook context`.
 
-- `UserPromptSubmit` injects relevant AGENTS.md rules.
-- ContextOS suggests auth/authentication files.
-- `Stop` prints a ContextOS report with rule outcomes.
-- `ctx evidence` shows the specific evidence behind the last report.
+5. Let the task finish, then run:
 
-## Before / After
-
-Without ContextOS, Codex receives the full AGENTS.md context passively and can miss task-relevant rules in large context windows.
-
-With ContextOS, each prompt gets a compact block:
-
-```text
-## Critical ContextOS rules
-- Use code-review-graph before reading files.
-- Recheck authentication flow before editing auth code.
-
-## Suggested files to check
-- services/auth-service/src/auth.controller.ts
-- services/auth-service/src/auth.service.ts
+```bash
+ctx report
+ctx evidence
 ```
 
-## What It Does
+The demo should show one idea: ContextOS puts the right rule in front of the agent before work starts, then proves whether the rule was followed.
 
-- Hooks into Codex `UserPromptSubmit`, `SessionStart`, and `Stop`.
-- Hooks into Claude Code `UserPromptSubmit`, `SessionStart`, and `Stop`.
-- Hooks into Antigravity `PreInvocation` and `Stop` through the `agy` adapter.
-- Registers a `ctx-mcp` MCP server that owns model loading and semantic scoring.
-- Reads the active `AGENTS.md` chain for the current workspace.
-- Scores rules by relevance to the user prompt.
-- Scans project/global `.codex/skills`, `.claude/skills`, and Antigravity `.gemini/**/skills`, ranks skill descriptions by task relevance, and injects top skill hints.
-- Filters host/session setup rules such as "run commands as user X" or `sudo -u user` because they are environment instructions, not project guidance.
-- Finds likely relevant files with a hybrid retriever:
-  - first, local prompt/file heuristics create seed candidates;
-  - then, if `.code-review-graph/graph.db` exists, ContextOS queries `code-review-graph` semantic search and re-ranks graph-backed matches;
-  - if no graph exists or graph lookup times out, it falls back to local heuristics.
-- Stores scheduled context and hook telemetry per workspace under `~/.ctx/contextos/workspaces/<workspace-id>`.
-- Reports rule outcomes as `followed`, `ignored`, or `unknown`, using runtime telemetry for tool/command rules when available.
-- Injects `additionalContext` into Codex by default.
-
-By default, ContextOS runs in injection mode. It adds task-relevant rules and files to the model context so the agent has the right project guidance at the moment it starts working.
-
-## Install
+## Detailed Install
 
 From the package:
 
