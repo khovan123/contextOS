@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.2
+
+- Recovers automatically from malformed `embeddings.db` files by moving the corrupt cache aside and recreating it.
+- Writes the sql.js embedding cache with atomic temp-file rename to avoid partial DB files during concurrent hook/MCP writes.
+
 ## 0.5.1
 
 - Fixes `ctx sync --skills` first-run ordering by running `skillshare init` before `skillshare backup`, matching skillshare's config requirement.

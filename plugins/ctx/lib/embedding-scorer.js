@@ -158,21 +158,11 @@ async function getCachedEmbedding({ cache, embedder, text, sources }) {
   return embedding;
 }
 
-async function openEmbeddingCache(dataDir) {
+export async function openEmbeddingCache(dataDir) {
   fs.mkdirSync(dataDir, { recursive: true });
   const cachePath = path.join(dataDir, "embeddings.db");
   const SQL = await getSql();
-  const buffer = fs.existsSync(cachePath) ? fs.readFileSync(cachePath) : null;
-  const db = buffer?.length ? new SQL.Database(buffer) : new SQL.Database();
-
-  db.run(`
-    CREATE TABLE IF NOT EXISTS embeddings (
-      key TEXT PRIMARY KEY,
-      model TEXT NOT NULL,
-      vector TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    )
-  `);
+  const db = initializeEmbeddingDatabase(SQL, cachePath);
 
   return {
     path: cachePath,
@@ -191,13 +181,77 @@ async function openEmbeddingCache(dataDir) {
         "INSERT OR REPLACE INTO embeddings (key, model, vector, updated_at) VALUES (?, ?, ?, ?)",
         [key, DEFAULT_MODEL, JSON.stringify(vector), new Date().toISOString()]
       );
-      fs.writeFileSync(cachePath, Buffer.from(db.export()));
+      writeDatabaseAtomically(cachePath, db);
     },
     close() {
-      fs.writeFileSync(cachePath, Buffer.from(db.export()));
+      writeDatabaseAtomically(cachePath, db);
       db.close();
     }
   };
+}
+
+function initializeEmbeddingDatabase(SQL, cachePath) {
+  let db = openSqlDatabase(SQL, cachePath);
+  try {
+    ensureEmbeddingSchema(db);
+    return db;
+  } catch (error) {
+    try {
+      db.close();
+    } catch {
+      // Ignore close failures while recovering a corrupt cache.
+    }
+    quarantineMalformedCache(cachePath, error);
+    db = new SQL.Database();
+    ensureEmbeddingSchema(db);
+    writeDatabaseAtomically(cachePath, db);
+    return db;
+  }
+}
+
+function ensureEmbeddingSchema(db) {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS embeddings (
+      key TEXT PRIMARY KEY,
+      model TEXT NOT NULL,
+      vector TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )
+  `);
+}
+
+function openSqlDatabase(SQL, cachePath) {
+  if (!fs.existsSync(cachePath)) return new SQL.Database();
+  const buffer = fs.readFileSync(cachePath);
+  if (!buffer.length) return new SQL.Database();
+  try {
+    return new SQL.Database(buffer);
+  } catch (error) {
+    quarantineMalformedCache(cachePath, error);
+    return new SQL.Database();
+  }
+}
+
+function quarantineMalformedCache(cachePath, error) {
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const corruptPath = `${cachePath}.corrupt-${stamp}-${process.pid}`;
+  try {
+    fs.renameSync(cachePath, corruptPath);
+    console.warn(`[ctx] Embedding cache was malformed and has been moved to ${corruptPath}: ${error?.message || error}`);
+  } catch {
+    try {
+      fs.rmSync(cachePath, { force: true });
+      console.warn(`[ctx] Embedding cache was malformed and has been reset: ${error?.message || error}`);
+    } catch {
+      // The caller will recreate the cache if the old file could not be moved.
+    }
+  }
+}
+
+function writeDatabaseAtomically(cachePath, db) {
+  const tmpPath = `${cachePath}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  fs.writeFileSync(tmpPath, Buffer.from(db.export()));
+  fs.renameSync(tmpPath, cachePath);
 }
 
 async function getSql() {
