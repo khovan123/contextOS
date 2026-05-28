@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { enhanceRuleScoresWithEmbeddings, warmRuleEmbeddings } from "./embedding-scorer.js";
+import { enhanceRuleScoresWithEmbeddings, isModelCacheReady, warmRuleEmbeddings } from "./embedding-scorer.js";
 
 const SOURCE_EXTENSIONS = new Set([
   ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".py", ".sql", ".md", ".json"
@@ -65,6 +65,7 @@ export async function warmFileEmbeddings({
   maxFiles = Number(process.env.CONTEXTOS_FILE_EMBEDDING_MAX_FILES || DEFAULT_MAX_FILES)
 } = {}) {
   if (!dataDir) return { count: 0, cachePath: null };
+  if (!allowRemote && !isModelCacheReady(dataDir)) return { count: 0, cachePath: null, status: "missing-model" };
   const files = listSourceFiles(cwd, { maxFiles });
   const rules = files.map((filePath) => ({ content: fileSearchText(filePath) }));
   return warmRuleEmbeddings({

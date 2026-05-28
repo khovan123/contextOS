@@ -156,7 +156,7 @@ Antigravity does not use `UserPromptSubmit`; ContextOS injects context through `
 
 Restart Antigravity or `agy` after installing.
 
-The embedding model is mandatory. `ctx install` intentionally fails if the model cannot be prepared, because otherwise the first prompt hook would have to cold-load or download the model.
+The embedding model is mandatory. `ctx install` checks `~/.ctx/contextos/models` first and downloads the MiniLM model only when the required local files are missing. It intentionally fails if the model cannot be prepared, because otherwise the first prompt hook would have to cold-load or download the model.
 
 Verify the published package in any project:
 

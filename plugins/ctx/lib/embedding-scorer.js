@@ -57,6 +57,9 @@ export async function warmRuleEmbeddings({
   sources = [],
   allowRemote = true
 } = {}) {
+  if (!allowRemote && !isModelCacheReady(dataDir)) {
+    return { count: 0, cachePath: path.join(dataDir, "embeddings.db"), status: "missing-model" };
+  }
   const texts = [...new Set([
     task,
     ...rules.map((rule) => rule.content || "")
@@ -129,6 +132,16 @@ async function getExtractor({ allowRemote, dataDir }) {
 
 export function modelCacheDir(dataDir = defaultDataRoot()) {
   return path.join(dataDir, "models");
+}
+
+export function isModelCacheReady(dataDir = defaultDataRoot()) {
+  const modelDir = path.join(modelCacheDir(dataDir), ...DEFAULT_MODEL.split("/"));
+  return [
+    "config.json",
+    "tokenizer.json",
+    "tokenizer_config.json",
+    path.join("onnx", "model_quantized.onnx")
+  ].every((relativePath) => fs.existsSync(path.join(modelDir, relativePath)));
 }
 
 async function getCachedEmbedding({ cache, embedder, text, sources }) {

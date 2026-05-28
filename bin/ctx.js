@@ -10,7 +10,7 @@ import { scheduleContext } from "../plugins/ctx/lib/scheduler.js";
 import { formatEvidence, formatReport } from "../plugins/ctx/lib/reporter.js";
 import { installGlobalHooks } from "../plugins/ctx/lib/global-hooks.js";
 import { formatStats, loadStats } from "../plugins/ctx/lib/stats.js";
-import { modelCacheDir, warmRuleEmbeddings } from "../plugins/ctx/lib/embedding-scorer.js";
+import { isModelCacheReady, modelCacheDir, warmRuleEmbeddings } from "../plugins/ctx/lib/embedding-scorer.js";
 import { warmFileEmbeddings } from "../plugins/ctx/lib/file-embedding-retriever.js";
 import { scoreContext } from "../plugins/ctx/lib/score-context.js";
 import { defaultDataRoot, workspaceDataDir, workspaceMarkerPath } from "../plugins/ctx/lib/workspace-data.js";
@@ -88,7 +88,6 @@ async function install({ copy = false, inject = true, agent = "codex" } = {}) {
     const installRoot = copyPackageRoot({ rootDir, targetRoot: agentInstallRoot("claude") });
     const hooksPath = installClaudeHooks({ installRoot, injectPromptContext: inject });
     const mcpConfigPath = installClaudeMcp({ installRoot });
-    console.log("Preparing required local embedding model...");
     const warmResult = await warmInstallEmbeddings();
     console.log("Installed ctx hooks for Claude Code.");
     console.log(`Stable install root: ${installRoot}`);
@@ -106,7 +105,6 @@ async function install({ copy = false, inject = true, agent = "codex" } = {}) {
     const installRoot = copyPackageRoot({ rootDir, targetRoot: agentInstallRoot("agy") });
     const hooksPath = installAntigravityHooks({ installRoot, injectPromptContext: inject });
     const mcpConfigPaths = installAntigravityMcp({ installRoot });
-    console.log("Preparing required local embedding model...");
     const warmResult = await warmInstallEmbeddings();
     console.log("Installed ctx hooks for Antigravity.");
     console.log(`Stable install root: ${installRoot}`);
@@ -136,7 +134,6 @@ async function install({ copy = false, inject = true, agent = "codex" } = {}) {
   const proxyResult = installMcpTelemetryProxies({ codexHome: codexHome(), marketplaceRoot });
   const hooksPath = installGlobalHooks({ codexHome: codexHome(), marketplaceRoot, injectPromptContext: inject });
 
-  console.log("Preparing required local embedding model...");
   const warmResult = await warmInstallEmbeddings();
   console.log("Installed ctx through Codex plugin marketplace.");
   console.log(`Stable marketplace root: ${marketplaceRoot}`);
@@ -152,6 +149,10 @@ async function install({ copy = false, inject = true, agent = "codex" } = {}) {
 
 async function warmInstallEmbeddings() {
   const dataDir = contextOSDataDir();
+  const modelReady = isModelCacheReady(dataDir);
+  console.log(modelReady
+    ? "Required local embedding model already cached."
+    : "Preparing required local embedding model...");
   const result = await warmRuleEmbeddings({
     rules: [
       { content: "Always use project rules that are semantically relevant to the user prompt." },
@@ -161,14 +162,14 @@ async function warmInstallEmbeddings() {
     task: "kiểm duyệt upload moderation semantic code search",
     dataDir,
     sources: [],
-    allowRemote: true
+    allowRemote: !modelReady
   });
   const fileResult = await warmFileEmbeddings({
     cwd: process.cwd(),
     dataDir,
-    allowRemote: true
+    allowRemote: !modelReady
   });
-  return { ...result, fileCount: fileResult.count };
+  return { ...result, modelAlreadyCached: modelReady, fileCount: fileResult.count };
 }
 
 function tryRunCodex(args) {
