@@ -8,6 +8,7 @@ const DEFAULT_LIMIT = 2;
 const MIN_WORKFLOW_BYTES = 100;
 const MAX_DESCRIPTION_CHARS = 500;
 const DEFAULT_EMBEDDING_CANDIDATES = 40;
+const DEFAULT_SYNC_AGENTS = ["claude", "codex", "agy"];
 const KNOWN_AGENT_NAMES = new Set([
   "planner",
   "tester",
@@ -40,6 +41,29 @@ export function workflowSearchRoots({ cwd = process.cwd(), home = os.homedir() }
     path.join(home, ".gemini", "antigravity", "workflows"),
     path.join(home, ".gemini", "antigravity-cli", "workflows")
   ];
+}
+
+export function workflowGlobalRoots({ home = os.homedir(), agents = DEFAULT_SYNC_AGENTS } = {}) {
+  const normalizedAgents = parseWorkflowAgents(agents);
+  const roots = [];
+  if (normalizedAgents.includes("claude")) roots.push(path.join(home, ".claude", "workflows"));
+  if (normalizedAgents.includes("codex")) roots.push(path.join(home, ".codex", "workflows"));
+  if (normalizedAgents.includes("agy")) {
+    roots.push(path.join(home, ".gemini", "workflows"));
+    roots.push(path.join(home, ".gemini", "antigravity", "workflows"));
+    roots.push(path.join(home, ".gemini", "antigravity-cli", "workflows"));
+  }
+  return roots;
+}
+
+export function parseWorkflowAgents(value = DEFAULT_SYNC_AGENTS) {
+  const raw = Array.isArray(value) ? value : String(value || "").split(",");
+  const agents = raw
+    .map((agent) => String(agent || "").trim().toLowerCase())
+    .map((agent) => agent === "antigravity" ? "agy" : agent)
+    .filter(Boolean);
+  const known = agents.filter((agent) => DEFAULT_SYNC_AGENTS.includes(agent));
+  return [...new Set(known.length ? known : DEFAULT_SYNC_AGENTS)];
 }
 
 export function scanWorkflows({ cwd = process.cwd(), roots = workflowSearchRoots({ cwd }) } = {}) {
@@ -148,20 +172,67 @@ export async function syncWorkflows({
   cwd = process.cwd(),
   dataDir,
   allowRemote = true,
+  args = [],
+  home = os.homedir(),
   logger = console.log
 } = {}) {
-  const workflows = scanWorkflows({ cwd });
-  logger("ContextOS workflow index");
-  logger(`Found workflows: ${workflows.length}`);
+  const options = parseSyncWorkflowArgs(args);
+  const agents = parseWorkflowAgents(options.agents);
+  const workflows = scanWorkflows({ cwd, roots: workflowSearchRoots({ cwd, home }) });
+  const targets = workflowGlobalRoots({ home, agents });
+
+  logger("ContextOS workflow sync");
+  logger(`Agents: ${agents.join(", ")}`);
+  logger(`Found unique workflows: ${workflows.length}`);
   if (workflows.length) {
     for (const workflow of workflows) {
       logger(`- ${workflow.relativePath || workflow.path} (${workflow.chain.join(" -> ") || "no chain"})`);
     }
   }
+  const syncResult = syncWorkflowFiles({ workflows, targets, dryRun: options.dryRun, logger });
   const result = await warmWorkflowEmbeddings({ cwd, dataDir, allowRemote, workflows });
+  logger(`Synced workflows: ${syncResult.copied}${options.dryRun ? " planned" : ""}`);
+  logger(`Skipped duplicates: ${syncResult.duplicates}`);
   logger(`Indexed workflows: ${workflows.length}`);
   if (result.cachePath) logger(`Cache: ${result.cachePath}`);
-  return { workflows, embeddings: result };
+  return { workflows, embeddings: result, sync: syncResult };
+}
+
+function parseSyncWorkflowArgs(args = []) {
+  const agentsFlag = args.indexOf("--agents");
+  return {
+    agents: agentsFlag >= 0 ? args[agentsFlag + 1] : DEFAULT_SYNC_AGENTS,
+    dryRun: args.includes("--dry-run")
+  };
+}
+
+function syncWorkflowFiles({ workflows = [], targets = [], dryRun = false, logger = console.log } = {}) {
+  let copied = 0;
+  let duplicates = 0;
+  const seenNames = new Set();
+  for (const workflow of workflows) {
+    if (seenNames.has(workflow.name)) {
+      duplicates += 1;
+      continue;
+    }
+    seenNames.add(workflow.name);
+    for (const targetRoot of targets) {
+      const targetPath = path.join(targetRoot, `${workflow.name}.md`);
+      const sourceRealPath = safeRealpath(workflow.path) || path.resolve(workflow.path);
+      const targetRealPath = safeRealpath(targetPath) || path.resolve(targetPath);
+      if (sourceRealPath === targetRealPath) continue;
+      if (!dryRun) {
+        fs.mkdirSync(targetRoot, { recursive: true });
+        fs.copyFileSync(workflow.path, targetPath);
+      }
+      copied += 1;
+    }
+  }
+  if (targets.length) {
+    logger(`Target roots: ${targets.length}`);
+    for (const target of targets) logger(`  -> ${target}`);
+  }
+  return { copied, duplicates, targets: targets.length };
 }
 
 function stripFrontmatter(content) {

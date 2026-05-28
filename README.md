@@ -216,10 +216,12 @@ After this, `ctx debug -- "task"` and prompt hooks can suggest skills from `~/.c
 
 ## Workflow Discovery
 
-ContextOS can also index Claude/Codex workflow markdown files and suggest the right workflow for the current task:
+ContextOS can also sync Claude/Codex/Antigravity workflow markdown files and suggest the right workflow for the current task:
 
 ```bash
 ctx sync --workflows
+ctx sync --workflows --agents codex,claude,agy
+ctx sync --workflows --dry-run
 ```
 
 It scans project workflows first, then global workflows:
@@ -238,6 +240,8 @@ It scans project workflows first, then global workflows:
 ```
 
 Workflow files do not need YAML frontmatter. ContextOS reads the top `#` heading, section headings, and referenced agent names such as `planner`, `tester`, `code-reviewer`, and `docs-manager`, then warms semantic embeddings. Prompt hooks inject a `Suggested workflow for this task` section only when a workflow is relevant enough.
+
+`ctx sync --workflows` reads every known project/global workflow root, keeps the first workflow for each filename/name according to root priority, then copies that unique set to the selected global agent roots. This prevents duplicate `primary-workflow` suggestions when the same workflow exists in Claude, Codex, and Antigravity directories.
 
 ## Modes
 
@@ -384,7 +388,9 @@ This warning comes from a transitive dependency in the local embedding/WASM stac
 | `ctx sync --skills --agents <list>` | Syncs skills only for selected agents. | You want to target a subset such as `codex,claude` or `codex,claude,agy`. | Runs `skillshare sync --agents <list>` with `agy` normalized to `antigravity`, then refreshes skill embeddings. |
 | `ctx sync --skills --dry-run` | Previews skillshare sync. | You want to inspect behavior before changing skill directories. | Runs `skillshare sync --dry-run` and skips embedding rebuild. |
 | `ctx sync --skills --no-collect` | Skips collecting existing agent skills into skillshare. | You already manage `~/.config/skillshare/skills` and only want to push it out. | Initializes/syncs skillshare without running `skillshare backup` or `skillshare collect --all`. |
-| `ctx sync --workflows` | Indexes agent workflow markdown files for prompt-time workflow suggestions. | You use `.claude/workflows/` or `.codex/workflows/` and want ContextOS to suggest the best workflow chain for each task. | Scans project/global workflow folders, parses headings and agent chain mentions, warms workflow embeddings, and makes `ctx debug`/prompt hooks show relevant workflow hints. |
+| `ctx sync --workflows` | Syncs and indexes agent workflow markdown files for prompt-time workflow suggestions. | You use `.claude/workflows/`, `.codex/workflows/`, or Antigravity workflow folders and want every agent to see the same deduped workflow set. | Scans project/global workflow folders, dedupes by workflow name, copies unique workflows to selected global agent roots, warms workflow embeddings, and makes `ctx debug`/prompt hooks show relevant workflow hints. |
+| `ctx sync --workflows --agents <list>` | Syncs workflows only for selected agents. | You want a subset such as `codex,claude` or `codex,claude,agy`. | Accepts comma-separated `codex`, `claude`, `agy`, or `antigravity`; `agy` writes the Gemini/Antigravity workflow roots. |
+| `ctx sync --workflows --dry-run` | Previews workflow sync without writing files. | You want to inspect source workflows and target roots first. | Prints planned sync/index output and skips copying target files. |
 | `ctx embeddings warm -- "task"` | Prepares local semantic embedding caches. | First install, CI smoke checks, or after changing AGENTS.md/project files/skills/workflows. | Loads/downloads `Xenova/all-MiniLM-L6-v2` and writes rule, file-path, skill, and workflow vectors to `~/.ctx/contextos/embeddings.db`. |
 | `ctx ruler -- <args>` | Forwards args to the installed `ruler` CLI. | You need native Ruler commands such as `init`, `apply`, or `revert`. | Preserves Ruler stdout/stderr and exit status. |
 | `ctx skillshare -- <args>` | Forwards args to the installed `skillshare` CLI. | You need native skillshare commands such as `status`, `target list`, `doctor`, `push`, or `pull`. | Preserves skillshare stdout/stderr and exit status. |

@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { parseWorkflowFile, scanWorkflows, suggestWorkflows } from "../plugins/ctx/lib/workflow-discoverer.js";
+import { parseWorkflowFile, scanWorkflows, suggestWorkflows, syncWorkflows } from "../plugins/ctx/lib/workflow-discoverer.js";
 
 function writeWorkflow(root, name, content) {
   fs.mkdirSync(root, { recursive: true });
@@ -97,6 +97,79 @@ describe("workflow discoverer", () => {
 
     expect(workflows.map((workflow) => workflow.name)).toEqual(["primary-workflow"]);
     expect(workflows[0].root).toBe(claudeRoot);
+  });
+
+  it("syncs unique workflows to global agent roots", async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-workflow-sync-"));
+    const home = path.join(tmp, "home");
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-workflow-sync-data-"));
+    const claudeRoot = path.join(tmp, ".claude", "workflows");
+    const codexRoot = path.join(tmp, ".codex", "workflows");
+    writeWorkflow(claudeRoot, "primary-workflow", [
+      "# Primary Workflow",
+      "",
+      "Feature implementation workflow.",
+      "",
+      "#### Code Implementation",
+      "Use `planner`, `tester`, and `code-reviewer`."
+    ].join("\n"));
+    writeWorkflow(codexRoot, "primary-workflow", [
+      "# Primary Workflow",
+      "",
+      "Duplicate workflow that should lose to Claude root priority.",
+      "",
+      "#### Code Implementation",
+      "Use `planner`."
+    ].join("\n"));
+    writeWorkflow(claudeRoot, "documentation-management", [
+      "# Documentation Management",
+      "",
+      "Documentation workflow for README and changelog updates.",
+      "",
+      "### Docs",
+      "Use `docs-manager`."
+    ].join("\n"));
+
+    const result = await syncWorkflows({
+      cwd: tmp,
+      home,
+      dataDir,
+      allowRemote: false,
+      args: ["--agents", "codex,agy"],
+      logger: () => {}
+    });
+
+    expect(result.workflows.map((workflow) => workflow.name)).toEqual(expect.arrayContaining(["primary-workflow", "documentation-management"]));
+    expect(fs.existsSync(path.join(home, ".codex", "workflows", "primary-workflow.md"))).toBe(true);
+    expect(fs.existsSync(path.join(home, ".gemini", "antigravity", "workflows", "documentation-management.md"))).toBe(true);
+    expect(fs.existsSync(path.join(home, ".claude", "workflows", "primary-workflow.md"))).toBe(false);
+    expect(fs.readFileSync(path.join(home, ".codex", "workflows", "primary-workflow.md"), "utf8")).toContain("Feature implementation workflow.");
+  });
+
+  it("supports dry-run workflow sync without writing target files", async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-workflow-sync-dry-"));
+    const home = path.join(tmp, "home");
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-workflow-sync-dry-data-"));
+    writeWorkflow(path.join(tmp, ".claude", "workflows"), "primary-workflow", [
+      "# Primary Workflow",
+      "",
+      "Feature implementation workflow.",
+      "",
+      "#### Code Implementation",
+      "Use `planner`, `tester`, and `code-reviewer`."
+    ].join("\n"));
+
+    const result = await syncWorkflows({
+      cwd: tmp,
+      home,
+      dataDir,
+      allowRemote: false,
+      args: ["--dry-run"],
+      logger: () => {}
+    });
+
+    expect(result.sync.copied).toBeGreaterThan(0);
+    expect(fs.existsSync(path.join(home, ".codex", "workflows", "primary-workflow.md"))).toBe(false);
   });
 
   it("suggests the implementation workflow for feature prompts", async () => {

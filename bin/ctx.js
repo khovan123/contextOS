@@ -63,6 +63,8 @@ Usage:
   ctx sync --rules --no-import-codex-mcp
   ctx sync --skills
   ctx sync --workflows
+  ctx sync --workflows --agents codex,claude,agy
+  ctx sync --workflows --dry-run
   ctx sync --skills --dry-run
   ctx sync --skills --no-collect
   ctx sync --skills --agents codex,claude,antigravity
@@ -571,7 +573,8 @@ try {
       await syncWorkflows({
         cwd: process.cwd(),
         dataDir: contextOSDataDir(),
-        allowRemote: !isModelCacheReady(contextOSDataDir())
+        allowRemote: !isModelCacheReady(contextOSDataDir()),
+        args: args.slice(1)
       });
     } else if (args.includes("--skills")) {
       await syncSkills({

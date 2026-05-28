@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.12
+
+- Makes `ctx sync --workflows` synchronize unique workflow files to global Claude, Codex, and Antigravity workflow roots.
+- Adds `ctx sync --workflows --agents ...` and `--dry-run`, with workflow-name dedupe to avoid duplicated workflow suggestions across agents.
+
 ## 0.5.11
 
 - Adds Antigravity workflow discovery roots under `.gemini/workflows`, `.gemini/antigravity/workflows`, and `.gemini/antigravity-cli/workflows`.
