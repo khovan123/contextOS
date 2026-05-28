@@ -55,6 +55,25 @@ describe("skill discoverer", () => {
     expect(skills[0]).toMatchObject({ name: "planning" });
   });
 
+  it("scans Antigravity skill directories", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-agy-skills-"));
+    const skillDir = path.join(tmp, ".gemini", "antigravity", "skills", "payment-integration");
+    fs.mkdirSync(skillDir, { recursive: true });
+    fs.writeFileSync(path.join(skillDir, "SKILL.md"), [
+      "---",
+      "name: payment-integration",
+      "description: Use for payment checkout and billing webhook tasks.",
+      "---"
+    ].join("\n"));
+
+    const skills = scanSkills({
+      cwd: tmp,
+      roots: [path.join(tmp, ".gemini", "antigravity", "skills")]
+    });
+
+    expect(skills.map((skill) => skill.name)).toContain("payment-integration");
+  });
+
   it("suggests top skills without being affected by catalog size/order", async () => {
     const skills = Array.from({ length: 50 }, (_, index) => ({
       name: `zzz-${index}`,

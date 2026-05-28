@@ -1,9 +1,14 @@
 # Changelog
 
+## 0.4.1
+
+- Adds Antigravity skill discovery roots for `.gemini/skills`, `.gemini/antigravity/skills`, and `.gemini/antigravity-cli/skills`.
+- Raises the skill catalog scan cap to cover large Antigravity skill catalogs before ranking.
+
 ## 0.4.0
 
 - Adds prompt-aware skill discovery to `ctx_score_context`, returning `suggestedSkills` alongside rules and files.
-- Scans project/global `.codex/skills` and `.claude/skills` catalogs, ranks skill `name` + `description`, and injects top skill hints into prompt context.
+- Scans project/global `.codex/skills`, `.claude/skills`, and Antigravity `.gemini/**/skills` catalogs, ranks skill `name` + `description`, and injects top skill hints into prompt context.
 - Warms skill embeddings during `ctx install` and `ctx embeddings warm`.
 
 ## 0.3.0

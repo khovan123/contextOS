@@ -77,7 +77,7 @@ With ContextOS, each prompt gets a compact block:
 - Registers a `ctx-mcp` MCP server that owns model loading and semantic scoring.
 - Reads the active `AGENTS.md` chain for the current workspace.
 - Scores rules by relevance to the user prompt.
-- Scans project/global `.codex/skills` and `.claude/skills`, ranks skill descriptions by task relevance, and injects top skill hints.
+- Scans project/global `.codex/skills`, `.claude/skills`, and Antigravity `.gemini/**/skills`, ranks skill descriptions by task relevance, and injects top skill hints.
 - Filters host/session setup rules such as "run commands as user X" or `sudo -u user` because they are environment instructions, not project guidance.
 - Finds likely relevant files with a hybrid retriever:
   - first, local prompt/file heuristics create seed candidates;

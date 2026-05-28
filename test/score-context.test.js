@@ -4,6 +4,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { scoreContext } from "../plugins/ctx/lib/score-context.js";
+import { scanSkills } from "../plugins/ctx/lib/skill-discoverer.js";
 
 describe("score context", () => {
   it("excludes system-user shell rules from scored context", async () => {
@@ -19,6 +20,7 @@ describe("score context", () => {
       cwd: tmp,
       prompt: "fix zod validation",
       dataDir,
+      skills: [],
       embeddingTimeoutMs: 20,
       fileEmbeddingTimeoutMs: 1
     });
@@ -46,6 +48,10 @@ describe("score context", () => {
       cwd: tmp,
       prompt: "create payment checkout webhook integration",
       dataDir,
+      skills: scanSkills({
+        cwd: tmp,
+        roots: [path.join(tmp, ".codex", "skills")]
+      }),
       embeddingTimeoutMs: 20,
       fileEmbeddingTimeoutMs: 1
     });
