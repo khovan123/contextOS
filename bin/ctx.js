@@ -59,6 +59,68 @@ Usage:
 `;
 }
 
+function normalizeInstallAgent(agent) {
+  const normalized = String(agent || "").trim().toLowerCase();
+  if (normalized === "antigravity") return "agy";
+  return normalized;
+}
+
+function createInstallProgress({ quiet = false } = {}) {
+  const enabled = !quiet && process.stderr.isTTY;
+  const frames = ["-", "\\", "|", "/"];
+  let percent = 0;
+  let label = "starting";
+  let frame = 0;
+  let timer = null;
+
+  function render() {
+    if (!enabled) return;
+    const text = `[ctx] install ${String(percent).padStart(3)}% ${frames[frame % frames.length]} ${label}`;
+    process.stderr.write(`\r${text.padEnd(92)}`);
+    frame += 1;
+  }
+
+  return {
+    start(initialLabel = "starting") {
+      label = initialLabel;
+      percent = 0;
+      if (enabled) {
+        render();
+        timer = setInterval(render, 120);
+      } else if (!quiet) {
+        console.log(`[ctx] install 0% ${label}`);
+      }
+    },
+    step(nextPercent, nextLabel) {
+      percent = Math.max(percent, Math.min(100, nextPercent));
+      label = nextLabel;
+      if (enabled) render();
+      else if (!quiet) console.log(`[ctx] install ${percent}% ${label}`);
+    },
+    done(finalLabel = "done") {
+      percent = 100;
+      label = finalLabel;
+      if (timer) clearInterval(timer);
+      timer = null;
+      if (enabled) {
+        render();
+        process.stderr.write("\n");
+      } else if (!quiet) {
+        console.log(`[ctx] install 100% ${label}`);
+      }
+    },
+    fail(errorLabel = "failed") {
+      label = errorLabel;
+      if (timer) clearInterval(timer);
+      timer = null;
+      if (enabled) {
+        render();
+        process.stderr.write("\n");
+      }
+    }
+  };
+}
+
 function packageVersion() {
   try {
     const packageJson = JSON.parse(fs.readFileSync(path.join(rootDir, "package.json"), "utf8"));
@@ -85,75 +147,100 @@ function agentInstallRoot(agent) {
 }
 
 async function install({ copy = false, inject = true, agent = "codex" } = {}) {
+  agent = normalizeInstallAgent(agent);
   if (copy) {
     copyInstall();
     return;
   }
+  const progress = createInstallProgress({ quiet: false });
+  progress.start(`installing ${agent || "codex"}`);
 
-  if (agent === "claude") {
-    const installRoot = copyPackageRoot({ rootDir, targetRoot: agentInstallRoot("claude") });
-    const hooksPath = installClaudeHooks({ installRoot, injectPromptContext: inject });
-    const mcpConfigPath = installClaudeMcp({ installRoot });
+  try {
+    if (agent === "claude") {
+      progress.step(10, "copying package");
+      const installRoot = copyPackageRoot({ rootDir, targetRoot: agentInstallRoot("claude") });
+      progress.step(25, "installing hooks");
+      const hooksPath = installClaudeHooks({ installRoot, injectPromptContext: inject });
+      progress.step(40, "installing mcp");
+      const mcpConfigPath = installClaudeMcp({ installRoot });
+      progress.step(55, "warming embeddings");
+      const warmResult = await warmInstallEmbeddings();
+      progress.done("claude installed");
+      console.log("Installed ctx hooks for Claude Code.");
+      console.log(`Stable install root: ${installRoot}`);
+      console.log(`Installed ContextOS hooks to ${hooksPath}`);
+      console.log(`Installed ctx-mcp MCP server to ${mcpConfigPath}`);
+      console.log(`Embedding model cache: ${modelCacheDir(contextOSDataDir())}`);
+      console.log(`Embedding vectors cache: ${warmResult.cachePath}`);
+      console.log(`File path embeddings warmed: ${warmResult.fileCount || 0}`);
+      console.log(`Skill embeddings warmed: ${warmResult.skillCount || 0}`);
+      console.log(`Prompt context injection: ${inject ? "enabled" : "quiet logging only"}`);
+      console.log("Restart Claude Code if it was already running, then submit a task to trigger ContextOS.");
+      return;
+    }
+
+    if (agent === "agy") {
+      progress.step(10, "copying package");
+      const installRoot = copyPackageRoot({ rootDir, targetRoot: agentInstallRoot("agy") });
+      progress.step(25, "installing hooks");
+      const hooksPath = installAntigravityHooks({ installRoot, injectPromptContext: inject });
+      progress.step(40, "installing mcp");
+      const mcpConfigPaths = installAntigravityMcp({ installRoot });
+      progress.step(55, "warming embeddings");
+      const warmResult = await warmInstallEmbeddings();
+      progress.done("agy installed");
+      console.log("Installed ctx hooks for Antigravity.");
+      console.log(`Stable install root: ${installRoot}`);
+      console.log(`Installed ContextOS hooks to ${hooksPath}`);
+      console.log(`Installed ctx-mcp MCP server to ${mcpConfigPaths.join(", ")}`);
+      console.log(`Embedding model cache: ${modelCacheDir(contextOSDataDir())}`);
+      console.log(`Embedding vectors cache: ${warmResult.cachePath}`);
+      console.log(`File path embeddings warmed: ${warmResult.fileCount || 0}`);
+      console.log(`Skill embeddings warmed: ${warmResult.skillCount || 0}`);
+      console.log(`Prompt context injection: ${inject ? "enabled" : "quiet logging only"}`);
+      console.log("Restart Antigravity or agy if it was already running, then submit a task to trigger ContextOS.");
+      return;
+    }
+
+    if (agent !== "codex") {
+      throw new Error(`Unknown agent '${agent}'. Expected codex, claude, or agy.`);
+    }
+
+    progress.step(10, "copying marketplace");
+    const marketplaceRoot = path.join(codexHome(), "marketplaces", "contextos");
+    copyPackageRoot({ rootDir, targetRoot: marketplaceRoot });
+
+    progress.step(20, "refreshing codex plugin");
+    tryRunCodex(["plugin", "remove", "ctx@contextos"]);
+    tryRunCodex(["plugin", "marketplace", "remove", "contextos"]);
+    tryRunCodex(["mcp", "remove", "ctx-mcp"]);
+    runCodex(["plugin", "marketplace", "add", marketplaceRoot]);
+    runCodex(["plugin", "add", "ctx@contextos"]);
+    progress.step(40, "installing mcp");
+    runCodex(["mcp", "add", "ctx-mcp", "--", "node", path.join(marketplaceRoot, "plugins", "ctx", "mcp", "server.js")]);
+    progress.step(50, "installing telemetry proxies");
+    const proxyResult = installMcpTelemetryProxies({ codexHome: codexHome(), marketplaceRoot });
+    progress.step(60, "installing hooks");
+    const hooksPath = installGlobalHooks({ codexHome: codexHome(), marketplaceRoot, injectPromptContext: inject });
+
+    progress.step(70, "warming embeddings");
     const warmResult = await warmInstallEmbeddings();
-    console.log("Installed ctx hooks for Claude Code.");
-    console.log(`Stable install root: ${installRoot}`);
-    console.log(`Installed ContextOS hooks to ${hooksPath}`);
-    console.log(`Installed ctx-mcp MCP server to ${mcpConfigPath}`);
+    progress.done("codex installed");
+    console.log("Installed ctx through Codex plugin marketplace.");
+    console.log(`Stable marketplace root: ${marketplaceRoot}`);
+    console.log(`Installed ContextOS global hooks to ${hooksPath}`);
+    console.log("Installed ctx-mcp MCP server.");
+    console.log(`MCP telemetry proxies: ${proxyResult.wrapped.length ? proxyResult.wrapped.map((item) => item.name).join(", ") : "none changed"}`);
     console.log(`Embedding model cache: ${modelCacheDir(contextOSDataDir())}`);
     console.log(`Embedding vectors cache: ${warmResult.cachePath}`);
     console.log(`File path embeddings warmed: ${warmResult.fileCount || 0}`);
     console.log(`Skill embeddings warmed: ${warmResult.skillCount || 0}`);
     console.log(`Prompt context injection: ${inject ? "enabled" : "quiet logging only"}`);
-    console.log("Restart Claude Code if it was already running, then submit a task to trigger ContextOS.");
-    return;
+    console.log("Restart Codex if it was already running, then submit a task to trigger ContextOS.");
+  } catch (error) {
+    progress.fail("install failed");
+    throw error;
   }
-
-  if (agent === "agy") {
-    const installRoot = copyPackageRoot({ rootDir, targetRoot: agentInstallRoot("agy") });
-    const hooksPath = installAntigravityHooks({ installRoot, injectPromptContext: inject });
-    const mcpConfigPaths = installAntigravityMcp({ installRoot });
-    const warmResult = await warmInstallEmbeddings();
-    console.log("Installed ctx hooks for Antigravity.");
-    console.log(`Stable install root: ${installRoot}`);
-    console.log(`Installed ContextOS hooks to ${hooksPath}`);
-    console.log(`Installed ctx-mcp MCP server to ${mcpConfigPaths.join(", ")}`);
-    console.log(`Embedding model cache: ${modelCacheDir(contextOSDataDir())}`);
-    console.log(`Embedding vectors cache: ${warmResult.cachePath}`);
-    console.log(`File path embeddings warmed: ${warmResult.fileCount || 0}`);
-    console.log(`Skill embeddings warmed: ${warmResult.skillCount || 0}`);
-    console.log(`Prompt context injection: ${inject ? "enabled" : "quiet logging only"}`);
-    console.log("Restart Antigravity or agy if it was already running, then submit a task to trigger ContextOS.");
-    return;
-  }
-
-  if (agent !== "codex") {
-    throw new Error(`Unknown agent '${agent}'. Expected codex, claude, or agy.`);
-  }
-
-  const marketplaceRoot = path.join(codexHome(), "marketplaces", "contextos");
-  copyPackageRoot({ rootDir, targetRoot: marketplaceRoot });
-
-  tryRunCodex(["plugin", "remove", "ctx@contextos"]);
-  tryRunCodex(["plugin", "marketplace", "remove", "contextos"]);
-  tryRunCodex(["mcp", "remove", "ctx-mcp"]);
-  runCodex(["plugin", "marketplace", "add", marketplaceRoot]);
-  runCodex(["plugin", "add", "ctx@contextos"]);
-  runCodex(["mcp", "add", "ctx-mcp", "--", "node", path.join(marketplaceRoot, "plugins", "ctx", "mcp", "server.js")]);
-  const proxyResult = installMcpTelemetryProxies({ codexHome: codexHome(), marketplaceRoot });
-  const hooksPath = installGlobalHooks({ codexHome: codexHome(), marketplaceRoot, injectPromptContext: inject });
-
-  const warmResult = await warmInstallEmbeddings();
-  console.log("Installed ctx through Codex plugin marketplace.");
-  console.log(`Stable marketplace root: ${marketplaceRoot}`);
-  console.log(`Installed ContextOS global hooks to ${hooksPath}`);
-  console.log("Installed ctx-mcp MCP server.");
-  console.log(`MCP telemetry proxies: ${proxyResult.wrapped.length ? proxyResult.wrapped.map((item) => item.name).join(", ") : "none changed"}`);
-  console.log(`Embedding model cache: ${modelCacheDir(contextOSDataDir())}`);
-  console.log(`Embedding vectors cache: ${warmResult.cachePath}`);
-  console.log(`File path embeddings warmed: ${warmResult.fileCount || 0}`);
-  console.log(`Skill embeddings warmed: ${warmResult.skillCount || 0}`);
-  console.log(`Prompt context injection: ${inject ? "enabled" : "quiet logging only"}`);
-  console.log("Restart Codex if it was already running, then submit a task to trigger ContextOS.");
 }
 
 async function warmInstallEmbeddings() {
@@ -309,9 +396,9 @@ const command = args[0];
 
 function installAgentFromArgs(args) {
   const agentFlag = args.indexOf("--agent");
-  if (agentFlag >= 0) return args[agentFlag + 1] || "";
+  if (agentFlag >= 0) return normalizeInstallAgent(args[agentFlag + 1] || "");
   const firstValue = args.slice(1).find((arg) => !arg.startsWith("--"));
-  return firstValue || "codex";
+  return normalizeInstallAgent(firstValue || "codex");
 }
 
 try {
@@ -322,7 +409,7 @@ try {
   } else if (command === "install") {
     await install({
       copy: args.includes("--copy"),
-      inject: !args.includes("--quiet"),
+      inject: args.includes("--inject") || !args.includes("--quiet"),
       agent: installAgentFromArgs(args)
     });
   } else if (command === "debug") {

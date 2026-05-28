@@ -162,6 +162,8 @@ Restart Antigravity or `agy` after installing.
 
 The embedding model is mandatory. `ctx install` checks `~/.ctx/contextos/models` first and downloads the MiniLM model only when the required local files are missing. It intentionally fails if the model cannot be prepared, because otherwise the first prompt hook would have to cold-load or download the model.
 
+During install, ContextOS prints a 0-100 progress indicator. The longest stage is usually embedding warmup; if the model is already cached, install skips the download and only refreshes vectors.
+
 Verify the published package in any project:
 
 ```bash
@@ -191,6 +193,7 @@ Useful variants:
 ctx sync --skills --dry-run
 ctx sync --skills --no-collect
 ctx sync --skills --agents codex,claude
+ctx sync --skills --agents codex,claude,agy
 ```
 
 After this, `ctx debug -- "task"` and prompt hooks can suggest skills from `~/.config/skillshare/skills/` plus agent-specific skill folders.
@@ -235,11 +238,13 @@ Use Ruler when the project wants one rule/MCP source of truth for multiple agent
 ctx sync --rules
 ```
 
-Default agents are `codex`, `claude`, and `antigravity`. You can target a subset:
+Default agents are `codex`, `claude`, and `agy` (Antigravity). Ruler's official identifier is still `antigravity`, so ContextOS accepts both `agy` and `antigravity` and normalizes them before calling Ruler. You can target a subset:
 
 ```bash
 ctx sync --rules --agents codex
 ctx sync --rules --agents codex,claude
+ctx sync --rules --agents codex,claude,agy
+ctx sync --rules --agents codex,claude,antigravity
 ```
 
 What it does:
@@ -302,7 +307,7 @@ This warning comes from a transitive dependency in the local embedding/WASM stac
 | `ctx install agy` | Installs ContextOS into Antigravity. | You use the `agy` CLI or Antigravity app/editor. | Copies a stable package root to `~/.ctx/contextos/agents/agy/contextos`, writes hooks to `~/.gemini/config/hooks.json`, and registers `ctx-mcp` in Antigravity app, CLI, and legacy editor MCP config paths. |
 | `ctx install --agent <name>` | Installs for a named agent. | You prefer explicit scripts. | Accepts `codex`, `claude`, or `agy`. |
 | `ctx install --quiet` | Installs ContextOS in measurement-only mode. | You want reports and stats but do not want visible injected context. | Installs the same hooks, but prompt hooks return empty context. |
-| `ctx install --inject` | Installs ContextOS with explicit injection mode. | You want to be explicit in scripts or docs. | Same runtime behavior as the default install mode. |
+| `ctx install --inject` | Installs ContextOS with explicit injection mode. | You want to be explicit in scripts or docs. | Same runtime behavior as the default install mode; if combined with `--quiet`, `--inject` wins. |
 | `ctx install --copy` | Copies only the plugin payload to `$CODEX_HOME/plugins/ctx`. | Local development or manual plugin experiments. | Does not register marketplace, MCP, or global hooks. |
 | `ctx debug -- "task"` | Runs the scheduler locally for a fake prompt. | You want to see which AGENTS.md rules and files ContextOS would inject before using Codex. | Prints rule scores, scoring reasons, suggested files, and final `additionalContext`. |
 | `ctx report` | Shows the last Stop-hook compliance report for the current workspace. | An agent task has finished and you want the summary again. | Reads `~/.ctx/contextos/workspaces/<workspace-id>/last-report.json`. |
@@ -310,12 +315,12 @@ This warning comes from a transitive dependency in the local embedding/WASM stac
 | `ctx stats` | Shows aggregate runtime metrics for the current workspace. | You want to know whether ContextOS is active and useful over time. | Prints prompt count, report count, injected/quiet ratio, average prompt analysis time, efficiency, rule outcomes, hook events, and last suggested files for the current workspace only. |
 | `ctx benchmark -- "task"` | Compares baseline AGENTS.md ordering with ContextOS task-aware scheduling. | You want a before/after signal for lost-in-the-middle risk. | Prints parsed/actionable/filtered rule counts, relevant rules in the middle of the original file, scheduled high/mid rules, and top scored rules. |
 | `ctx sync --rules` | Syncs project rules and MCP servers through Ruler. | You want Codex, Claude Code, and Antigravity to share one project rule/MCP source of truth. | Ensures `.ruler/ruler.toml`, injects `ctx-mcp`, imports existing MCP servers from Codex and project `.mcp.json`, runs `ruler apply --agents codex,claude,antigravity`, mirrors MCP servers to Antigravity MCP configs, and verifies generated config. |
-| `ctx sync --rules --agents <list>` | Syncs only selected agents through Ruler. | You want to update one or two agents without touching the others. | Accepts comma-separated values such as `codex`, `claude`, `antigravity`, or `codex,claude`. |
+| `ctx sync --rules --agents <list>` | Syncs only selected agents through Ruler. | You want to update one or two agents without touching the others. | Accepts comma-separated values such as `codex`, `claude`, `agy`, `antigravity`, or `codex,claude,agy`; `agy` is normalized to Ruler's `antigravity`. |
 | `ctx sync --rules --dry-run` | Previews Ruler sync without writing files or running apply. | You want to inspect behavior before changing project config. | Prints the same flow with dry-run status. |
 | `ctx sync --rules --force` | Rewrites ContextOS-owned Ruler sections. | You changed the ContextOS install path or need to refresh `ctx-mcp`. | Removes and re-adds ContextOS-owned `mcp`, `mcp_servers.ctx-mcp`, and selected agent sections. |
 | `ctx sync --rules --no-import-codex-mcp` | Skips Codex MCP import. | You only want ContextOS' own `ctx-mcp` in Ruler. | Does not read `~/.codex/config.toml`. |
 | `ctx sync --skills` | Syncs agent skills through skillshare. | You want Codex, Claude Code, and Antigravity to share one skill source. | Installs or verifies `skillshare`, initializes it if needed, backs up and collects existing skills unless skipped, runs `skillshare sync`, and rebuilds ContextOS skill embeddings. |
-| `ctx sync --skills --agents <list>` | Syncs skills only for selected agents. | You want to target a subset such as `codex,claude`. | Runs `skillshare sync --agents <list>` and refreshes skill embeddings. |
+| `ctx sync --skills --agents <list>` | Syncs skills only for selected agents. | You want to target a subset such as `codex,claude` or `codex,claude,agy`. | Runs `skillshare sync --agents <list>` with `agy` normalized to `antigravity`, then refreshes skill embeddings. |
 | `ctx sync --skills --dry-run` | Previews skillshare sync. | You want to inspect behavior before changing skill directories. | Runs `skillshare sync --dry-run` and skips embedding rebuild. |
 | `ctx sync --skills --no-collect` | Skips collecting existing agent skills into skillshare. | You already manage `~/.config/skillshare/skills` and only want to push it out. | Initializes/syncs skillshare without running `skillshare backup` or `skillshare collect --all`. |
 | `ctx embeddings warm -- "task"` | Prepares local semantic embedding caches. | First install, CI smoke checks, or after changing AGENTS.md/project files/skills. | Loads/downloads `Xenova/all-MiniLM-L6-v2` and writes rule, file-path, and skill vectors to `~/.ctx/contextos/embeddings.db`. |

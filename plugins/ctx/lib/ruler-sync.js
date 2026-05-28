@@ -7,6 +7,12 @@ import { execFileSync } from "node:child_process";
 const DEFAULT_AGENTS = ["codex", "claude", "antigravity"];
 const CTX_MCP_NAME = "ctx-mcp";
 const CONTEXTOS_PROXY_MARKER = "/contextos/plugins/ctx/mcp/proxy.js";
+const AGENT_ALIASES = new Map([
+  ["agy", "antigravity"],
+  ["antigravity", "antigravity"],
+  ["codex", "codex"],
+  ["claude", "claude"]
+]);
 
 function statusLine(label, value) {
   return `[ctx] ${label.padEnd(38)} ${value}`;
@@ -21,7 +27,7 @@ function runCommand(command, args, { cwd = process.cwd(), stdio = "pipe", dryRun
 export function parseSyncRulesArgs(args = []) {
   const agentsFlag = args.indexOf("--agents");
   const agents = agentsFlag >= 0
-    ? String(args[agentsFlag + 1] || "").split(",").map((item) => item.trim()).filter(Boolean)
+    ? normalizeAgentList(String(args[agentsFlag + 1] || "").split(","))
     : DEFAULT_AGENTS;
   return {
     rules: args.includes("--rules"),
@@ -31,6 +37,19 @@ export function parseSyncRulesArgs(args = []) {
     importCodexMcp: !args.includes("--no-import-codex-mcp"),
     yes: args.includes("--yes") || args.includes("-y")
   };
+}
+
+export function normalizeAgentName(agent) {
+  const key = String(agent || "").trim().toLowerCase();
+  return AGENT_ALIASES.get(key) || key;
+}
+
+export function normalizeAgentList(agents = []) {
+  return [...new Set(agents.map(normalizeAgentName).filter(Boolean))];
+}
+
+function displayAgentName(agent) {
+  return agent === "antigravity" ? "agy" : agent;
 }
 
 function codexConfigPath() {
@@ -378,7 +397,7 @@ export function injectCtxMcp({ tomlPath, mcpServerPath, agents = DEFAULT_AGENTS,
 }
 
 export function runRulerApply({ agents = DEFAULT_AGENTS, cwd = process.cwd(), run = runCommand, dryRun = false } = {}) {
-  run("ruler", ["apply", "--agents", agents.join(",")], { cwd, stdio: "inherit", dryRun });
+  run("ruler", ["apply", "--agents", normalizeAgentList(agents).join(",")], { cwd, stdio: "inherit", dryRun });
 }
 
 function fileContains(filePath, pattern) {
@@ -481,7 +500,7 @@ export async function syncRules({
   logger("[ctx] Verifying sync...");
   const checks = options.dryRun ? options.agents.map((agent) => ({ agent, ok: true, filePath: "(dry-run)" })) : verifySync({ cwd, agents: options.agents });
   for (const check of checks) {
-    logger(`      → ctx-mcp in ${check.agent.padEnd(12)} ${check.ok ? "✓" : "not found"}${check.filePath ? ` ${check.filePath}` : ""}`);
+    logger(`      → ctx-mcp in ${displayAgentName(check.agent).padEnd(12)} ${check.ok ? "✓" : "not found"}${check.filePath ? ` ${check.filePath}` : ""}`);
   }
 
   const okCount = checks.filter((check) => check.ok).length;

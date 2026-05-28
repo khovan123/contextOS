@@ -24,6 +24,7 @@ describe("ruler sync", () => {
       force: false
     });
     expect(parseSyncRulesArgs(["--rules", "--agents", "codex,claude", "--dry-run", "--force"]).agents).toEqual(["codex", "claude"]);
+    expect(parseSyncRulesArgs(["--rules", "--agents", "codex,claude,agy"]).agents).toEqual(["codex", "claude", "antigravity"]);
   });
 
   it("builds ctx-mcp Ruler TOML for selected agents", () => {

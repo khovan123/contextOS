@@ -8,6 +8,12 @@ import { execFileSync, execSync } from "node:child_process";
 const DEFAULT_AGENTS = ["codex", "claude", "antigravity"];
 const INSTALL_SH_URL = "https://raw.githubusercontent.com/runkids/skillshare/main/install.sh";
 const INSTALL_PS_URL = "https://raw.githubusercontent.com/runkids/skillshare/main/install.ps1";
+const AGENT_ALIASES = new Map([
+  ["agy", "antigravity"],
+  ["antigravity", "antigravity"],
+  ["codex", "codex"],
+  ["claude", "claude"]
+]);
 
 function statusLine(label, value) {
   return `[ctx] ${label.padEnd(38)} ${value}`;
@@ -28,7 +34,7 @@ function runShell(command, { cwd = process.cwd(), stdio = "inherit", dryRun = fa
 export function parseSyncSkillsArgs(args = []) {
   const agentsFlag = args.indexOf("--agents");
   const agents = agentsFlag >= 0
-    ? String(args[agentsFlag + 1] || "").split(",").map((item) => item.trim()).filter(Boolean)
+    ? normalizeAgentList(String(args[agentsFlag + 1] || "").split(","))
     : DEFAULT_AGENTS;
   return {
     skills: args.includes("--skills"),
@@ -37,6 +43,15 @@ export function parseSyncSkillsArgs(args = []) {
     noCollect: args.includes("--no-collect"),
     yes: args.includes("--yes") || args.includes("-y")
   };
+}
+
+function normalizeAgentName(agent) {
+  const key = String(agent || "").trim().toLowerCase();
+  return AGENT_ALIASES.get(key) || key;
+}
+
+function normalizeAgentList(agents = []) {
+  return [...new Set(agents.map(normalizeAgentName).filter(Boolean))];
 }
 
 export function detectOS(platform = process.platform) {

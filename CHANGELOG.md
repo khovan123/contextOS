@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.6
+
+- Adds visible `ctx install` progress from 0-100 so long model/file/skill embedding warmups no longer look stalled.
+- Accepts `agy` as the Antigravity alias for install, Ruler sync, and skillshare sync while still passing Ruler/skillshare their official `antigravity` agent id.
+- Makes `ctx install --inject` explicitly override `--quiet` when both flags are present.
+
 ## 0.5.5
 
 - Discovers all skill roots containing `SKILL.md` under global/project `.gemini`, `.codex`, and `.claude` directories before `ctx sync --skills`.

@@ -22,6 +22,7 @@ describe("skillshare sync", () => {
       noCollect: false
     });
     expect(parseSyncSkillsArgs(["--skills", "--agents", "codex,claude", "--dry-run", "--no-collect"]).agents).toEqual(["codex", "claude"]);
+    expect(parseSyncSkillsArgs(["--skills", "--agents", "codex,claude,agy"]).agents).toEqual(["codex", "claude", "antigravity"]);
     expect(parseSyncSkillsArgs(["--skills", "--dry-run"]).dryRun).toBe(true);
     expect(parseSyncSkillsArgs(["--skills", "--no-collect"]).noCollect).toBe(true);
   });
