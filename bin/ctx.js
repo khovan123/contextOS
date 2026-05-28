@@ -18,6 +18,7 @@ import { installMcpTelemetryProxies } from "../plugins/ctx/lib/mcp-proxy-install
 import { benchmarkWorkspace, formatBenchmark } from "../plugins/ctx/lib/benchmark.js";
 import { copyDir, copyPackageRoot } from "../plugins/ctx/lib/package-install.js";
 import { installClaudeHooks } from "../plugins/ctx/lib/claude-hooks.js";
+import { installClaudeMcp } from "../plugins/ctx/lib/claude-mcp.js";
 import { installAntigravityHooks } from "../plugins/ctx/lib/antigravity-hooks.js";
 import { installAntigravityMcp } from "../plugins/ctx/lib/antigravity-mcp.js";
 
@@ -81,11 +82,13 @@ async function install({ copy = false, inject = true, agent = "codex" } = {}) {
   if (agent === "claude") {
     const installRoot = copyPackageRoot({ rootDir, targetRoot: agentInstallRoot("claude") });
     const hooksPath = installClaudeHooks({ installRoot, injectPromptContext: inject });
+    const mcpConfigPath = installClaudeMcp({ installRoot });
     console.log("Preparing required local embedding model...");
     const warmResult = await warmInstallEmbeddings();
     console.log("Installed ctx hooks for Claude Code.");
     console.log(`Stable install root: ${installRoot}`);
     console.log(`Installed ContextOS hooks to ${hooksPath}`);
+    console.log(`Installed ctx-mcp MCP server to ${mcpConfigPath}`);
     console.log(`Embedding model cache: ${modelCacheDir(contextOSDataDir())}`);
     console.log(`Embedding vectors cache: ${warmResult.cachePath}`);
     console.log(`File path embeddings warmed: ${warmResult.fileCount || 0}`);

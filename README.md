@@ -137,7 +137,7 @@ Restart Codex after installing.
 
 ### Claude Code
 
-`ctx install claude` copies this package into `~/.ctx/contextos/agents/claude/contextos` and merges ContextOS hooks into `~/.claude/settings.json`.
+`ctx install claude` copies this package into `~/.ctx/contextos/agents/claude/contextos`, merges ContextOS hooks into `~/.claude/settings.json`, and registers `ctx-mcp` as a user-scoped Claude Code MCP server in `~/.claude.json`.
 
 Claude Code receives prompt context through `UserPromptSubmit` using `hookSpecificOutput.additionalContext`, then ContextOS writes the same local workspace report files used by `ctx report`, `ctx evidence`, and `ctx stats`.
 
@@ -231,7 +231,7 @@ This warning comes from a transitive dependency in the local embedding/WASM stac
 | --- | --- | --- | --- |
 | `ctx install` | Installs ContextOS into Codex with prompt context injection enabled. | Normal Codex setup after installing the npm package. | Same as `ctx install codex`. |
 | `ctx install codex` | Installs ContextOS into Codex. | You use the `codex` CLI. | Copies the plugin into `$CODEX_HOME/marketplaces/contextos`, registers `ctx@contextos`, registers `ctx-mcp`, installs global hooks, downloads the embedding model, and warms caches. |
-| `ctx install claude` | Installs ContextOS into Claude Code. | You use the `claude` CLI. | Copies a stable package root to `~/.ctx/contextos/agents/claude/contextos` and merges hooks into `~/.claude/settings.json`. |
+| `ctx install claude` | Installs ContextOS into Claude Code. | You use the `claude` CLI. | Copies a stable package root to `~/.ctx/contextos/agents/claude/contextos`, merges hooks into `~/.claude/settings.json`, and registers `ctx-mcp` in `~/.claude.json`. |
 | `ctx install agy` | Installs ContextOS into Antigravity. | You use the `agy` CLI or Antigravity app. | Copies a stable package root to `~/.ctx/contextos/agents/agy/contextos`, writes hooks to `~/.gemini/config/hooks.json`, and registers `ctx-mcp` in `~/.gemini/antigravity/mcp_config.json` plus `~/.gemini/antigravity-cli/mcp_config.json`. |
 | `ctx install --agent <name>` | Installs for a named agent. | You prefer explicit scripts. | Accepts `codex`, `claude`, or `agy`. |
 | `ctx install --quiet` | Installs ContextOS in measurement-only mode. | You want reports and stats but do not want visible injected context. | Installs the same hooks, but prompt hooks return empty context. |

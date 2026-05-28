@@ -4,6 +4,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { installClaudeHooks } from "../plugins/ctx/lib/claude-hooks.js";
+import { buildClaudeMcpConfig, installClaudeMcp } from "../plugins/ctx/lib/claude-mcp.js";
 import { buildAntigravityHooksConfig, installAntigravityHooks } from "../plugins/ctx/lib/antigravity-hooks.js";
 import { buildAntigravityMcpConfig, installAntigravityMcp } from "../plugins/ctx/lib/antigravity-mcp.js";
 import { antigravityCwd, extractPromptFromAntigravityPayload } from "../plugins/ctx/lib/antigravity-adapter.js";
@@ -34,6 +35,42 @@ describe("agent hook installers", () => {
     expect(settings.hooks.UserPromptSubmit[0].hooks[0].command).toContain("/tmp/contextos/plugins/ctx/bin/on-prompt.js");
     expect(settings.hooks.Stop).toHaveLength(2);
     expect(settings.hooks.Stop[1].hooks[0].command).toContain("/tmp/contextos/plugins/ctx/bin/on-stop.js");
+  });
+
+  it("builds Claude Code user MCP config without dropping existing servers", () => {
+    const config = buildClaudeMcpConfig({
+      mcpServers: {
+        github: {
+          type: "stdio",
+          command: "npx",
+          args: ["-y", "@modelcontextprotocol/server-github"]
+        }
+      },
+      projects: {
+        "/tmp/project": {}
+      }
+    }, {
+      installRoot: "/tmp/contextos"
+    });
+
+    expect(config.projects["/tmp/project"]).toEqual({});
+    expect(config.mcpServers.github.command).toBe("npx");
+    expect(config.mcpServers["ctx-mcp"].type).toBe("stdio");
+    expect(config.mcpServers["ctx-mcp"].command).toBe("node");
+    expect(config.mcpServers["ctx-mcp"].args[0]).toBe("/tmp/contextos/plugins/ctx/mcp/server.js");
+  });
+
+  it("installs Claude Code user MCP config to .claude.json", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-claude-mcp-"));
+    const configPath = path.join(tmp, ".claude.json");
+
+    installClaudeMcp({
+      configPath,
+      installRoot: "/tmp/contextos"
+    });
+
+    const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+    expect(config.mcpServers["ctx-mcp"].args[0]).toBe("/tmp/contextos/plugins/ctx/mcp/server.js");
   });
 
   it("builds Antigravity hooks using PreInvocation and Stop adapters", () => {
