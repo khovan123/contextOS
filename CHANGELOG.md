@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.0
+
+- Adds `ctx sync --skills` for skillshare-backed skill sync across Codex, Claude Code, and Antigravity.
+- Detects existing global/project skill directories, backs them up, optionally collects them into skillshare, runs sync, and rebuilds skill embeddings.
+- Adds `~/.config/skillshare/skills` to skill discovery roots so ContextOS ranks the shared source of truth after sync.
+
 ## 0.4.1
 
 - Adds Antigravity skill discovery roots for `.gemini/skills`, `.gemini/antigravity/skills`, and `.gemini/antigravity-cli/skills`.

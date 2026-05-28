@@ -16,6 +16,7 @@ export function skillSearchRoots({ cwd = process.cwd(), home = os.homedir() } = 
     path.join(cwd, ".gemini", "skills"),
     path.join(cwd, ".gemini", "antigravity", "skills"),
     path.join(cwd, ".gemini", "antigravity-cli", "skills"),
+    path.join(home, ".config", "skillshare", "skills"),
     path.join(home, ".codex", "skills"),
     path.join(home, ".claude", "skills"),
     path.join(home, ".gemini", "skills"),

@@ -288,6 +288,10 @@ This warning comes from a transitive dependency in the local embedding/WASM stac
 | `ctx sync --rules --dry-run` | Previews Ruler sync without writing files or running apply. | You want to inspect behavior before changing project config. | Prints the same flow with dry-run status. |
 | `ctx sync --rules --force` | Rewrites ContextOS-owned Ruler sections. | You changed the ContextOS install path or need to refresh `ctx-mcp`. | Removes and re-adds ContextOS-owned `mcp`, `mcp_servers.ctx-mcp`, and selected agent sections. |
 | `ctx sync --rules --no-import-codex-mcp` | Skips Codex MCP import. | You only want ContextOS' own `ctx-mcp` in Ruler. | Does not read `~/.codex/config.toml`. |
+| `ctx sync --skills` | Syncs agent skills through skillshare. | You want Codex, Claude Code, and Antigravity to share one skill source. | Installs or verifies `skillshare`, initializes it if needed, backs up and collects existing skills unless skipped, runs `skillshare sync`, and rebuilds ContextOS skill embeddings. |
+| `ctx sync --skills --agents <list>` | Syncs skills only for selected agents. | You want to target a subset such as `codex,claude`. | Runs `skillshare sync --agents <list>` and refreshes skill embeddings. |
+| `ctx sync --skills --dry-run` | Previews skillshare sync. | You want to inspect behavior before changing skill directories. | Runs `skillshare sync --dry-run` and skips embedding rebuild. |
+| `ctx sync --skills --no-collect` | Skips collecting existing agent skills into skillshare. | You already manage `~/.config/skillshare/skills` and only want to push it out. | Initializes/syncs skillshare without running `skillshare backup` or `skillshare collect --all`. |
 | `ctx embeddings warm -- "task"` | Prepares local semantic embedding caches. | First install, CI smoke checks, or after changing AGENTS.md/project files/skills. | Loads/downloads `Xenova/all-MiniLM-L6-v2` and writes rule, file-path, and skill vectors to `~/.ctx/contextos/embeddings.db`. |
 | `ctx --version` | Prints the installed ContextOS CLI version. | You want to confirm which npm version is being executed. | Prints the version from package metadata. |
 

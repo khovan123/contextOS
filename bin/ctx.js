@@ -22,7 +22,8 @@ import { installClaudeMcp } from "../plugins/ctx/lib/claude-mcp.js";
 import { installAntigravityHooks } from "../plugins/ctx/lib/antigravity-hooks.js";
 import { installAntigravityMcp } from "../plugins/ctx/lib/antigravity-mcp.js";
 import { syncRules } from "../plugins/ctx/lib/ruler-sync.js";
-import { warmSkillEmbeddings } from "../plugins/ctx/lib/skill-discoverer.js";
+import { syncSkills } from "../plugins/ctx/lib/skillshare-sync.js";
+import { scanSkills, warmSkillEmbeddings } from "../plugins/ctx/lib/skill-discoverer.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
@@ -49,6 +50,10 @@ Usage:
   ctx sync --rules --agents codex,claude,antigravity
   ctx sync --rules --dry-run
   ctx sync --rules --no-import-codex-mcp
+  ctx sync --skills
+  ctx sync --skills --dry-run
+  ctx sync --skills --no-collect
+  ctx sync --skills --agents codex,claude,antigravity
   ctx embeddings warm -- "task"
   ctx --version
 `;
@@ -345,7 +350,20 @@ try {
     if (!task.trim()) throw new Error('Usage: ctx benchmark -- "task"');
     console.log(formatBenchmark(benchmarkWorkspace({ cwd: process.cwd(), task })));
   } else if (command === "sync") {
-    await syncRules({ cwd: process.cwd(), rootDir, args: args.slice(1) });
+    if (args.includes("--skills")) {
+      await syncSkills({
+        cwd: process.cwd(),
+        args: args.slice(1),
+        rebuildSkillEmbeddings: async ({ cwd, sourceDir }) => warmSkillEmbeddings({
+          cwd,
+          dataDir: contextOSDataDir(),
+          allowRemote: !isModelCacheReady(contextOSDataDir()),
+          skills: scanSkills({ cwd, roots: [sourceDir] })
+        })
+      });
+    } else {
+      await syncRules({ cwd: process.cwd(), rootDir, args: args.slice(1) });
+    }
   } else {
     throw new Error(`Unknown command: ${command}\n\n${usage()}`);
   }

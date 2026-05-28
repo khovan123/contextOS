@@ -6,3 +6,4 @@ coverage/
 .code-review-graph
 ~
 .sock-test**
+claudekit-engineer/
