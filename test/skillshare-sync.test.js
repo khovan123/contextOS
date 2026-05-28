@@ -77,8 +77,8 @@ describe("skillshare sync", () => {
 
     expect(calls.map(([command, args]) => `${command} ${args.join(" ")}`)).toEqual([
       "skillshare --version",
-      "skillshare backup",
       "skillshare init",
+      "skillshare backup",
       "skillshare collect --all",
       "skillshare sync --agents codex,claude"
     ]);

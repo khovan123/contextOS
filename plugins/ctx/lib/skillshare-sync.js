@@ -199,10 +199,6 @@ export async function syncSkills({
       for (const entry of existing) {
         logger(`      ${entry.path.padEnd(44)} ${entry.count} skills`);
       }
-      if (!options.noCollect) {
-        run("skillshare", ["backup"], { cwd, stdio: "inherit", dryRun: options.dryRun });
-        logger(statusLine("Backing up...", options.dryRun ? "dry-run" : "✓ backup created"));
-      }
     } else {
       logger("[ctx] No existing skills found.");
     }
@@ -211,6 +207,8 @@ export async function syncSkills({
     logger(statusLine("Initializing skillshare...", options.dryRun ? "dry-run" : "✓ initialized"));
 
     if (existing.length && !options.noCollect) {
+      run("skillshare", ["backup"], { cwd, stdio: "inherit", dryRun: options.dryRun });
+      logger(statusLine("Backing up...", options.dryRun ? "dry-run" : "✓ backup created"));
       run("skillshare", ["collect", "--all"], { cwd, stdio: "inherit", dryRun: options.dryRun });
       const collected = countSkillFiles(skillshareSourceDir({ home }));
       logger(statusLine("Collecting from all agents...", options.dryRun ? "dry-run" : `✓ ${collected} skills collected`));

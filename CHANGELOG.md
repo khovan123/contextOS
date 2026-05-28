@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.1
+
+- Fixes `ctx sync --skills` first-run ordering by running `skillshare init` before `skillshare backup`, matching skillshare's config requirement.
+
 ## 0.5.0
 
 - Adds `ctx sync --skills` for skillshare-backed skill sync across Codex, Claude Code, and Antigravity.
