@@ -21,7 +21,7 @@ Published package: [`@minhpnq1807/contextos`](https://www.npmjs.com/package/@min
 
 ## Demo
 
-![ContextOS demo GIF placeholder](docs/contextos-demo-placeholder.svg)
+![ContextOS actual terminal demo](docs/demo/contextos-demo.gif)
 
 Example hook context injected before the agent works:
 

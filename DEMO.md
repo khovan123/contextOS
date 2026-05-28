@@ -2,6 +2,18 @@
 
 Use this to record the README GIF or a short terminal clip.
 
+The current rendered demo is checked in at:
+
+```text
+docs/demo/contextos-demo.gif
+```
+
+It was generated from an actual terminal transcript using:
+
+```text
+node docs/demo/render-terminal-gif.mjs <terminal-log> docs/demo/contextos-demo.gif
+```
+
 ## Goal
 
 Show one thing clearly:

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.14
+
+- Adds an actual rendered terminal demo GIF generated from `ctx debug` plus a real `codex exec` hook run.
+- Points the README demo section at `docs/demo/contextos-demo.gif`.
+
 ## 0.5.13
 
 - Reworks the README for launch: demo-first positioning, fear hook, one-line install, before/after, and quick command table.
