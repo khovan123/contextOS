@@ -105,7 +105,7 @@ node bin/ctx.js install
 3. Downloads and caches the required local MiniLM embedding model under `~/.ctx/contextos/models`.
 4. Warms `~/.ctx/contextos/embeddings.db` for AGENTS rules and project file paths.
 5. Registers the `ctx-mcp` MCP server and merges ContextOS global hooks into `$CODEX_HOME/hooks.json`.
-6. Wraps supported local MCP servers, currently `code-review-graph` and `agentmemory`, with a transparent telemetry proxy so `tools/call` events can be measured.
+6. Wraps configured local MCP servers, except ContextOS' own `ctx-mcp`, with a transparent telemetry proxy so `tools/call` events can be measured. The original MCP command is preserved after the proxy separator and executed unchanged.
 
 Restart Codex after installing.
 
@@ -290,7 +290,7 @@ unknown  = the rule was relevant, but the diff does not prove either way
 
 For runtime-only rules, ContextOS also checks `telemetry.jsonl` for hook-visible tool names, MCP server names, and command metadata. A rule like "use code-review-graph before reading files" can be marked `followed` when telemetry contains a matching `code-review-graph` signal.
 
-`ctx install` wraps supported stdio MCP servers with a transparent proxy. The proxy forwards MCP JSON-RPC unchanged, but records `tools/call` requests such as `code-review-graph.detect_changes_tool` to workspace telemetry. This is what lets ContextOS prove runtime rules that cannot be seen in git diff.
+`ctx install` wraps configured stdio MCP servers with a transparent proxy. Codex will show `node .../proxy.js` as the launched command because that is how stdio can be intercepted, but the original MCP command is kept after `--` and executed unchanged, including RTK-managed commands. The proxy forwards MCP JSON-RPC unchanged and records `tools/call` requests such as `code-review-graph.detect_changes_tool` to workspace telemetry.
 
 Host/session setup rules such as "run shell commands as user X", `sudo su - user`, `sudo -i -u user`, and `sudo -u user` are filtered before scoring. They are not injected and do not count toward `unknown` outcomes because they describe the agent runtime environment rather than project behavior.
 

@@ -1,22 +1,22 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const DEFAULT_TARGETS = new Set(["code-review-graph"]);
+const DEFAULT_EXCLUDES = new Set(["ctx-mcp"]);
 
-export function installMcpTelemetryProxies({ codexHome, marketplaceRoot, targets = DEFAULT_TARGETS } = {}) {
+export function installMcpTelemetryProxies({ codexHome, marketplaceRoot, targets = null, excludes = DEFAULT_EXCLUDES } = {}) {
   const configPath = path.join(codexHome, "config.toml");
   if (!fs.existsSync(configPath)) return { wrapped: [], skipped: [], configPath };
 
   const original = fs.readFileSync(configPath, "utf8");
   const proxyPath = path.join(marketplaceRoot, "plugins", "ctx", "mcp", "proxy.js");
-  const result = rewriteMcpTelemetryProxies(original, { proxyPath, targets });
+  const result = rewriteMcpTelemetryProxies(original, { proxyPath, targets, excludes });
   if (result.content !== original) {
     fs.writeFileSync(configPath, result.content, "utf8");
   }
   return { ...result, configPath };
 }
 
-export function rewriteMcpTelemetryProxies(toml, { proxyPath, targets = DEFAULT_TARGETS } = {}) {
+export function rewriteMcpTelemetryProxies(toml, { proxyPath, targets = null, excludes = DEFAULT_EXCLUDES } = {}) {
   const lines = String(toml || "").split(/\r?\n/);
   const sections = findMcpServerSections(lines);
   const wrapped = [];
@@ -26,8 +26,9 @@ export function rewriteMcpTelemetryProxies(toml, { proxyPath, targets = DEFAULT_
     const body = lines.slice(section.start + 1, section.end);
     const command = findStringValue(body, "command");
     const args = findArrayValue(body, "args") || [];
+    const shouldProxy = shouldProxyServer(section.name, { targets, excludes });
 
-    if (command === "node" && args[0] === proxyPath && !targets.has(section.name)) {
+    if (command === "node" && args[0] === proxyPath && !shouldProxy) {
       const original = unwrapProxyArgs(args);
       if (original) {
         const nextBody = replaceOrInsertServerField(
@@ -41,7 +42,7 @@ export function rewriteMcpTelemetryProxies(toml, { proxyPath, targets = DEFAULT_
       }
     }
 
-    if (!targets.has(section.name)) {
+    if (!shouldProxy) {
       skipped.push({ name: section.name, reason: "not-targeted" });
       continue;
     }
@@ -52,10 +53,6 @@ export function rewriteMcpTelemetryProxies(toml, { proxyPath, targets = DEFAULT_
     }
     if (command === "node" && args[0] === proxyPath) {
       skipped.push({ name: section.name, reason: "already-wrapped" });
-      continue;
-    }
-    if (command === "rtk") {
-      skipped.push({ name: section.name, reason: "rtk-managed" });
       continue;
     }
 
@@ -69,6 +66,12 @@ export function rewriteMcpTelemetryProxies(toml, { proxyPath, targets = DEFAULT_
   }
 
   return { content: lines.join("\n"), wrapped: wrapped.reverse(), skipped: skipped.reverse() };
+}
+
+function shouldProxyServer(name, { targets, excludes }) {
+  if (targets instanceof Set) return targets.has(name);
+  if (Array.isArray(targets)) return targets.includes(name);
+  return !(excludes || DEFAULT_EXCLUDES).has(name);
 }
 
 function unwrapProxyArgs(args) {

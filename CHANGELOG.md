@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.9
+
+- Proxies all configured MCP servers except ContextOS' own `ctx-mcp` server.
+- Preserves each original MCP command after the proxy separator and forwards it unchanged, including RTK-managed commands.
+
 ## 0.1.8
 
 - Limits automatic MCP telemetry wrapping to `code-review-graph` only.
