@@ -7,6 +7,7 @@ import {
   collectAntigravityLegacySkills,
   detectExistingSkills,
   detectOS,
+  discoverSkillRoots,
   parseSyncSkillsArgs,
   skillshareSourceDir,
   syncSkills
@@ -44,6 +45,23 @@ describe("skillshare sync", () => {
     expect(existing).toEqual(expect.arrayContaining([
       { path: path.join(home, ".codex", "skills"), count: 1 },
       { path: path.join(cwd, ".gemini", "antigravity", "skills"), count: 1 }
+    ]));
+  });
+
+  it("discovers nested skill roots under gemini, codex, and claude", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-skillshare-discover-"));
+    const home = path.join(tmp, "home");
+    const cwd = path.join(tmp, "repo");
+    writeSkill(path.join(home, ".gemini", "antigravity", "skills", "payments"), "payments");
+    writeSkill(path.join(home, ".gemini", "vendor", "nested", "skills", "seo"), "seo");
+    writeSkill(path.join(home, ".codex", "skills", "reviewer"), "reviewer");
+    writeSkill(path.join(cwd, ".claude", "team", "skills", "planner"), "planner");
+
+    expect(discoverSkillRoots({ cwd, home })).toEqual(expect.arrayContaining([
+      path.join(home, ".gemini", "antigravity", "skills"),
+      path.join(home, ".gemini", "vendor", "nested", "skills"),
+      path.join(home, ".codex", "skills"),
+      path.join(cwd, ".claude", "team", "skills")
     ]));
   });
 
@@ -88,19 +106,23 @@ describe("skillshare sync", () => {
     expect(logs.join("\n")).toContain("Rebuilding skill embeddings");
   });
 
-  it("copies Antigravity legacy skills into the skillshare source before sync", async () => {
+  it("copies discovered agent skills into the skillshare source before sync", async () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-skillshare-agy-"));
     const home = path.join(tmp, "home");
     const cwd = path.join(tmp, "repo");
     fs.mkdirSync(skillshareSourceDir({ home }), { recursive: true });
     writeSkill(path.join(home, ".gemini", "antigravity", "skills", "payment-integration"), "payment-integration");
     writeSkill(path.join(home, ".gemini", "skills", "visible-to-skillshare"), "visible-to-skillshare");
+    writeSkill(path.join(home, ".codex", "extra", "skills", "codex-extra"), "codex-extra");
 
     const result = collectAntigravityLegacySkills({ cwd, home });
 
     expect(result.copied).toContain("payment-integration");
+    expect(result.copied).toContain("codex-extra");
+    expect(result.copied).toContain("visible-to-skillshare");
     expect(fs.existsSync(path.join(skillshareSourceDir({ home }), "payment-integration", "SKILL.md"))).toBe(true);
-    expect(result.copied).not.toContain("visible-to-skillshare");
+    expect(fs.existsSync(path.join(skillshareSourceDir({ home }), "codex-extra", "SKILL.md"))).toBe(true);
+    expect(fs.existsSync(path.join(skillshareSourceDir({ home }), "visible-to-skillshare", "SKILL.md"))).toBe(true);
   });
 
   it("uses custom skillshare source path from config.yaml", async () => {

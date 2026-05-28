@@ -122,7 +122,7 @@ export function detectExistingSkills({ cwd = process.cwd(), home = os.homedir() 
 }
 
 function skillRoots({ cwd, home }) {
-  return [
+  return uniquePaths([
     path.join(home, ".claude", "skills"),
     path.join(home, ".codex", "skills"),
     path.join(home, ".gemini", "antigravity", "skills"),
@@ -130,17 +130,67 @@ function skillRoots({ cwd, home }) {
     path.join(cwd, ".claude", "skills"),
     path.join(cwd, ".codex", "skills"),
     path.join(cwd, ".gemini", "antigravity", "skills"),
-    path.join(cwd, ".gemini", "antigravity-cli", "skills")
-  ];
+    path.join(cwd, ".gemini", "antigravity-cli", "skills"),
+    ...discoverSkillRoots({ cwd, home })
+  ]);
 }
 
 function antigravityLegacyRoots({ cwd, home }) {
-  return [
+  return uniquePaths([
     path.join(home, ".gemini", "antigravity", "skills"),
     path.join(home, ".gemini", "antigravity-cli", "skills"),
     path.join(cwd, ".gemini", "antigravity", "skills"),
-    path.join(cwd, ".gemini", "antigravity-cli", "skills")
-  ];
+    path.join(cwd, ".gemini", "antigravity-cli", "skills"),
+    ...discoverSkillRoots({ cwd, home })
+  ]);
+}
+
+export function discoverSkillRoots({ cwd = process.cwd(), home = os.homedir() } = {}) {
+  const roots = [];
+  for (const base of [
+    path.join(home, ".gemini"),
+    path.join(home, ".codex"),
+    path.join(home, ".claude"),
+    path.join(cwd, ".gemini"),
+    path.join(cwd, ".codex"),
+    path.join(cwd, ".claude")
+  ]) {
+    findSkillRoots(base, 0, roots);
+  }
+  return uniquePaths(roots);
+}
+
+function findSkillRoots(directory, depth, roots) {
+  if (depth > 5) return;
+  let entries = [];
+  try {
+    entries = fs.readdirSync(directory, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  if (entries.some((entry) => entry.isFile() && entry.name === "SKILL.md")) {
+    roots.push(path.dirname(directory));
+    return;
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
+    if (entry.name === ".git" || entry.name === ".tmp" || entry.name === "node_modules") continue;
+    const fullPath = path.join(directory, entry.name);
+    if (entry.isSymbolicLink() && !safeStat(fullPath)?.isDirectory()) continue;
+    findSkillRoots(fullPath, depth + 1, roots);
+  }
+}
+
+function uniquePaths(paths) {
+  const seen = new Set();
+  const result = [];
+  for (const item of paths) {
+    const normalized = path.resolve(item);
+    if (seen.has(normalized)) continue;
+    seen.add(normalized);
+    result.push(item);
+  }
+  return result;
 }
 
 function countSkillFiles(root) {

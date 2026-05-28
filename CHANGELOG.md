@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.5
+
+- Discovers all skill roots containing `SKILL.md` under global/project `.gemini`, `.codex`, and `.claude` directories before `ctx sync --skills`.
+- Skips temporary/cache directories such as `.tmp`, `.git`, and `node_modules` while discovering skill roots.
+
 ## 0.5.4
 
 - Bridges legacy Antigravity skill directories (`~/.gemini/antigravity/skills` and `~/.gemini/antigravity-cli/skills`) into the skillshare source before `ctx sync --skills`.
