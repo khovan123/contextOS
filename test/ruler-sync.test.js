@@ -8,6 +8,7 @@ import {
   injectCtxMcp,
   injectMcpServers,
   parseSyncRulesArgs,
+  pruneClaudeProjectCtxMcp,
   readCodexMcpServers,
   readProjectMcpJsonServers,
   syncAntigravityMcpFromRuler,
@@ -139,7 +140,7 @@ describe("ruler sync", () => {
     expect(content).toContain("[mcp_servers.code-review-graph]");
   });
 
-  it("reads project .mcp.json servers and skips missing absolute commands", () => {
+  it("reads project .mcp.json servers and skips missing or temporary absolute commands", () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-project-mcp-json-"));
     const rtkPath = path.join(tmp, "bin", "mcp-rtk");
     fs.mkdirSync(path.dirname(rtkPath), { recursive: true });
@@ -167,11 +168,6 @@ describe("ruler sync", () => {
     }));
 
     expect(readProjectMcpJsonServers({ cwd: tmp })).toEqual([
-      {
-        name: "mcp-rtk",
-        command: rtkPath,
-        args: ["--", "code-review-graph", "serve"]
-      },
       {
         name: "path-binary",
         command: "mcp-rtk",
@@ -220,8 +216,8 @@ describe("ruler sync", () => {
     });
 
     const content = fs.readFileSync(path.join(tmp, ".ruler", "ruler.toml"), "utf8");
-    expect(content).toContain("[mcp_servers.mcp-rtk]");
-    expect(content).toContain(rtkPath);
+    expect(content).not.toContain("[mcp_servers.mcp-rtk]");
+    expect(content).not.toContain(rtkPath);
     expect(content).not.toContain("[mcp_servers.missing-rtk]");
     expect(content).not.toContain("/home/user/.cargo/bin/mcp-rtk");
   });
@@ -281,6 +277,43 @@ describe("ruler sync", () => {
       expect(config.mcpServers["missing-rtk"]).toBeUndefined();
       expect(config.mcpServers["mcp-rtk"]).toBeUndefined();
     }
+  });
+
+  it("removes project ctx-mcp for Claude when user-scope ctx-mcp already exists", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-claude-prune-"));
+    const userConfigPath = path.join(tmp, ".claude.json");
+    const projectConfigPath = path.join(tmp, "repo", ".mcp.json");
+    fs.mkdirSync(path.dirname(projectConfigPath), { recursive: true });
+    fs.writeFileSync(userConfigPath, JSON.stringify({
+      mcpServers: {
+        "ctx-mcp": {
+          command: "node",
+          args: ["/stable/contextos/plugins/ctx/mcp/server.js"]
+        }
+      }
+    }));
+    fs.writeFileSync(projectConfigPath, JSON.stringify({
+      mcpServers: {
+        "ctx-mcp": {
+          command: "node",
+          args: ["/project/contextos/plugins/ctx/mcp/server.js"]
+        },
+        agentmemory: {
+          command: "npx",
+          args: ["-y", "@agentmemory/mcp"]
+        }
+      }
+    }));
+
+    const result = pruneClaudeProjectCtxMcp({
+      projectConfigPath,
+      userConfigPath
+    });
+    const projectConfig = JSON.parse(fs.readFileSync(projectConfigPath, "utf8"));
+
+    expect(result.removed).toBe(true);
+    expect(projectConfig.mcpServers["ctx-mcp"]).toBeUndefined();
+    expect(projectConfig.mcpServers.agentmemory.command).toBe("npx");
   });
 
   it("runs full sync with mocked Ruler commands", async () => {

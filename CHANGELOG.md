@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.18
+
+- Prevents `ctx sync --rules` from importing project MCP commands that point into temporary directories such as `/tmp/...`.
+- Prunes stale temporary MCP commands from Antigravity MCP configs during rule sync.
+- Removes the project-scope Claude `ctx-mcp` entry when a user-scope `ctx-mcp` is already installed, avoiding conflicting endpoint warnings.
+
 ## 0.5.17
 
 - Makes `ctx setup --agents ...` honor the provided agent list without prompting for the same agents again.

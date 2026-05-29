@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
@@ -54,6 +55,10 @@ function displayAgentName(agent) {
 
 function codexConfigPath() {
   return path.join(process.env.CODEX_HOME || path.join(process.env.HOME || process.cwd(), ".codex"), "config.toml");
+}
+
+function claudeUserConfigPath() {
+  return process.env.CLAUDE_CONFIG_PATH || path.join(process.env.HOME || process.cwd(), ".claude.json");
 }
 
 export function rulerTomlPath(cwd = process.cwd()) {
@@ -224,8 +229,16 @@ export function readProjectMcpJsonServers({ cwd = process.cwd(), configPath = pa
 }
 
 function isRunnableMcpCommand(command) {
+  if (isEphemeralAbsoluteCommand(command)) return false;
   if (!path.isAbsolute(command)) return true;
   return fs.existsSync(command);
+}
+
+function isEphemeralAbsoluteCommand(command) {
+  if (!path.isAbsolute(command)) return false;
+  const resolved = path.resolve(command);
+  const tmp = path.resolve(os.tmpdir());
+  return resolved === tmp || resolved.startsWith(`${tmp}${path.sep}`);
 }
 
 function mergeMcpServers(...groups) {
@@ -303,6 +316,28 @@ export function syncAntigravityMcpFromRuler({ tomlPath, configPaths = antigravit
   }
 
   return { changed: true, servers: servers.map((server) => server.name), skipped, removed: [...new Set(removed)], configPaths };
+}
+
+export function pruneClaudeProjectCtxMcp({
+  cwd = process.cwd(),
+  projectConfigPath = path.join(cwd, ".mcp.json"),
+  userConfigPath = claudeUserConfigPath(),
+  dryRun = false
+} = {}) {
+  const userConfig = readJsonFile(userConfigPath, {});
+  const userHasCtx = Boolean(userConfig?.mcpServers?.[CTX_MCP_NAME]);
+  if (!userHasCtx || !fs.existsSync(projectConfigPath)) {
+    return { changed: false, removed: false, projectConfigPath };
+  }
+
+  const projectConfig = readJsonFile(projectConfigPath, {});
+  if (!projectConfig?.mcpServers?.[CTX_MCP_NAME]) {
+    return { changed: false, removed: false, projectConfigPath };
+  }
+
+  delete projectConfig.mcpServers[CTX_MCP_NAME];
+  if (!dryRun) writeJsonFile(projectConfigPath, projectConfig);
+  return { changed: true, removed: true, projectConfigPath };
 }
 
 export function buildCtxMcpToml({ mcpServerPath, agents = DEFAULT_AGENTS } = {}) {
@@ -484,6 +519,12 @@ export async function syncRules({
 
   logger("[ctx] Running ruler apply...");
   runRulerApply({ agents: options.agents, cwd, run, dryRun: options.dryRun });
+
+  let claudePrune = { changed: false, removed: false };
+  if (options.agents.includes("claude")) {
+    claudePrune = pruneClaudeProjectCtxMcp({ cwd, dryRun: options.dryRun });
+    logger(statusLine("Deduping Claude ctx-mcp scope...", claudePrune.removed ? "✓ removed project duplicate" : "✓ no duplicate"));
+  }
 
   let antigravityMcp = { changed: false, servers: [], configPaths: [] };
   if (options.agents.includes("antigravity")) {
