@@ -9,6 +9,7 @@ const DEFAULT_MAX_SKILLS = 2000;
 const DEFAULT_EMBEDDING_CANDIDATES = 120;
 const DEFAULT_SEMANTIC_CATALOG_LIMIT = 300;
 const SCAN_CACHE_TTL_MS = 5 * 60 * 1000;
+const MAX_DESCRIPTION_CHARS = 500;
 
 const scanCache = new Map();
 
@@ -36,9 +37,13 @@ export function parseSkillFrontmatter(content = "", { fallbackName = "", skillPa
   const fallbackDescription = firstParagraph(body);
   return {
     name: fields.name || fallbackName || path.basename(path.dirname(skillPath)),
-    description: fields.description || fallbackDescription,
+    description: truncateDescription(fields.description || fallbackDescription),
     path: skillPath
   };
+}
+
+function truncateDescription(value) {
+  return String(value || "").replace(/\s+/g, " ").trim().slice(0, MAX_DESCRIPTION_CHARS);
 }
 
 function parseYamlishFields(frontmatter) {
@@ -65,7 +70,7 @@ function firstParagraph(body) {
 export function scanSkills({ cwd = process.cwd(), roots = skillSearchRoots({ cwd }), maxSkills = DEFAULT_MAX_SKILLS } = {}) {
   const cacheKey = `${path.resolve(cwd)}\0${maxSkills}\0${roots.map((root) => path.resolve(root)).join("\0")}`;
   const cached = scanCache.get(cacheKey);
-  if (cached && Date.now() - cached.createdAt < SCAN_CACHE_TTL_MS) {
+  if (cached && monotonicNow() - cached.createdAt < SCAN_CACHE_TTL_MS) {
     return cached.skills;
   }
 
@@ -73,7 +78,7 @@ export function scanSkills({ cwd = process.cwd(), roots = skillSearchRoots({ cwd
   const seen = new Set();
   for (const root of roots) {
     for (const skillPath of findSkillFiles(root)) {
-      if (skills.length >= maxSkills) return skills;
+      if (skills.length >= maxSkills) return cacheAndReturnSkills(cacheKey, skills);
       const realPath = safeRealpath(skillPath) || skillPath;
       if (seen.has(realPath)) continue;
       seen.add(realPath);
@@ -88,15 +93,23 @@ export function scanSkills({ cwd = process.cwd(), roots = skillSearchRoots({ cwd
         skillPath
       });
       if (!skill.name || !skill.description) continue;
-      skills.push({
+      skills.push(enrichSkill({
         ...skill,
         root,
         scope: isInsidePath(skillPath, cwd) ? "project" : "global",
         relativePath: path.relative(cwd, skillPath)
-      });
+      }));
     }
   }
-  scanCache.set(cacheKey, { createdAt: Date.now(), skills });
+  return cacheAndReturnSkills(cacheKey, skills);
+}
+
+function monotonicNow() {
+  return globalThis.performance?.now?.() || Date.now();
+}
+
+function cacheAndReturnSkills(cacheKey, skills) {
+  scanCache.set(cacheKey, { createdAt: monotonicNow(), skills });
   return skills;
 }
 
@@ -208,23 +221,23 @@ function scoreSkillsByKeyword({ prompt, skills }) {
   const normalizedPrompt = normalize(prompt);
   const promptTokens = new Set(normalizedPrompt.split(/\s+/).filter(Boolean));
   return skills.map((skill, index) => {
-    const name = String(skill.name || "");
-    const description = String(skill.description || "");
+    const enriched = skill.searchTokens ? skill : enrichSkill(skill);
+    const name = String(enriched.name || "");
+    const description = truncateDescription(enriched.description || "");
     const content = `${name} ${description}`;
-    const skillTokens = new Set(normalize(content).split(/\s+/).filter(Boolean));
-    const matches = [...skillTokens].filter((token) => promptTokens.has(token) && token.length > 2);
-    const normalizedName = normalize(name);
-    const nameTokens = normalizedName.split(/\s+/).filter((token) => token.length > 2);
+    const matches = enriched.searchTokens.filter((token) => promptTokens.has(token) && token.length > 2);
+    const normalizedName = enriched.normalizedName;
+    const nameTokens = enriched.nameTokens;
     const nameHit = normalizedPrompt.includes(normalizedName);
     const nameTokenHit = nameTokens.length > 1 && nameTokens.every((token) => promptTokens.has(token));
-    const scopeBonus = skill.scope === "project" ? 0.08 : 0;
+    const scopeBonus = enriched.scope === "project" ? 0.08 : 0;
     const score = Math.min(1, (matches.length ? 0.25 + matches.length * 0.08 : 0) + (nameHit ? 0.2 : 0) + (nameTokenHit ? 0.18 : 0) + scopeBonus);
     return {
       id: `skill-${index + 1}`,
       name,
       description,
-      path: skill.path,
-      scope: skill.scope,
+      path: enriched.path,
+      scope: enriched.scope,
       content,
       score,
       keywordScore: score,
@@ -235,6 +248,21 @@ function scoreSkillsByKeyword({ prompt, skills }) {
       originalOrder: index
     };
   });
+}
+
+function enrichSkill(skill) {
+  const name = String(skill.name || "");
+  const description = truncateDescription(skill.description || "");
+  const normalizedName = normalize(name);
+  const searchTokens = [...new Set(normalize(`${name} ${description}`).split(/\s+/).filter(Boolean))];
+  const nameTokens = normalizedName.split(/\s+/).filter((token) => token.length > 2);
+  return {
+    ...skill,
+    description,
+    normalizedName,
+    nameTokens,
+    searchTokens
+  };
 }
 
 function normalize(value) {

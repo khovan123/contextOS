@@ -35,6 +35,20 @@ describe("skill discoverer", () => {
     expect(skill.description).toBe("Debugger");
   });
 
+  it("truncates very long descriptions before scoring", () => {
+    const skill = parseSkillFrontmatter([
+      "---",
+      "name: huge-skill",
+      `description: ${"long ".repeat(300)}`,
+      "---"
+    ].join("\n"), {
+      skillPath: "/repo/.codex/skills/huge-skill/SKILL.md"
+    });
+
+    expect(skill.description.length).toBeLessThanOrEqual(500);
+  });
+
+
   it("scans global/project style skill directories", () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-skills-"));
     const skillDir = path.join(tmp, ".claude", "skills", "planning");
@@ -74,6 +88,22 @@ describe("skill discoverer", () => {
     expect(skills.map((skill) => skill.name)).toContain("payment-integration");
   });
 
+  it("caches scans even when the max skill limit is reached", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-skill-cache-"));
+    const root = path.join(tmp, ".codex", "skills");
+    writeSkill(path.join(root, "one"), "one");
+    writeSkill(path.join(root, "two"), "two");
+
+    const first = scanSkills({ cwd: tmp, roots: [root], maxSkills: 1 });
+    fs.rmSync(path.join(root, "one"), { recursive: true, force: true });
+    fs.rmSync(path.join(root, "two"), { recursive: true, force: true });
+    const second = scanSkills({ cwd: tmp, roots: [root], maxSkills: 1 });
+
+    expect(first).toHaveLength(1);
+    expect(second).toHaveLength(1);
+    expect(second[0].name).toBe(first[0].name);
+  });
+
   it("suggests top skills without being affected by catalog size/order", async () => {
     const skills = Array.from({ length: 50 }, (_, index) => ({
       name: `zzz-${index}`,
@@ -97,3 +127,13 @@ describe("skill discoverer", () => {
     expect(suggested[0].name).toBe("payment-integration");
   });
 });
+
+function writeSkill(directory, name) {
+  fs.mkdirSync(directory, { recursive: true });
+  fs.writeFileSync(path.join(directory, "SKILL.md"), [
+    "---",
+    `name: ${name}`,
+    `description: Use for ${name} tasks.`,
+    "---"
+  ].join("\n"));
+}

@@ -41,6 +41,8 @@ export function parseSyncSkillsArgs(args = []) {
     agents,
     dryRun: args.includes("--dry-run"),
     noCollect: args.includes("--no-collect"),
+    noEmbeddings: args.includes("--no-embeddings"),
+    verbose: args.includes("--verbose"),
     yes: args.includes("--yes") || args.includes("-y")
   };
 }
@@ -367,13 +369,18 @@ export async function syncSkills({
 
   const syncArgs = ["sync"];
   if (options.dryRun) syncArgs.push("--dry-run");
+  if (!options.verbose) syncArgs.push("--quiet");
   if (options.agents.length) syncArgs.push("--agents", options.agents.join(","));
-  run("skillshare", syncArgs, { cwd, stdio: "inherit", dryRun: false });
+  logger(statusLine("Running skillshare sync...", "started"));
+  run("skillshare", syncArgs, { cwd, stdio: options.verbose ? "inherit" : "pipe", dryRun: false });
   const syncedCount = countSkillFiles(skillshareSourceDir({ home }));
   logger(statusLine("Running skillshare sync...", options.dryRun ? "dry-run" : `✓ ${syncedCount} skills → ${options.agents.join(", ")}`));
 
-  let embeddings = { count: 0, cachePath: null, skipped: options.dryRun };
-  if (!options.dryRun) {
+  let embeddings = { count: 0, cachePath: null, skipped: options.dryRun || options.noEmbeddings };
+  if (options.noEmbeddings) {
+    logger(statusLine("Rebuilding skill embeddings...", "skipped by --no-embeddings"));
+  } else if (!options.dryRun) {
+    logger(statusLine("Rebuilding skill embeddings...", `started (${syncedCount} skills)`));
     embeddings = await rebuildSkillEmbeddings({ cwd, home, sourceDir: skillshareSourceDir({ home }) });
     logger(statusLine("Rebuilding skill embeddings...", `✓ ${embeddings.count || 0} skills indexed`));
   } else {

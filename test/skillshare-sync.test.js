@@ -25,6 +25,8 @@ describe("skillshare sync", () => {
     expect(parseSyncSkillsArgs(["--skills", "--agents", "codex,claude,agy"]).agents).toEqual(["codex", "claude", "antigravity"]);
     expect(parseSyncSkillsArgs(["--skills", "--dry-run"]).dryRun).toBe(true);
     expect(parseSyncSkillsArgs(["--skills", "--no-collect"]).noCollect).toBe(true);
+    expect(parseSyncSkillsArgs(["--skills", "--no-embeddings"]).noEmbeddings).toBe(true);
+    expect(parseSyncSkillsArgs(["--skills", "--verbose"]).verbose).toBe(true);
   });
 
   it("detects host OS names", () => {
@@ -100,11 +102,12 @@ describe("skillshare sync", () => {
       "skillshare init",
       "skillshare backup",
       "skillshare collect --all",
-      "skillshare sync --agents codex,claude"
+      "skillshare sync --quiet --agents codex,claude"
     ]);
     expect(result.syncedCount).toBe(1);
     expect(result.embeddings.count).toBe(1);
-    expect(logs.join("\n")).toContain("Rebuilding skill embeddings");
+    expect(logs.join("\n")).toContain("Rebuilding skill embeddings...         started (1 skills)");
+    expect(logs.join("\n")).toContain("Rebuilding skill embeddings...         ✓ 1 skills indexed");
   });
 
   it("copies discovered agent skills into the skillshare source before sync", async () => {
@@ -168,7 +171,7 @@ describe("skillshare sync", () => {
 
     expect(calls.map(([command, args]) => `${command} ${args.join(" ")}`)).toEqual([
       "skillshare --version",
-      "skillshare sync --agents codex,claude"
+      "skillshare sync --quiet --agents codex,claude"
     ]);
     expect(result.syncedCount).toBe(1);
     expect(fs.existsSync(path.join(skillshareSourceDir({ home }), "payment-integration", "SKILL.md"))).toBe(true);
@@ -200,9 +203,40 @@ describe("skillshare sync", () => {
     expect(calls.map(([, args]) => args.join(" "))).toEqual([
       "--version",
       "init",
-      "sync --dry-run --agents codex,claude,antigravity"
+      "sync --dry-run --quiet --agents codex,claude,antigravity"
     ]);
     expect(result.embeddings.skipped).toBe(true);
+  });
+
+  it("can skip embedding rebuild after skill sync", async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-skillshare-no-embeddings-"));
+    const home = path.join(tmp, "home");
+    const cwd = path.join(tmp, "repo");
+    fs.mkdirSync(skillshareSourceDir({ home }), { recursive: true });
+    writeSkill(path.join(skillshareSourceDir({ home }), "planning"), "planning");
+    const calls = [];
+    const logs = [];
+
+    const run = (command, args) => {
+      calls.push([command, args]);
+      if (command === "skillshare" && args[0] === "--version") return { stdout: "skillshare 0.19.24\n" };
+      return { stdout: "" };
+    };
+
+    const result = await syncSkills({
+      cwd,
+      home,
+      args: ["--skills", "--no-embeddings"],
+      run,
+      logger: (line) => logs.push(line),
+      rebuildSkillEmbeddings: async () => {
+        throw new Error("should not rebuild with --no-embeddings");
+      }
+    });
+
+    expect(calls.map(([, args]) => args.join(" "))).toContain("sync --quiet --agents codex,claude,antigravity");
+    expect(result.embeddings.skipped).toBe(true);
+    expect(logs.join("\n")).toContain("skipped by --no-embeddings");
   });
 });
 

@@ -252,6 +252,8 @@ Useful variants:
 ```bash
 ctx sync --skills --dry-run
 ctx sync --skills --no-collect
+ctx sync --skills --no-embeddings
+ctx sync --skills --verbose
 ctx sync --skills --agents codex,claude
 ctx sync --skills --agents codex,claude,agy
 ```
@@ -432,6 +434,8 @@ This warning comes from a transitive dependency in the local embedding/WASM stac
 | `ctx sync --skills --agents <list>` | Syncs skills only for selected agents. | You want to target a subset such as `codex,claude` or `codex,claude,agy`. | Runs `skillshare sync --agents <list>` with `agy` normalized to `antigravity`, then refreshes skill embeddings. |
 | `ctx sync --skills --dry-run` | Previews skillshare sync. | You want to inspect behavior before changing skill directories. | Runs `skillshare sync --dry-run` and skips embedding rebuild. |
 | `ctx sync --skills --no-collect` | Skips collecting existing agent skills into skillshare. | You already manage `~/.config/skillshare/skills` and only want to push it out. | Initializes/syncs skillshare without running `skillshare backup` or `skillshare collect --all`. |
+| `ctx sync --skills --no-embeddings` | Skips ContextOS skill embedding rebuild after skillshare sync. | You have a very large skill catalog and want sync to finish quickly. | Runs skillshare sync, then leaves embeddings to a later `ctx embeddings warm -- "task"` run. |
+| `ctx sync --skills --verbose` | Shows native skillshare token budget warnings during sync. | You are diagnosing skillshare path overlap or always-loaded context size. | Omits ContextOS' default `skillshare sync --quiet` behavior. |
 | `ctx sync --workflows` | Syncs and indexes agent workflow markdown files for prompt-time workflow suggestions. | You use `.claude/workflows/`, `.codex/workflows/`, or Antigravity workflow folders and want every agent to see the same deduped workflow set. | Scans project/global workflow folders, dedupes by workflow name, copies unique workflows to selected global agent roots, warms workflow embeddings, and makes `ctx debug`/prompt hooks show relevant workflow hints. |
 | `ctx sync --workflows --agents <list>` | Syncs workflows only for selected agents. | You want a subset such as `codex,claude` or `codex,claude,agy`. | Accepts comma-separated `codex`, `claude`, `agy`, or `antigravity`; `agy` writes the Gemini/Antigravity workflow roots. |
 | `ctx sync --workflows --dry-run` | Previews workflow sync without writing files. | You want to inspect source workflows and target roots first. | Prints planned sync/index output and skips copying target files. |

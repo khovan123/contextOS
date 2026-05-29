@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.16
+
+- Prints a "Rebuilding skill embeddings... started" status before indexing large skillshare catalogs so `ctx sync --skills` no longer looks stuck after skillshare finishes.
+- Adds `ctx sync --skills --no-embeddings` for fast skill sync when users want to warm embeddings later.
+- Caches oversized skill catalog scans correctly and truncates skill descriptions before scoring, keeping prompt-time skill discovery fast with large skillshare catalogs.
+- Runs native `skillshare sync` in quiet mode by default to avoid flooding ContextOS output with budget warnings; use `--verbose` to show them.
+
 ## 0.5.15
 
 - Replaces the misleading `ctx install --agent codex|claude|agy` usage text with separate commands.

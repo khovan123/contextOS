@@ -69,6 +69,8 @@ Usage:
   ctx sync --workflows --dry-run
   ctx sync --skills --dry-run
   ctx sync --skills --no-collect
+  ctx sync --skills --no-embeddings
+  ctx sync --skills --verbose
   ctx sync --skills --agents codex,claude,antigravity
   ctx embeddings warm -- "task"
   ctx ruler -- <ruler args>
