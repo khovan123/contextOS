@@ -20,3 +20,8 @@ claudekit-engineer/
 /CLAUDE.md
 /CLAUDE.md.bak
 # END Ruler Generated Files
+
+# ContextOS install artefacts
+.codex/marketplaces/contextos/
+.claude/settings.json
+.gemini/

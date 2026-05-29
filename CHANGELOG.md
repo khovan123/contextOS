@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.24
+
+- **Interactive agent selection:** Replaces the comma-separated text input in `ctx setup` with an interactive multi-select prompt — use ↑/↓ to navigate, Space to toggle agents on/off, and Enter to confirm.
+
 ## 0.5.23
 
 - **Fix Windows install paths:** Replaces all `process.env.HOME || process.cwd()` fallbacks with `os.homedir()` across `ctx.js`, `claude-hooks.js`, `antigravity-hooks.js`, `claude-mcp.js`, `antigravity-mcp.js`, and `ruler-sync.js`. On Windows, `HOME` is not set, causing `.codex/`, `.claude/`, and `.gemini/` directories (with full `node_modules` and source code) to be created inside the project tree instead of the user's home directory.

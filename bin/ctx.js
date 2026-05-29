@@ -30,6 +30,7 @@ import { syncSkills } from "../plugins/ctx/lib/skillshare-sync.js";
 import { scanSkills, warmSkillEmbeddings } from "../plugins/ctx/lib/skill-discoverer.js";
 import { parsePassthroughArgs, runPassthrough } from "../plugins/ctx/lib/passthrough.js";
 import { parseAgentList, parseSetupArgs, setupSummaryLines } from "../plugins/ctx/lib/setup-wizard.js";
+import { multiSelect } from "../plugins/ctx/lib/multi-select.js";
 import { syncWorkflows, warmWorkflowEmbeddings } from "../plugins/ctx/lib/workflow-discoverer.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -493,23 +494,40 @@ async function setup({ args = [], cwd = process.cwd() } = {}) {
 
   if (interactive) {
     const rl = readline.createInterface({ input, output });
-    try {
-      const proceed = await askSetupYesNo(rl, "Install to this directory?", true);
-      if (!proceed) {
-        console.log("Setup cancelled.");
-        return;
-      }
-      if (!options.agentsProvided) {
-        const agents = await askSetupQuestion(rl, "Install for agents? comma-separated", options.agents.join(","));
-        options.agents = parseAgentList(agents);
-      } else {
-        console.log(`◇ Install for agents:\n│  ${options.agents.join(", ")}`);
-      }
-      options.inject = await askSetupYesNo(rl, "Enable prompt context injection?", options.inject);
-      options.syncRules = await askSetupYesNo(rl, "Sync project rules and MCP servers through Ruler?", options.syncRules);
-      options.syncSkills = await askSetupYesNo(rl, "Sync skills through skillshare?", options.syncSkills);
-    } finally {
+    const proceed = await askSetupYesNo(rl, "Install to this directory?", true);
+    if (!proceed) {
       rl.close();
+      console.log("Setup cancelled.");
+      return;
+    }
+    if (!options.agentsProvided) {
+      rl.close();
+      const selected = await multiSelect({
+        message: "Select agents to install:",
+        options: [
+          { label: "Codex",              value: "codex",  selected: options.agents.includes("codex") },
+          { label: "Claude",             value: "claude", selected: options.agents.includes("claude") },
+          { label: "Antigravity (agy)",  value: "agy",    selected: options.agents.includes("agy") }
+        ]
+      });
+      options.agents = selected;
+      const rl2 = readline.createInterface({ input, output });
+      try {
+        options.inject = await askSetupYesNo(rl2, "Enable prompt context injection?", options.inject);
+        options.syncRules = await askSetupYesNo(rl2, "Sync project rules and MCP servers through Ruler?", options.syncRules);
+        options.syncSkills = await askSetupYesNo(rl2, "Sync skills through skillshare?", options.syncSkills);
+      } finally {
+        rl2.close();
+      }
+    } else {
+      try {
+        console.log(`◇ Install for agents:\n│  ${options.agents.join(", ")}`);
+        options.inject = await askSetupYesNo(rl, "Enable prompt context injection?", options.inject);
+        options.syncRules = await askSetupYesNo(rl, "Sync project rules and MCP servers through Ruler?", options.syncRules);
+        options.syncSkills = await askSetupYesNo(rl, "Sync skills through skillshare?", options.syncSkills);
+      } finally {
+        rl.close();
+      }
     }
   }
 
