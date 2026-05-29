@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.15
+
+- Replaces the misleading `ctx install --agent codex|claude|agy` usage text with separate commands.
+- Adds a clear CLI error when an install agent value contains shell-choice separators such as `|` or `/`.
+
 ## 0.5.14
 
 - Adds an actual rendered terminal demo GIF generated from `ctx debug` plus a real `codex exec` hook run.

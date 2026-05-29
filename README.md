@@ -440,6 +440,8 @@ This warning comes from a transitive dependency in the local embedding/WASM stac
 | `ctx skillshare -- <args>` | Forwards args to the installed `skillshare` CLI. | You need native skillshare commands such as `status`, `target list`, `doctor`, `push`, or `pull`. | Preserves skillshare stdout/stderr and exit status. |
 | `ctx --version` | Prints the installed ContextOS CLI version. | You want to confirm which npm version is being executed. | Prints the version from package metadata. |
 
+Do not run `ctx install --agent codex|claude|agy` in a shell. The `|` character is a pipe, so the shell will run `ctx install --agent codex`, pipe its output into `claude`, then pipe that into `agy`. Pick one command per agent instead.
+
 ## Runtime Files
 
 ContextOS writes shared caches to:

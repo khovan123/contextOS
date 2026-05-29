@@ -42,7 +42,9 @@ Usage:
   ctx install codex
   ctx install claude
   ctx install agy
-  ctx install --agent codex|claude|agy
+  ctx install --agent codex
+  ctx install --agent claude
+  ctx install --agent agy
   ctx install --quiet
   ctx install --inject
   ctx install --copy
@@ -77,6 +79,17 @@ Usage:
 
 function normalizeInstallAgent(agent) {
   const normalized = String(agent || "").trim().toLowerCase();
+  if (/[|/]/.test(normalized)) {
+    throw new Error([
+      `Invalid agent '${agent}'.`,
+      "Install one agent per command:",
+      "  ctx install --agent codex",
+      "  ctx install --agent claude",
+      "  ctx install --agent agy",
+      "",
+      "Do not run `ctx install --agent codex|claude|agy`: `|` is a shell pipe."
+    ].join("\n"));
+  }
   if (normalized === "antigravity") return "agy";
   return normalized;
 }
