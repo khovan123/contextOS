@@ -299,16 +299,21 @@ async function warmInstallEmbeddings() {
     dataDir,
     allowRemote: !modelReady
   });
-  const skillResult = await warmSkillEmbeddings({
-    cwd: process.cwd(),
-    dataDir,
-    allowRemote: !modelReady
-  });
-  const workflowResult = await warmWorkflowEmbeddings({
-    cwd: process.cwd(),
-    dataDir,
-    allowRemote: !modelReady
-  });
+  const warmDiscovery = process.env.CONTEXTOS_INSTALL_WARM_DISCOVERY === "1";
+  const skillResult = warmDiscovery
+    ? await warmSkillEmbeddings({
+      cwd: process.cwd(),
+      dataDir,
+      allowRemote: !modelReady
+    })
+    : { count: 0 };
+  const workflowResult = warmDiscovery
+    ? await warmWorkflowEmbeddings({
+      cwd: process.cwd(),
+      dataDir,
+      allowRemote: !modelReady
+    })
+    : { count: 0 };
   return { ...result, modelAlreadyCached: modelReady, fileCount: fileResult.count, skillCount: skillResult.count, workflowCount: workflowResult.count };
 }
 

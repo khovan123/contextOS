@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.20
+
+- Refreshes stale `ctx-mcp` Ruler entries that point at temporary paths such as `/tmp/contextos/...`.
+- Keeps `ctx install` fast by skipping large skill/workflow discovery embedding warmup unless `CONTEXTOS_INSTALL_WARM_DISCOVERY=1` is set.
+
 ## 0.5.19
 
 - Makes `ctx-mcp` startup non-mutating: the MCP server now verifies the local embedding model without warming or rewriting `embeddings.db` during agent initialization.

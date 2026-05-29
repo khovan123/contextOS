@@ -53,15 +53,16 @@ describe("ruler sync", () => {
       'args = ["-y", "github-mcp"]',
       ""
     ].join("\n"));
+    const stableServerPath = path.join(process.cwd(), "plugins", "ctx", "mcp", "server.js");
 
     const first = injectCtxMcp({
       tomlPath,
-      mcpServerPath: "/tmp/contextos/plugins/ctx/mcp/server.js",
+      mcpServerPath: stableServerPath,
       agents: ["codex"]
     });
     const second = injectCtxMcp({
       tomlPath,
-      mcpServerPath: "/tmp/contextos/plugins/ctx/mcp/server.js",
+      mcpServerPath: stableServerPath,
       agents: ["codex"]
     });
     const content = fs.readFileSync(tomlPath, "utf8");
@@ -92,6 +93,29 @@ describe("ruler sync", () => {
     expect(content).not.toContain("/old/server.js");
     expect(content).toContain("/new/server.js");
     expect(content.match(/\[mcp_servers\.ctx-mcp\]/g)).toHaveLength(1);
+  });
+
+  it("refreshes ctx-mcp when ruler.toml points at a temporary path", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-ruler-stale-"));
+    const tomlPath = path.join(tmp, ".ruler", "ruler.toml");
+    fs.mkdirSync(path.dirname(tomlPath), { recursive: true });
+    fs.writeFileSync(tomlPath, [
+      "[mcp_servers.ctx-mcp]",
+      'command = "node"',
+      'args = ["/tmp/contextos/plugins/ctx/mcp/server.js"]',
+      ""
+    ].join("\n"));
+
+    const result = injectCtxMcp({
+      tomlPath,
+      mcpServerPath: "/stable/contextos/plugins/ctx/mcp/server.js",
+      agents: ["antigravity"]
+    });
+    const content = fs.readFileSync(tomlPath, "utf8");
+
+    expect(result.changed).toBe(true);
+    expect(content).toContain("/stable/contextos/plugins/ctx/mcp/server.js");
+    expect(content).not.toContain("/tmp/contextos/plugins/ctx/mcp/server.js");
   });
 
   it("reads Codex MCP servers and unwraps ContextOS telemetry proxy commands", () => {

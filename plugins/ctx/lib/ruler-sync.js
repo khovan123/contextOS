@@ -268,6 +268,10 @@ function readRulerMcpServers({ tomlPath } = {}) {
   return servers;
 }
 
+function readRulerMcpServer({ tomlPath, name } = {}) {
+  return readRulerMcpServers({ tomlPath }).find((server) => server.name === name) || null;
+}
+
 function antigravityMcpConfigPaths() {
   const home = process.env.HOME || process.cwd();
   return [
@@ -415,7 +419,12 @@ export function injectCtxMcp({ tomlPath, mcpServerPath, agents = DEFAULT_AGENTS,
 
   let content = fs.readFileSync(tomlPath, "utf8");
   const sectionExists = hasTomlSection(content, `mcp_servers.${CTX_MCP_NAME}`);
-  if (sectionExists && !force) return { changed: false, existed: true };
+  if (sectionExists && !force) {
+    const existingServer = readRulerMcpServer({ tomlPath, name: CTX_MCP_NAME });
+    const existingPath = existingServer?.command === "node" ? existingServer.args?.[0] : existingServer?.command;
+    if (existingPath && isRunnableMcpCommand(existingPath)) return { changed: false, existed: true };
+    force = true;
+  }
 
   if (force) {
     content = removeTomlSection(content, "mcp");
