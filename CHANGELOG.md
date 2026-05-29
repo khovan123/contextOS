@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.17
+
+- Makes `ctx setup --agents ...` honor the provided agent list without prompting for the same agents again.
+
 ## 0.5.16
 
 - Prints a "Rebuilding skill embeddings... started" status before indexing large skillshare catalogs so `ctx sync --skills` no longer looks stuck after skillshare finishes.

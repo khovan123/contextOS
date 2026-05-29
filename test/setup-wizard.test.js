@@ -11,6 +11,7 @@ describe("setup wizard", () => {
   it("parses setup defaults", () => {
     expect(parseSetupArgs([])).toEqual({
       agents: ["codex", "claude", "agy"],
+      agentsProvided: false,
       yes: false,
       quiet: false,
       inject: true,
@@ -30,6 +31,7 @@ describe("setup wizard", () => {
       "codex,antigravity,agy"
     ])).toEqual({
       agents: ["codex", "agy"],
+      agentsProvided: true,
       yes: true,
       quiet: true,
       inject: false,

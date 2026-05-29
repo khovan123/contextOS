@@ -2,12 +2,14 @@ const DEFAULT_AGENTS = ["codex", "claude", "agy"];
 
 export function parseSetupArgs(args = []) {
   const agentsFlag = args.indexOf("--agents");
+  const agentsProvided = agentsFlag >= 0;
   const agents = agentsFlag >= 0
     ? parseAgentList(args[agentsFlag + 1])
     : DEFAULT_AGENTS;
 
   return {
     agents,
+    agentsProvided,
     yes: args.includes("--yes") || args.includes("-y"),
     quiet: args.includes("--quiet"),
     inject: !args.includes("--quiet") && !args.includes("--no-inject"),

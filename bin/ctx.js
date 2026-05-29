@@ -482,8 +482,12 @@ async function setup({ args = [], cwd = process.cwd() } = {}) {
         console.log("Setup cancelled.");
         return;
       }
-      const agents = await askSetupQuestion(rl, "Install for agents? comma-separated", options.agents.join(","));
-      options.agents = parseAgentList(agents);
+      if (!options.agentsProvided) {
+        const agents = await askSetupQuestion(rl, "Install for agents? comma-separated", options.agents.join(","));
+        options.agents = parseAgentList(agents);
+      } else {
+        console.log(`◇ Install for agents:\n│  ${options.agents.join(", ")}`);
+      }
       options.inject = await askSetupYesNo(rl, "Enable prompt context injection?", options.inject);
       options.syncRules = await askSetupYesNo(rl, "Sync project rules and MCP servers through Ruler?", options.syncRules);
       options.syncSkills = await askSetupYesNo(rl, "Sync skills through skillshare?", options.syncSkills);
