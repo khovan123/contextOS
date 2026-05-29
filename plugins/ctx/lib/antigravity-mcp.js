@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 function readJsonFile(filePath, fallback) {
@@ -12,7 +13,7 @@ export function antigravityMcpConfigPaths() {
   if (process.env.ANTIGRAVITY_MCP_CONFIG_PATH) {
     return [process.env.ANTIGRAVITY_MCP_CONFIG_PATH];
   }
-  const home = process.env.HOME || process.cwd();
+  const home = os.homedir();
   return [
     path.join(home, ".gemini", "antigravity", "mcp_config.json"),
     path.join(home, ".gemini", "antigravity-cli", "mcp_config.json"),

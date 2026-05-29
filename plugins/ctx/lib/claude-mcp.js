@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 function readJsonFile(filePath, fallback) {
@@ -9,7 +10,7 @@ function readJsonFile(filePath, fallback) {
 }
 
 export function claudeConfigPath() {
-  return process.env.CLAUDE_CONFIG_PATH || path.join(process.env.HOME || process.cwd(), ".claude.json");
+  return process.env.CLAUDE_CONFIG_PATH || path.join(os.homedir(), ".claude.json");
 }
 
 export function buildClaudeMcpConfig(existingConfig, { installRoot } = {}) {

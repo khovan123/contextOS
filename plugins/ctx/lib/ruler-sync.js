@@ -5,9 +5,12 @@ import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import { execFileSync } from "node:child_process";
 
+import { defaultDataRoot } from "./workspace-data.js";
+
 const DEFAULT_AGENTS = ["codex", "claude", "antigravity"];
 const CTX_MCP_NAME = "ctx-mcp";
 const CONTEXTOS_PROXY_MARKER = "/contextos/plugins/ctx/mcp/proxy.js";
+const MCP_SERVER_RELATIVE = path.join("plugins", "ctx", "mcp", "server.js");
 const AGENT_ALIASES = new Map([
   ["agy", "antigravity"],
   ["antigravity", "antigravity"],
@@ -54,11 +57,11 @@ function displayAgentName(agent) {
 }
 
 function codexConfigPath() {
-  return path.join(process.env.CODEX_HOME || path.join(process.env.HOME || process.cwd(), ".codex"), "config.toml");
+  return path.join(process.env.CODEX_HOME || path.join(os.homedir(), ".codex"), "config.toml");
 }
 
 function claudeUserConfigPath() {
-  return process.env.CLAUDE_CONFIG_PATH || path.join(process.env.HOME || process.cwd(), ".claude.json");
+  return process.env.CLAUDE_CONFIG_PATH || path.join(os.homedir(), ".claude.json");
 }
 
 export function rulerTomlPath(cwd = process.cwd()) {
@@ -273,7 +276,7 @@ function readRulerMcpServer({ tomlPath, name } = {}) {
 }
 
 function antigravityMcpConfigPaths() {
-  const home = process.env.HOME || process.cwd();
+  const home = os.homedir();
   return [
     path.join(home, ".gemini", "antigravity", "mcp_config.json"),
     path.join(home, ".gemini", "antigravity-cli", "mcp_config.json"),
@@ -456,7 +459,7 @@ export function verifySync({ cwd = process.cwd(), agents = DEFAULT_AGENTS } = {}
   const checks = [];
   const definitions = {
     codex: [path.join(cwd, ".codex", "config.toml")],
-    claude: [path.join(cwd, ".mcp.json"), path.join(cwd, ".claude", "settings.json"), path.join(process.env.HOME || "", ".claude.json")],
+    claude: [path.join(cwd, ".mcp.json"), path.join(cwd, ".claude", "settings.json"), path.join(os.homedir(), ".claude.json")],
     antigravity: [
       path.join(cwd, ".gemini", "settings.json"),
       path.join(cwd, ".gemini", "mcp.json"),
@@ -471,6 +474,21 @@ export function verifySync({ cwd = process.cwd(), agents = DEFAULT_AGENTS } = {}
     checks.push({ agent, ok: Boolean(found), filePath: found || files[0] || "" });
   }
   return checks;
+}
+
+function resolveStableMcpServerPath(rootDir) {
+  const codexRoot = path.join(process.env.CODEX_HOME || path.join(os.homedir(), ".codex"), "marketplaces", "contextos");
+  const dataRoot = defaultDataRoot();
+  const candidates = [
+    path.join(codexRoot, MCP_SERVER_RELATIVE),
+    path.join(dataRoot, "agents", "claude", "contextos", MCP_SERVER_RELATIVE),
+    path.join(dataRoot, "agents", "agy", "contextos", MCP_SERVER_RELATIVE),
+    path.join(rootDir, MCP_SERVER_RELATIVE)
+  ];
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return path.join(rootDir, MCP_SERVER_RELATIVE);
 }
 
 export async function syncRules({
@@ -495,7 +513,7 @@ export async function syncRules({
   const init = ensureRulerInit({ cwd, run, dryRun: options.dryRun });
   logger(statusLine("Checking .ruler/ruler.toml...", init.created ? "✓ created" : "✓ found"));
 
-  const mcpServerPath = path.join(rootDir, "plugins", "ctx", "mcp", "server.js");
+  const mcpServerPath = resolveStableMcpServerPath(rootDir);
   const injected = injectCtxMcp({
     tomlPath: init.tomlPath,
     mcpServerPath,

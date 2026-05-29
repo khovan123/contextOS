@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 function shellQuote(value) {
@@ -19,7 +20,7 @@ function commandFor(installRoot, scriptName, { injectPromptContext = true } = {}
 
 export function antigravityHooksPath() {
   return process.env.ANTIGRAVITY_HOOKS_PATH
-    || path.join(process.env.HOME || process.cwd(), ".gemini", "config", "hooks.json");
+    || path.join(os.homedir(), ".gemini", "config", "hooks.json");
 }
 
 export function buildAntigravityHooksConfig(existingConfig, { installRoot, injectPromptContext = true } = {}) {

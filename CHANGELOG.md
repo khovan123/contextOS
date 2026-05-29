@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.23
+
+- **Fix Windows install paths:** Replaces all `process.env.HOME || process.cwd()` fallbacks with `os.homedir()` across `ctx.js`, `claude-hooks.js`, `antigravity-hooks.js`, `claude-mcp.js`, `antigravity-mcp.js`, and `ruler-sync.js`. On Windows, `HOME` is not set, causing `.codex/`, `.claude/`, and `.gemini/` directories (with full `node_modules` and source code) to be created inside the project tree instead of the user's home directory.
+- **Fix ephemeral MCP server path:** `ctx sync --rules` now resolves the MCP server path from stable install roots (`~/.codex/marketplaces/contextos/`, `~/.ctx/contextos/agents/`) instead of `rootDir`, which may point to a temporary npm extraction directory (e.g. `/tmp/contextos/`) that disappears after cleanup.
+
 ## 0.5.22
 
 - Adds `.gitignore` management to `ctx install`: writes inner `.gitignore` (excludes `node_modules/`, `bin/`, `lib/`, `mcp/`) inside installed agent directories and ensures the project root `.gitignore` excludes `.codex/marketplaces/contextos/`, `.claude/settings.json`, and `.gemini/`.

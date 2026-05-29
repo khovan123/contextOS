@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 import { buildGlobalHooksConfig } from "./global-hooks.js";
@@ -11,7 +12,7 @@ function readJsonFile(filePath, fallback) {
 }
 
 export function claudeHome() {
-  return process.env.CLAUDE_HOME || path.join(process.env.HOME || process.cwd(), ".claude");
+  return process.env.CLAUDE_HOME || path.join(os.homedir(), ".claude");
 }
 
 export function installClaudeHooks({ claudeHome: home = claudeHome(), installRoot, injectPromptContext = true } = {}) {
