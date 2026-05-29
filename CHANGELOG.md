@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.22
+
+- Adds `.gitignore` management to `ctx install`: writes inner `.gitignore` (excludes `node_modules/`, `bin/`, `lib/`, `mcp/`) inside installed agent directories and ensures the project root `.gitignore` excludes `.codex/marketplaces/contextos/`, `.claude/settings.json`, and `.gemini/`.
+- Splits the `npm install -g && ctx setup` one-liner into two separate commands in README and LAUNCH docs to avoid shell PATH resolution failures.
+
 ## 0.5.21
 
 - Makes prompt hooks fall back to direct scoring when the `ctx-mcp` bridge socket is missing, stale, or unavailable, avoiding empty `hook context` output.

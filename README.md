@@ -49,10 +49,11 @@ Rule outcomes: 8 followed, 0 ignored, 0 unknown
 Runtime telemetry: code-review-graph, code-review-graph.query_graph_tool
 ```
 
-## Install In One Line
+## Quick Install
 
 ```bash
-npm install -g @minhpnq1807/contextos && ctx setup
+npm install -g @minhpnq1807/contextos
+ctx setup
 ```
 
 No postinstall surprise: `npm install` only installs the CLI. Setup runs only when you call `ctx setup`.

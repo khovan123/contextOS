@@ -37,7 +37,8 @@ It supports Codex, Claude Code, and Antigravity. It is local-first and uses loca
 
 Install:
 
-npm install -g @minhpnq1807/contextos && ctx setup
+npm install -g @minhpnq1807/contextos
+ctx setup
 
 Repo: https://github.com/khovan123/contextOS
 ```
@@ -51,7 +52,8 @@ Codex can read AGENTS.md and still ignore the rule that matters.
 
 ContextOS ranks rules per prompt, injects the important ones before work starts, then reports followed / ignored / unknown after the task.
 
-npm install -g @minhpnq1807/contextos && ctx setup
+npm install -g @minhpnq1807/contextos
+ctx setup
 
 https://github.com/khovan123/contextOS
 ```

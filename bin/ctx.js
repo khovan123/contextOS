@@ -24,6 +24,7 @@ import { installClaudeMcp } from "../plugins/ctx/lib/claude-mcp.js";
 import { installAntigravityHooks } from "../plugins/ctx/lib/antigravity-hooks.js";
 import { installAntigravityMcp } from "../plugins/ctx/lib/antigravity-mcp.js";
 import { syncRules } from "../plugins/ctx/lib/ruler-sync.js";
+import { writeInnerGitignore, ensureRootGitignore } from "../plugins/ctx/lib/gitignore.js";
 import { syncSkills } from "../plugins/ctx/lib/skillshare-sync.js";
 import { scanSkills, warmSkillEmbeddings } from "../plugins/ctx/lib/skill-discoverer.js";
 import { parsePassthroughArgs, runPassthrough } from "../plugins/ctx/lib/passthrough.js";
@@ -194,6 +195,9 @@ async function install({ copy = false, inject = true, agent = "codex" } = {}) {
       const hooksPath = installClaudeHooks({ installRoot, injectPromptContext: inject });
       progress.step(40, "installing mcp");
       const mcpConfigPath = installClaudeMcp({ installRoot });
+      progress.step(50, "configuring gitignore");
+      writeInnerGitignore(installRoot);
+      ensureRootGitignore(process.cwd());
       progress.step(55, "warming embeddings");
       const warmResult = await warmInstallEmbeddings();
       progress.done("claude installed");
@@ -218,6 +222,9 @@ async function install({ copy = false, inject = true, agent = "codex" } = {}) {
       const hooksPath = installAntigravityHooks({ installRoot, injectPromptContext: inject });
       progress.step(40, "installing mcp");
       const mcpConfigPaths = installAntigravityMcp({ installRoot });
+      progress.step(50, "configuring gitignore");
+      writeInnerGitignore(installRoot);
+      ensureRootGitignore(process.cwd());
       progress.step(55, "warming embeddings");
       const warmResult = await warmInstallEmbeddings();
       progress.done("agy installed");
@@ -255,6 +262,10 @@ async function install({ copy = false, inject = true, agent = "codex" } = {}) {
     const proxyResult = installMcpTelemetryProxies({ codexHome: codexHome(), marketplaceRoot });
     progress.step(60, "installing hooks");
     const hooksPath = installGlobalHooks({ codexHome: codexHome(), marketplaceRoot, injectPromptContext: inject });
+
+    progress.step(65, "configuring gitignore");
+    writeInnerGitignore(marketplaceRoot);
+    ensureRootGitignore(process.cwd());
 
     progress.step(70, "warming embeddings");
     const warmResult = await warmInstallEmbeddings();
