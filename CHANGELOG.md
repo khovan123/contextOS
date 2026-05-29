@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.19
+
+- Makes `ctx-mcp` startup non-mutating: the MCP server now verifies the local embedding model without warming or rewriting `embeddings.db` during agent initialization.
+- Fixes Antigravity staying on `ctx-mcp initializing...` when a large embedding cache makes startup writes slow or blocked.
+
 ## 0.5.18
 
 - Prevents `ctx sync --rules` from importing project MCP commands that point into temporary directories such as `/tmp/...`.

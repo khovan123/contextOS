@@ -4,7 +4,7 @@ import net from "node:net";
 
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 
-import { modelCacheDir, warmRuleEmbeddings } from "../lib/embedding-scorer.js";
+import { isModelCacheReady, modelCacheDir } from "../lib/embedding-scorer.js";
 import { scoreContext } from "../lib/score-context.js";
 import { ctxMcpSocketPath } from "../lib/ctx-mcp-client.js";
 import { defaultDataRoot } from "../lib/workspace-data.js";
@@ -24,15 +24,9 @@ await server.connect(new StdioServerTransport());
 
 async function ensureModelReady() {
   const modelDir = modelCacheDir(dataDir);
-  if (!fs.existsSync(modelDir)) {
+  if (!fs.existsSync(modelDir) || !isModelCacheReady(dataDir)) {
     throw new Error(`ContextOS model cache missing: ${modelDir}. Run ctx install first.`);
   }
-  await warmRuleEmbeddings({
-    task: "contextos mcp model ready",
-    rules: [{ content: "ContextOS semantic scorer is ready." }],
-    dataDir,
-    allowRemote: false
-  });
 }
 
 function startBridge() {
