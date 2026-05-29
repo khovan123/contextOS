@@ -259,7 +259,7 @@ export function scoreRules(rules, task, openFiles = []) {
 
     const lowerRule = rule.content.toLowerCase();
     if (IMPORTANT_WORDS.some((word) => lowerRule.includes(word))) {
-      score += 0.4;
+      score += 0.5;
       reasons.push("imperative");
     }
 

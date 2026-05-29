@@ -83,6 +83,28 @@ describe("hook contracts", () => {
     expect(output.hookSpecificOutput.additionalContext).toContain("zod");
   });
 
+  it("falls back to direct scoring when the MCP bridge is unavailable", async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-hook-bridge-fallback-"));
+    const dataPath = path.join(tmp, ".data", "last-prompt-context.json");
+    fs.writeFileSync(path.join(tmp, "AGENTS.md"), "- Always use code-review-graph before reading files.\n");
+
+    const output = await handlePromptPayload(
+      { prompt: "review code changes", cwd: tmp, hook_event_name: "UserPromptSubmit" },
+      {
+        dataPath,
+        mcpDataDir: path.join(tmp, ".ctx-data"),
+        scoreContextClient: async () => {
+          throw new Error("ctx-mcp bridge socket not found");
+        }
+      }
+    );
+    const runtime = JSON.parse(fs.readFileSync(dataPath, "utf8"));
+
+    expect(output.continue).toBe(true);
+    expect(output.hookSpecificOutput.additionalContext).toContain("code-review-graph");
+    expect(runtime.telemetry.bridgeStatus).toBe("fallback");
+  });
+
   it("on-stop handler returns valid JSON when no git repo exists", () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-stop-"));
     fs.mkdirSync(path.join(tmp, ".data"), { recursive: true });

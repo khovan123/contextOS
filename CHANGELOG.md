@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.21
+
+- Makes prompt hooks fall back to direct scoring when the `ctx-mcp` bridge socket is missing, stale, or unavailable, avoiding empty `hook context` output.
+- Prioritizes imperative and code-review-graph rules in injected critical context so `IMPORTANT` project rules appear before generic semantic matches.
+- Improves workflow detection for CI, deployment, server, runtime, debugging, and issue-analysis prompts.
+
 ## 0.5.20
 
 - Refreshes stale `ctx-mcp` Ruler entries that point at temporary paths such as `/tmp/contextos/...`.

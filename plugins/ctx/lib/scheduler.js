@@ -1,9 +1,10 @@
 const MAX_CONTEXT_CHARS = 4000;
 
 export function scheduleContext({ rules = [], relevantFiles = [], suggestedSkills = [], suggestedWorkflows = [], maxChars = MAX_CONTEXT_CHARS } = {}) {
-  const high = rules.filter((rule) => rule.score >= 0.5);
-  const mid = rules.filter((rule) => rule.score >= 0.1 && rule.score < 0.5);
-  const dropped = rules.filter((rule) => rule.score < 0.1);
+  const orderedRules = [...rules].sort(compareRulesForContext);
+  const high = orderedRules.filter((rule) => rule.score >= 0.5);
+  const mid = orderedRules.filter((rule) => rule.score >= 0.1 && rule.score < 0.5);
+  const dropped = orderedRules.filter((rule) => rule.score < 0.1);
 
   const sections = [];
   if (high.length) {
@@ -35,6 +36,20 @@ export function scheduleContext({ rules = [], relevantFiles = [], suggestedSkill
     suggestedWorkflows,
     additionalContext
   };
+}
+
+function compareRulesForContext(a, b) {
+  return rulePriority(b) - rulePriority(a)
+    || Number(b.score || 0) - Number(a.score || 0)
+    || Number(a.originalOrder || 0) - Number(b.originalOrder || 0);
+}
+
+function rulePriority(rule) {
+  const content = String(rule.content || "").toLowerCase();
+  let priority = 0;
+  if (/\b(important|always|must|required|mandatory|strictly|never)\b/.test(content)) priority += 10;
+  if (/\b(code-review-graph|query_graph|get_minimal_context|detect_changes|semantic_search_nodes)\b/.test(content)) priority += 4;
+  return priority;
 }
 
 function section(title, lines) {

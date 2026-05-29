@@ -320,12 +320,12 @@ function scoreWorkflowsByKeyword({ prompt, workflows }) {
 
 function actionIntentBonus(normalizedPrompt, workflow) {
   const name = normalize(`${workflow.name} ${workflow.title} ${workflow.description}`);
-  const implementationIntent = /\b(implement|feature|build|create|fix|debug|test|ci|failing)\b/.test(normalizedPrompt);
+  const implementationIntent = /\b(implement|feature|build|create|fix|debug|test|ci|cd|pipeline|failing|failure|error|issue|bug|analyze|analyse|solution|server|runtime|deploy|fly|flyio|loi|phan tich|giai phap)\b/.test(normalizedPrompt);
   const docsIntent = /\b(doc|docs|documentation|readme|changelog|roadmap)\b/.test(normalizedPrompt);
   const orchestrationIntent = /\b(parallel|sequential|chain|delegate|agent|subagent|orchestrat)\b/.test(normalizedPrompt);
-  if (implementationIntent && /\b(primary|implementation|testing|debugging|quality)\b/.test(name)) return 0.35;
-  if (docsIntent && /\b(documentation|docs|changelog|roadmap)\b/.test(name)) return 0.35;
-  if (orchestrationIntent && /\b(orchestration|parallel|sequential|chaining)\b/.test(name)) return 0.35;
+  if (implementationIntent && /\b(primary|implementation|testing|debugging|quality)\b/.test(name)) return 0.42;
+  if (docsIntent && /\b(documentation|docs|changelog|roadmap)\b/.test(name)) return 0.42;
+  if (orchestrationIntent && /\b(orchestration|parallel|sequential|chaining)\b/.test(name)) return 0.42;
   return 0;
 }
 

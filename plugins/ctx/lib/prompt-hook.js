@@ -2,6 +2,7 @@ import { scheduleContext } from "./scheduler.js";
 import { appendJsonLine, writeJsonFile } from "./fs-utils.js";
 import { callCtxScoreContext } from "./ctx-mcp-client.js";
 import { resolveHookCwd } from "./hook-io.js";
+import { scoreContext as scoreContextDirect } from "./score-context.js";
 import path from "node:path";
 
 export async function handlePromptPayload(
@@ -21,15 +22,31 @@ export async function handlePromptPayload(
   const openFiles = payload.openFiles || payload.open_files || payload.files || [];
   const dataDir = dataPath ? path.dirname(dataPath) : undefined;
 
-  const scored = await scoreContextClient({
-    cwd,
-    prompt,
-    openFiles,
-    maxFiles: 3
-  }, {
-    dataDir: mcpDataDir || dataDir,
-    timeoutMs: Number(process.env.CONTEXTOS_MCP_BRIDGE_TIMEOUT_MS || 1000)
-  });
+  let scored;
+  try {
+    scored = await scoreContextClient({
+      cwd,
+      prompt,
+      openFiles,
+      maxFiles: 3
+    }, {
+      dataDir: mcpDataDir || dataDir,
+      timeoutMs: Number(process.env.CONTEXTOS_MCP_BRIDGE_TIMEOUT_MS || 1000)
+    });
+  } catch (error) {
+    scored = await scoreContextDirect({
+      cwd,
+      prompt,
+      openFiles,
+      maxFiles: 3,
+      dataDir: mcpDataDir || dataDir
+    });
+    scored.telemetry = {
+      ...(scored.telemetry || {}),
+      bridgeStatus: "fallback",
+      bridgeError: error?.message || String(error)
+    };
+  }
 
   if (scored.error) throw new Error(scored.error);
   const scoredRules = scored.scoredRules || [];
