@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.5.33
+## 0.5.34
 
 - **Real-time streaming output during install/setup:** Replaced `captureSetupOutput` (buffered) with `streamSetupOutput` — now prints each line immediately with `│  ` prefix as it arrives, eliminating the perceived "hang" during long-running downloads and installs.
 - **Fix codex CLI output missing `│` prefix:** Changed `runCodex` from `stdio: "inherit"` to `stdio: ["ignore", "pipe", "pipe"]`. Output now flows through `console.log` → `streamSetupOutput` → `│  ` prefix, ensuring lines like "Added marketplace..." are consistently formatted.
