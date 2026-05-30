@@ -330,11 +330,18 @@ function copyDirectory(sourceDir, targetDir) {
   for (const entry of fs.readdirSync(sourceDir, { withFileTypes: true })) {
     const source = path.join(sourceDir, entry.name);
     const target = path.join(targetDir, entry.name);
-    if (entry.isDirectory()) {
+    if (entry.isSymbolicLink()) {
+      // Follow symlinks and copy real content to avoid incompatibility
+      // with tools like antigravity-awesome-skills that reject symlinks.
+      const real = fs.realpathSync(source);
+      const stat = fs.statSync(real);
+      if (stat.isDirectory()) {
+        copyDirectory(real, target);
+      } else if (stat.isFile()) {
+        fs.copyFileSync(real, target);
+      }
+    } else if (entry.isDirectory()) {
       copyDirectory(source, target);
-    } else if (entry.isSymbolicLink()) {
-      const link = fs.readlinkSync(source);
-      fs.symlinkSync(link, target);
     } else if (entry.isFile()) {
       fs.copyFileSync(source, target);
     }
