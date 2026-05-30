@@ -14,7 +14,6 @@ describe("setup wizard", () => {
       agentsProvided: false,
       yes: false,
       quiet: false,
-      inject: true,
       syncRules: true,
       syncSkills: true
     });
@@ -24,7 +23,6 @@ describe("setup wizard", () => {
     expect(parseSetupArgs([
       "--yes",
       "--quiet",
-      "--no-inject",
       "--no-rules",
       "--no-skills",
       "--agents",
@@ -34,11 +32,9 @@ describe("setup wizard", () => {
       agentsProvided: true,
       yes: true,
       quiet: true,
-      inject: false,
       syncRules: false,
       syncSkills: false
     });
-    expect(parseSetupArgs(["--quiet"]).inject).toBe(false);
   });
 
   it("normalizes agent aliases", () => {
@@ -46,17 +42,16 @@ describe("setup wizard", () => {
     expect(parseAgentList("codex, claude, antigravity")).toEqual(["codex", "claude", "agy"]);
   });
 
-  it("formats setup summary lines", () => {
+  it("formats setup summary lines with always-on injection", () => {
     expect(setupSummaryLines({
       cwd: "/repo",
       agents: ["codex"],
-      inject: false,
       syncRules: false,
       syncSkills: true
     })).toEqual([
       "Installation directory: /repo",
       "Agents: codex",
-      "Prompt context injection: quiet logging only",
+      "Prompt context injection: always enabled",
       "Ruler rule/MCP sync: skipped",
       "skillshare skill sync: enabled"
     ]);

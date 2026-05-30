@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.27
+
+- **Fix Windows `spawnSync`/`execFileSync` ENOENT across all modules:** Added `shell: true` to every remaining child-process invocation in `ruler-sync.js`, `skillshare-sync.js`, `passthrough.js`, and `measure.js`. Without this, Windows cannot resolve `.cmd`/`.ps1` shims (e.g. `npm.cmd`, `ruler.cmd`, `skillshare.cmd`) via PATH, causing `ctx setup` to crash during the Ruler/Skillshare installation step.
+
 ## 0.5.26
 
 - **Interactive `ctx install`:** Running `ctx install` without `--agent` now shows an interactive multi-select prompt (↑/↓ to navigate, Space to toggle, Enter to confirm) letting you pick which agents to install in one go.

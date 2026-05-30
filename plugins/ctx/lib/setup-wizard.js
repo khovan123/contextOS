@@ -12,7 +12,6 @@ export function parseSetupArgs(args = []) {
     agentsProvided,
     yes: args.includes("--yes") || args.includes("-y"),
     quiet: args.includes("--quiet"),
-    inject: !args.includes("--quiet") && !args.includes("--no-inject"),
     syncRules: !args.includes("--no-rules"),
     syncSkills: !args.includes("--no-skills")
   };
@@ -35,14 +34,13 @@ export function normalizeSetupAgent(agent) {
 export function setupSummaryLines({
   cwd = process.cwd(),
   agents = DEFAULT_AGENTS,
-  inject = true,
   syncRules = true,
   syncSkills = true
 } = {}) {
   return [
     `Installation directory: ${cwd}`,
     `Agents: ${agents.join(", ") || "(none)"}`,
-    `Prompt context injection: ${inject ? "enabled" : "quiet logging only"}`,
+    `Prompt context injection: always enabled`,
     `Ruler rule/MCP sync: ${syncRules ? "enabled" : "skipped"}`,
     `skillshare skill sync: ${syncSkills ? "enabled" : "skipped"}`
   ];

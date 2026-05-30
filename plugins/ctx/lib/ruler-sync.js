@@ -24,7 +24,7 @@ function statusLine(label, value) {
 
 function runCommand(command, args, { cwd = process.cwd(), stdio = "pipe", dryRun = false } = {}) {
   if (dryRun) return { stdout: "", skipped: true };
-  const stdout = execFileSync(command, args, { cwd, stdio, encoding: "utf8" });
+  const stdout = execFileSync(command, args, { cwd, stdio, encoding: "utf8", shell: true });
   return { stdout: stdout || "" };
 }
 

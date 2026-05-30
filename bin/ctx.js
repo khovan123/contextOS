@@ -43,8 +43,6 @@ function usage() {
 Usage:
   ctx install                                  Interactive multi-select agent installer
   ctx install --agent <name>                   Install a specific agent (codex|claude|agy)
-  ctx install --quiet                          Install without prompt injection (logging only)
-  ctx install --inject                         Explicitly enable prompt context injection
   ctx install --copy                           Legacy: copy plugin folder only (no hooks/mcp)
   ctx setup                                    Interactive full setup wizard
   ctx setup --yes                              Auto-confirm all setup prompts
@@ -181,7 +179,8 @@ function agentInstallRoot(agent) {
   return path.join(contextOSDataDir(), "agents", agent, "contextos");
 }
 
-async function install({ copy = false, inject = true, agent = "codex" } = {}) {
+async function install({ copy = false, agent = "codex" } = {}) {
+  const inject = true; // Prompt injection is always enabled
   agent = normalizeInstallAgent(agent);
   if (copy) {
     copyInstall();
@@ -514,7 +513,6 @@ async function setup({ args = [], cwd = process.cwd() } = {}) {
       options.agents = selected;
       const rl2 = readline.createInterface({ input, output });
       try {
-        options.inject = await askSetupYesNo(rl2, "Enable prompt context injection?", options.inject);
         options.syncRules = await askSetupYesNo(rl2, "Sync project rules and MCP servers through Ruler?", options.syncRules);
         options.syncSkills = await askSetupYesNo(rl2, "Sync skills through skillshare?", options.syncSkills);
       } finally {
@@ -523,7 +521,6 @@ async function setup({ args = [], cwd = process.cwd() } = {}) {
     } else {
       try {
         console.log(`◇ Install for agents:\n│  ${options.agents.join(", ")}`);
-        options.inject = await askSetupYesNo(rl, "Enable prompt context injection?", options.inject);
         options.syncRules = await askSetupYesNo(rl, "Sync project rules and MCP servers through Ruler?", options.syncRules);
         options.syncSkills = await askSetupYesNo(rl, "Sync skills through skillshare?", options.syncSkills);
       } finally {
@@ -541,7 +538,7 @@ async function setup({ args = [], cwd = process.cwd() } = {}) {
 
   for (const agent of options.agents) {
     console.log(`● Setting up ${agent}...`);
-    await install({ agent, inject: options.inject, copy: false });
+    await install({ agent, copy: false });
   }
 
   if (options.syncRules) {
@@ -592,12 +589,11 @@ try {
     console.log(packageVersion());
   } else if (command === "install") {
     const copy = args.includes("--copy");
-    const inject = args.includes("--inject") || !args.includes("--quiet");
     const explicitAgent = installAgentFromArgs(args);
 
     if (explicitAgent) {
       // Direct mode: ctx install --agent <name>
-      await install({ copy, inject, agent: explicitAgent });
+      await install({ copy, agent: explicitAgent });
     } else {
       // Interactive mode: ctx install
       const selected = await multiSelect({
@@ -608,7 +604,7 @@ try {
         console.log("No agents selected. Nothing to install.");
       } else {
         for (const agent of selected) {
-          await install({ copy, inject, agent });
+          await install({ copy, agent });
           console.log("");
         }
       }

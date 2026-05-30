@@ -53,7 +53,8 @@ export function readGitSnapshot({ cwd = process.cwd() } = {}) {
       cwd,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
-      timeout: 1000
+      timeout: 1000,
+      shell: true
     });
     return parseGitDiff(diff);
   } catch {
@@ -62,7 +63,8 @@ export function readGitSnapshot({ cwd = process.cwd() } = {}) {
         cwd,
         encoding: "utf8",
         stdio: ["ignore", "pipe", "pipe"],
-        timeout: 1000
+        timeout: 1000,
+        shell: true
       });
       const changedFiles = parseStatusFiles(status);
       return {

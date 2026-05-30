@@ -33,7 +33,8 @@ export function runPassthrough({
   const result = spawn(command, args, {
     cwd,
     env,
-    stdio: "inherit"
+    stdio: "inherit",
+    shell: true
   });
 
   if (result.error) {
