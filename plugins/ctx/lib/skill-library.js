@@ -19,25 +19,64 @@ const SKILL_LIBRARIES = [
     url: "https://github.com/sickn33/antigravity-awesome-skills",
     rawReadmeUrl: "https://raw.githubusercontent.com/sickn33/antigravity-awesome-skills/main/README.md",
     agents: ["agy", "claude", "codex", "copilot"],   // universal library
-    description: "1,400+ agentic skills for all agents"
+    description: "1,400+ agentic skills for all agents",
+    install: {
+      type: "npx",
+      fullInstall: "npx antigravity-awesome-skills",
+      agentFlags: {
+        codex: "npx antigravity-awesome-skills --codex",
+        claude: "npx antigravity-awesome-skills --claude",
+        agy: "npx antigravity-awesome-skills --antigravity",
+        copilot: "npx antigravity-awesome-skills --cursor",
+        gemini: "npx antigravity-awesome-skills --gemini"
+      },
+      verify: 'test -d ~/.agents/skills && echo "Skills installed in ~/.agents/skills"'
+    }
   },
   {
     id: "awesome-claude",
     name: "Awesome Claude Skills",
     repo: "ComposioHQ/awesome-claude-skills",
     url: "https://github.com/ComposioHQ/awesome-claude-skills",
-    rawReadmeUrl: "https://raw.githubusercontent.com/ComposioHQ/awesome-claude-skills/main/README.md",
+    rawReadmeUrl: "https://raw.githubusercontent.com/ComposioHQ/awesome-claude-skills/master/README.md",
     agents: ["claude"],
-    description: "Curated Claude Code skills & workflows"
+    description: "Curated Claude Code skills & workflows",
+    install: {
+      type: "git-clone",
+      clone: "git clone https://github.com/ComposioHQ/awesome-claude-skills.git",
+      skillDir: "~/.claude/skills",
+      copyCommand: (skillName) =>
+        `cp -r awesome-claude-skills/${skillName} ~/.claude/skills/${skillName}`,
+      fullInstall: [
+        "git clone https://github.com/ComposioHQ/awesome-claude-skills.git",
+        "mkdir -p ~/.claude/skills",
+        'for d in awesome-claude-skills/*/; do [ -f "$d/SKILL.md" ] && cp -r "$d" ~/.claude/skills/; done'
+      ].join(" && "),
+      verify: 'ls ~/.claude/skills/'
+    }
   },
   {
     id: "awesome-codex",
     name: "Awesome Codex Skills",
     repo: "ComposioHQ/awesome-codex-skills",
     url: "https://github.com/ComposioHQ/awesome-codex-skills",
-    rawReadmeUrl: "https://raw.githubusercontent.com/ComposioHQ/awesome-codex-skills/main/README.md",
+    rawReadmeUrl: "https://raw.githubusercontent.com/ComposioHQ/awesome-codex-skills/master/README.md",
     agents: ["codex"],
-    description: "Practical Codex CLI skills & automations"
+    description: "Practical Codex CLI skills & automations",
+    install: {
+      type: "git-clone-python",
+      clone: "git clone https://github.com/ComposioHQ/awesome-codex-skills.git",
+      skillDir: "~/.codex/skills",
+      installScript: (skillName) =>
+        `python awesome-codex-skills/skill-installer/scripts/install-skill-from-github.py --repo ComposioHQ/awesome-codex-skills --path ${skillName}`,
+      fullInstall: [
+        "git clone https://github.com/ComposioHQ/awesome-codex-skills.git",
+        "cd awesome-codex-skills",
+        "mkdir -p ~/.codex/skills",
+        'for d in */; do [ -f "$d/SKILL.md" ] && [ "$d" != "skill-installer/" ] && cp -r "$d" ~/.codex/skills/; done'
+      ].join(" && "),
+      verify: 'ls ~/.codex/skills/'
+    }
   },
   {
     id: "awesome-copilot",
@@ -46,7 +85,13 @@ const SKILL_LIBRARIES = [
     url: "https://github.com/github/awesome-copilot",
     rawReadmeUrl: "https://raw.githubusercontent.com/github/awesome-copilot/main/README.md",
     agents: ["copilot"],
-    description: "Community GitHub Copilot instructions & agents"
+    description: "Community GitHub Copilot instructions & agents",
+    install: {
+      type: "manual",
+      fullInstall: null,
+      instructions: "Browse the repository and copy relevant .instructions.md files to your .github/ directory.",
+      url: "https://github.com/github/awesome-copilot"
+    }
   }
 ];
 
@@ -287,4 +332,33 @@ export function printSkillRecommendations(libraryResults, { logger = console.log
  */
 export function getAllLibraries() {
   return SKILL_LIBRARIES;
+}
+
+/**
+ * Get install commands for a specific library.
+ * @param {string} libraryId
+ * @param {string} [agent] - optional agent to target
+ * @returns {{ fullInstall: string|null, agentInstall: string|null, verify: string|null, instructions: string|null, type: string }}
+ */
+export function getInstallCommands(libraryId, agent) {
+  const lib = SKILL_LIBRARIES.find((l) => l.id === libraryId);
+  if (!lib || !lib.install) return null;
+
+  const inst = lib.install;
+  const result = {
+    type: inst.type,
+    fullInstall: typeof inst.fullInstall === "string" ? inst.fullInstall : null,
+    agentInstall: null,
+    verify: inst.verify || null,
+    instructions: inst.instructions || null,
+    url: inst.url || lib.url
+  };
+
+  // Agent-specific install (only for npx-based libs)
+  if (agent && inst.agentFlags) {
+    const normalized = agent.toLowerCase().replace("antigravity", "agy");
+    result.agentInstall = inst.agentFlags[normalized] || null;
+  }
+
+  return result;
 }

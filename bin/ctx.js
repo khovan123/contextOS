@@ -5,7 +5,7 @@ import path from "node:path";
 import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import { fileURLToPath } from "node:url";
-import { execFileSync } from "node:child_process";
+import { execFileSync, execSync, spawn } from "node:child_process";
 
 import { readAgentsChain } from "../plugins/ctx/lib/reader.js";
 import { filterActionableRules, parseRules, scoreRules } from "../plugins/ctx/lib/analyzer.js";
@@ -35,7 +35,37 @@ import { parseAgentList, parseSetupArgs, setupSummaryLines } from "../plugins/ct
 import { multiSelect } from "../plugins/ctx/lib/multi-select.js";
 import { syncWorkflows, warmWorkflowEmbeddings } from "../plugins/ctx/lib/workflow-discoverer.js";
 import { checkForUpdate } from "../plugins/ctx/lib/update-notifier.js";
-import { fetchSkillsForAgents, printSkillRecommendations, getAllLibraries } from "../plugins/ctx/lib/skill-library.js";
+import { fetchSkillsForAgents, printSkillRecommendations, getAllLibraries, getInstallCommands } from "../plugins/ctx/lib/skill-library.js";
+
+/**
+ * Run a shell command with all output lines prefixed by │  
+ * Keeps the visual box style consistent during child-process output.
+ * stdin is inherited so interactive prompts (e.g. npx "Ok to proceed?") still work.
+ */
+function runPrefixed(cmd) {
+  const DIM = "\x1B[2m";
+  const RST = "\x1B[0m";
+  const pfx = `${DIM}│${RST}  `;
+  return new Promise((resolve, reject) => {
+    const child = spawn("sh", ["-c", cmd], { stdio: ["inherit", "pipe", "pipe"] });
+    function pipe(stream, target) {
+      let needPrefix = true;
+      stream.on("data", (buf) => {
+        const str = buf.toString();
+        let out = "";
+        for (const ch of str) {
+          if (needPrefix) { out += pfx; needPrefix = false; }
+          out += ch;
+          if (ch === "\n") needPrefix = true;
+        }
+        target.write(out);
+      });
+    }
+    pipe(child.stdout, process.stdout);
+    pipe(child.stderr, process.stderr);
+    child.on("close", (code) => code === 0 ? resolve() : reject(new Error(`exit code ${code}`)));
+  });
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
@@ -701,7 +731,7 @@ try {
     if (!task.trim()) throw new Error('Usage: ctx benchmark -- "task"');
     console.log(formatBenchmark(benchmarkWorkspace({ cwd: process.cwd(), task })));
   } else if (command === "skills") {
-    // Browse community skill libraries
+    // Interactive community skill library selector + installer
     const agentsFlag = args.indexOf("--agents");
     const forceRefresh = args.includes("--refresh");
     let agents;
@@ -710,21 +740,115 @@ try {
     } else {
       agents = ["codex", "claude", "agy", "copilot"];
     }
+
+    const DIM = "\x1B[2m";
+    const RESET = "\x1B[0m";
+    const CYAN = "\x1B[36m";
+    const GREEN = "\x1B[32m";
+    const YELLOW = "\x1B[33m";
+    const BOLD = "\x1B[1m";
+
     console.log("Fetching community skill libraries...\n");
     const libraryResults = await fetchSkillsForAgents(agents, {
       dataDir: contextOSDataDir()
     });
-    printSkillRecommendations(libraryResults);
-    console.log("");
+
     const totalSkills = libraryResults.reduce((sum, r) => sum + r.count, 0);
     if (totalSkills === 0) {
       console.log("No skills found. Check your network connection or try --refresh.");
-    } else {
-      console.log(`Total: ${totalSkills} skills across ${libraryResults.filter((r) => r.count > 0).length} libraries.`);
-      console.log("");
-      console.log("To install skills, visit the library URLs above or use:");
-      console.log("  ctx sync --skills       Sync skills across agents via skillshare");
+      process.exit(1);
     }
+
+    // Compact header
+    console.log(`${CYAN}◇${RESET} ${BOLD}Community skill libraries available:${RESET}`);
+    console.log(`${DIM}│${RESET}  Browse and install curated skills from the community.`);
+    console.log(`${DIM}│${RESET}`);
+
+    // Multi-select which sources to install from
+    const allLibs = getAllLibraries();
+    const availableLibs = allLibs.filter((lib) => {
+      const result = libraryResults.find((r) => r.library.id === lib.id);
+      return result && result.count > 0;
+    });
+
+    if (availableLibs.length === 0) {
+      console.log("No installable libraries available.");
+      process.exit(0);
+    }
+
+    const selectedSources = await multiSelect({
+      message: "Select skill sources to install:",
+      options: availableLibs.map((lib) => {
+        const result = libraryResults.find((r) => r.library.id === lib.id);
+        return {
+          label: `${lib.name} (${result?.count || 0} skills)`,
+          value: lib.id,
+          hint: lib.url,
+          selected: false
+        };
+      })
+    });
+
+    if (!selectedSources || selectedSources.length === 0) {
+      console.log(`\n${DIM}No sources selected.${RESET}`);
+      process.exit(0);
+    }
+
+    // Install each selected source using its provided commands
+    let successCount = 0;
+    for (const libId of selectedSources) {
+      const lib = allLibs.find((l) => l.id === libId);
+      if (!lib) continue;
+
+      const installInfo = getInstallCommands(libId);
+      if (!installInfo) {
+        console.log(`${YELLOW}⚠${RESET}  No install info for ${lib.name}. Visit: ${lib.url}`);
+        continue;
+      }
+
+      console.log("");
+      console.log(`${CYAN}◇${RESET} ${BOLD}Installing from ${lib.name}${RESET}`);
+
+      if (installInfo.type === "manual") {
+        console.log(`${DIM}│${RESET}  ${installInfo.instructions}`);
+        console.log(`${DIM}│${RESET}  ${DIM}URL: ${lib.url}${RESET}`);
+        continue;
+      }
+
+      const installCmd = installInfo.fullInstall;
+      if (installCmd) {
+        console.log(`${DIM}│${RESET}  ${GREEN}$ ${installCmd}${RESET}`);
+        console.log(`${DIM}│${RESET}`);
+
+        try {
+          await runPrefixed(installCmd);
+          successCount++;
+
+          // Run verify command if available
+          if (installInfo.verify) {
+            try {
+              await runPrefixed(installInfo.verify);
+            } catch { /* verify is best-effort */ }
+          }
+          console.log(`${DIM}│${RESET}`);
+          console.log(`${GREEN}✔${RESET} ${lib.name} installed successfully.`);
+        } catch (err) {
+          console.error(`${YELLOW}⚠${RESET}  Install failed for ${lib.name}. Try manually:`);
+          console.error(`   ${installCmd}`);
+          console.error(`   ${DIM}${err.message}${RESET}`);
+        }
+      }
+    }
+
+    // Final summary
+    console.log("");
+    if (successCount > 0) {
+      console.log(`${GREEN}✔${RESET} ${BOLD}${successCount} source${successCount > 1 ? "s" : ""} installed.${RESET}`);
+      console.log(`${DIM}│${RESET}  Restart your agent to pick up new skills.`);
+    } else {
+      console.log(`${DIM}No installations were completed.${RESET}`);
+    }
+    console.log("");
   } else if (command === "sync") {
     if (args.includes("--workflows")) {
       await syncWorkflows({

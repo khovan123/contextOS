@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.41
+
+- **Interactive community skill installer (`ctx skills`):** Replaced the info-only display with a fully functional multi-select installer. Users can now toggle multiple community library sources with `Space`, confirm with `Enter`, and the CLI automatically runs the appropriate install command for each selected source (`npx`, `git clone`, etc.).
+- **Compact selection UI with URL hints:** The skill source picker now shows a clean box-styled header and each option displays its GitHub URL as a dimmed sub-line hint, matching the `◇ / │` visual language used throughout contextOS.
+- **Prefixed install output (`runPrefixed`):** All child-process output during installation (including interactive npx prompts like "Ok to proceed?") is piped through a line-by-line prefixer that prepends `│  ` to every line. This keeps the visual box style consistent and prevents raw command output from breaking the layout. `stdin` remains inherited so users can still answer interactive prompts.
+- **`multiSelect` hint support:** The multi-select component now accepts an optional `hint` property on each option, rendered as a dimmed indented line below the label. Used for URLs but available for any contextual sub-text.
+- **Library install metadata:** `skill-library.js` now exports `getInstallCommands(libraryId)` returning structured install info (command, verify step, type) for each library source, keeping install logic out of the main CLI.
+
 ## 0.5.40
 
 - **Update notifier:** `ctx` now checks npm for newer versions in the background (once per day, 3s timeout). If a newer release exists, a boxed notice is printed at the very end of any command: `Update available: 0.5.39 → 0.5.40`. Check result is cached in `$CONTEXTOS_DATA/.update-check.json` to avoid repeated network calls.

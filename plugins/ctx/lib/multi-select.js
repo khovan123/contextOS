@@ -62,6 +62,9 @@ export function multiSelect({ message, options }) {
         const label = isCursor ? `${BOLD}${CYAN}${options[i].label}${RESET}` : options[i].label;
         const pointer = isCursor ? `${CYAN}❯${RESET}` : " ";
         lines.push(`  ${pointer} ${checkbox} ${label}`);
+        if (options[i].hint) {
+          lines.push(`        ${DIM}${options[i].hint}${RESET}`);
+        }
       }
       return lines;
     }
@@ -133,6 +136,116 @@ export function multiSelect({ message, options }) {
         process.stdout.write(`${CYAN}◇${RESET} ${message}\n`);
         process.stdout.write(`${DIM}│${RESET}  ${GREEN}${summary}${RESET}\n`);
         resolve(selected);
+      }
+    }
+
+    process.stdin.on("data", onData);
+    draw();
+  });
+}
+
+/**
+ * Interactive single-select prompt (radio-button style).
+ *
+ * @param {{ message: string, options: Array<{label: string, value: string, disabled?: boolean, isHeader?: boolean}> }} config
+ * @returns {Promise<string|null>} selected value or null
+ */
+export function singleSelect({ message, options }) {
+  return new Promise((resolve) => {
+    if (!process.stdin.isTTY) {
+      // Non-interactive: return first non-disabled
+      const first = options.find((o) => !o.disabled);
+      resolve(first ? first.value : null);
+      return;
+    }
+
+    // Filter to only selectable items, but keep the full list for rendering
+    const selectableIndices = options
+      .map((o, i) => (o.disabled ? -1 : i))
+      .filter((i) => i >= 0);
+    if (selectableIndices.length === 0) { resolve(null); return; }
+
+    let cursorIdx = 0; // index into selectableIndices
+    let cursor = selectableIndices[0]; // actual index in options
+
+    function render() {
+      const lines = [];
+      lines.push(`${CYAN}◇${RESET} ${message}`);
+      lines.push(`${DIM}  Use ↑/↓ to navigate, Enter to select${RESET}`);
+      for (let i = 0; i < options.length; i++) {
+        const opt = options[i];
+        if (opt.disabled || opt.isHeader) {
+          lines.push(`  ${DIM}${opt.label}${RESET}`);
+          continue;
+        }
+        const isCursor = i === cursor;
+        const radio = isCursor ? `${GREEN}◉${RESET}` : `${DIM}○${RESET}`;
+        const label = isCursor ? `${BOLD}${CYAN}${opt.label}${RESET}` : opt.label;
+        const pointer = isCursor ? `${CYAN}❯${RESET}` : " ";
+        lines.push(`  ${pointer} ${radio} ${label}`);
+      }
+      return lines;
+    }
+
+    let prevLineCount = 0;
+
+    function draw() {
+      const lines = render();
+      if (prevLineCount > 0) {
+        process.stdout.write(`\x1B[${prevLineCount}A`);
+        for (let i = 0; i < prevLineCount; i++) {
+          process.stdout.write("\x1B[2K");
+          if (i < prevLineCount - 1) process.stdout.write("\x1B[1B");
+        }
+        process.stdout.write(`\x1B[${prevLineCount - 1}A`);
+      }
+      process.stdout.write(lines.join("\n") + "\n");
+      prevLineCount = lines.length;
+    }
+
+    process.stdout.write(HIDE_CURSOR);
+
+    const wasRaw = process.stdin.isRaw;
+    process.stdin.setRawMode(true);
+    process.stdin.resume();
+    process.stdin.setEncoding("utf8");
+
+    function cleanup() {
+      process.stdin.setRawMode(wasRaw || false);
+      process.stdin.pause();
+      process.stdin.removeListener("data", onData);
+      process.stdout.write(SHOW_CURSOR);
+    }
+
+    function onData(data) {
+      if (matchKey(data, KEYS.CTRL_C)) {
+        cleanup();
+        process.exit(0);
+      }
+
+      if (matchKey(data, KEYS.UP) || matchKey(data, KEYS.K)) {
+        cursorIdx = (cursorIdx - 1 + selectableIndices.length) % selectableIndices.length;
+        cursor = selectableIndices[cursorIdx];
+        draw();
+      } else if (matchKey(data, KEYS.DOWN) || matchKey(data, KEYS.J)) {
+        cursorIdx = (cursorIdx + 1) % selectableIndices.length;
+        cursor = selectableIndices[cursorIdx];
+        draw();
+      } else if (matchKey(data, KEYS.ENTER)) {
+        cleanup();
+        const selected = options[cursor];
+        // Clear and show result
+        if (prevLineCount > 0) {
+          process.stdout.write(`\x1B[${prevLineCount}A`);
+          for (let i = 0; i < prevLineCount; i++) {
+            process.stdout.write("\x1B[2K");
+            if (i < prevLineCount - 1) process.stdout.write("\x1B[1B");
+          }
+          process.stdout.write(`\x1B[${prevLineCount - 1}A`);
+        }
+        process.stdout.write(`${CYAN}◇${RESET} ${message}\n`);
+        process.stdout.write(`${DIM}│${RESET}  ${GREEN}${selected.label}${RESET}\n`);
+        resolve(selected.value);
       }
     }
 
