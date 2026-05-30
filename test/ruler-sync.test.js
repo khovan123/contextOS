@@ -20,7 +20,7 @@ describe("ruler sync", () => {
   it("parses sync --rules flags", () => {
     expect(parseSyncRulesArgs(["--rules"])).toMatchObject({
       rules: true,
-      agents: ["codex", "claude", "antigravity"],
+      agents: ["codex", "claude", "antigravity", "copilot"],
       dryRun: false,
       force: false
     });

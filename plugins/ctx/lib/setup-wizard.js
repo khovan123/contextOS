@@ -1,4 +1,5 @@
-const DEFAULT_AGENTS = ["codex", "claude", "agy"];
+// No agents pre-selected by default — user must choose explicitly
+const DEFAULT_AGENTS = [];
 
 export function parseSetupArgs(args = []) {
   const agentsFlag = args.indexOf("--agents");

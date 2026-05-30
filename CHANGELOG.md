@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.35
+
+- **Add GitHub Copilot agent support:** New `copilot` agent for `ctx install --agent copilot` and `ctx setup`. Creates `.github/copilot-instructions.md` with ContextOS integration marker and configures `ctx-mcp` MCP server in `.vscode/mcp.json`. Copilot is now recognized by Ruler (`ctx sync --rules`) and Skillshare (`ctx sync --skills`) alongside existing codex, claude, and agy agents.
+- **Agent selection defaults to none:** `ctx setup` and `ctx install` no longer pre-select all agents. Users must explicitly choose which agents to install via the interactive multiSelect prompt or `--agents` flag. This prevents accidental installation of unwanted agent hooks.
+- **copilot-hooks.js:** Writes a managed `copilot-instructions.md` file under `.github/`, appending to existing content if present. Uses a marker comment (`<!-- managed by ContextOS -->`) to avoid duplicate sections.
+- **copilot-mcp.js:** Configures `ctx-mcp` server in `.vscode/mcp.json` using the same pattern as existing claude/antigravity MCP modules.
+
 ## 0.5.34
 
 - **Real-time streaming output during install/setup:** Replaced `captureSetupOutput` (buffered) with `streamSetupOutput` — now prints each line immediately with `│  ` prefix as it arrives, eliminating the perceived "hang" during long-running downloads and installs.

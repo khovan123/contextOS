@@ -5,14 +5,15 @@ import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import { execFileSync, execSync, spawn } from "node:child_process";
 
-const DEFAULT_AGENTS = ["codex", "claude", "antigravity"];
+const DEFAULT_AGENTS = ["codex", "claude", "antigravity", "copilot"];
 const INSTALL_SH_URL = "https://raw.githubusercontent.com/runkids/skillshare/main/install.sh";
 const INSTALL_PS_URL = "https://raw.githubusercontent.com/runkids/skillshare/main/install.ps1";
 const AGENT_ALIASES = new Map([
   ["agy", "antigravity"],
   ["antigravity", "antigravity"],
   ["codex", "codex"],
-  ["claude", "claude"]
+  ["claude", "claude"],
+  ["copilot", "copilot"]
 ]);
 
 function statusLine(label, value) {

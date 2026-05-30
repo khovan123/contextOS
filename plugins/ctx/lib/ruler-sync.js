@@ -7,7 +7,7 @@ import { execFileSync, spawn } from "node:child_process";
 
 import { defaultDataRoot } from "./workspace-data.js";
 
-const DEFAULT_AGENTS = ["codex", "claude", "antigravity"];
+const DEFAULT_AGENTS = ["codex", "claude", "antigravity", "copilot"];
 const CTX_MCP_NAME = "ctx-mcp";
 const CONTEXTOS_PROXY_MARKER = "/contextos/plugins/ctx/mcp/proxy.js";
 const MCP_SERVER_RELATIVE = path.join("plugins", "ctx", "mcp", "server.js");
@@ -15,7 +15,8 @@ const AGENT_ALIASES = new Map([
   ["agy", "antigravity"],
   ["antigravity", "antigravity"],
   ["codex", "codex"],
-  ["claude", "claude"]
+  ["claude", "claude"],
+  ["copilot", "copilot"]
 ]);
 
 function statusLine(label, value) {
@@ -508,6 +509,10 @@ export function verifySync({ cwd = process.cwd(), agents = DEFAULT_AGENTS } = {}
       path.join(cwd, ".gemini", "mcp.json"),
       ...antigravityMcpConfigPaths(),
       path.join(cwd, "AGENTS.md")
+    ],
+    copilot: [
+      path.join(cwd, ".vscode", "mcp.json"),
+      path.join(cwd, ".github", "copilot-instructions.md")
     ]
   };
 
@@ -526,6 +531,7 @@ function resolveStableMcpServerPath(rootDir) {
     path.join(codexRoot, MCP_SERVER_RELATIVE),
     path.join(dataRoot, "agents", "claude", "contextos", MCP_SERVER_RELATIVE),
     path.join(dataRoot, "agents", "agy", "contextos", MCP_SERVER_RELATIVE),
+    path.join(dataRoot, "agents", "copilot", "contextos", MCP_SERVER_RELATIVE),
     path.join(rootDir, MCP_SERVER_RELATIVE)
   ];
   for (const candidate of candidates) {
@@ -542,7 +548,7 @@ export async function syncRules({
   logger = console.log
 } = {}) {
   const options = parseSyncRulesArgs(args);
-  if (!options.rules) throw new Error("Usage: ctx sync --rules [--agents codex,claude,antigravity] [--dry-run] [--force]");
+  if (!options.rules) throw new Error("Usage: ctx sync --rules [--agents codex,claude,antigravity,copilot] [--dry-run] [--force]");
 
   logger("");
   const ruler = checkRulerInstalled({ run });
@@ -608,6 +614,23 @@ export async function syncRules({
     logger(statusLine("Syncing Antigravity MCP config...", antigravityMcp.servers.length ? `✓ ${antigravityMcp.servers.join(", ")}` : "none found"));
   }
 
+  let copilotMcp = { changed: false };
+  if (options.agents.includes("copilot")) {
+    // Copilot MCP is managed by copilot-mcp.js during install,
+    // but we verify it's still in place during sync.
+    const vscodeMcpPath = path.join(cwd, ".vscode", "mcp.json");
+    if (fs.existsSync(vscodeMcpPath)) {
+      try {
+        const content = JSON.parse(fs.readFileSync(vscodeMcpPath, "utf8"));
+        copilotMcp.changed = Boolean(content?.mcpServers?.[CTX_MCP_NAME]);
+        logger(statusLine("Verifying Copilot MCP config...", copilotMcp.changed ? "✓ ctx-mcp found" : "not configured"));
+      } catch {
+        logger(statusLine("Verifying Copilot MCP config...", "⚠ parse error"));
+      }
+    } else {
+      logger(statusLine("Verifying Copilot MCP config...", "not installed (run ctx install --agent copilot)"));
+    }
+  }
   logger("[ctx] Verifying sync...");
   const checks = options.dryRun ? options.agents.map((agent) => ({ agent, ok: true, filePath: "(dry-run)" })) : verifySync({ cwd, agents: options.agents });
   for (const check of checks) {

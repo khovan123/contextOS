@@ -17,7 +17,7 @@ describe("skillshare sync", () => {
   it("parses sync --skills flags", () => {
     expect(parseSyncSkillsArgs(["--skills"])).toMatchObject({
       skills: true,
-      agents: ["codex", "claude", "antigravity"],
+      agents: ["codex", "claude", "antigravity", "copilot"],
       dryRun: false,
       noCollect: false
     });
@@ -203,7 +203,7 @@ describe("skillshare sync", () => {
     expect(calls.map(([, args]) => args.join(" "))).toEqual([
       "--version",
       "init --no-copy --no-git --no-skill --all-targets",
-      "sync --dry-run --quiet --agents codex,claude,antigravity"
+      "sync --dry-run --quiet --agents codex,claude,antigravity,copilot"
     ]);
     expect(result.embeddings.skipped).toBe(true);
   });
@@ -234,7 +234,7 @@ describe("skillshare sync", () => {
       }
     });
 
-    expect(calls.map(([, args]) => args.join(" "))).toContain("sync --quiet --agents codex,claude,antigravity");
+    expect(calls.map(([, args]) => args.join(" "))).toContain("sync --quiet --agents codex,claude,antigravity,copilot");
     expect(result.embeddings.skipped).toBe(true);
     expect(logs.join("\n")).toContain("skipped by --no-embeddings");
   });

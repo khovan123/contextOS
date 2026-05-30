@@ -10,7 +10,7 @@ import {
 describe("setup wizard", () => {
   it("parses setup defaults", () => {
     expect(parseSetupArgs([])).toEqual({
-      agents: ["codex", "claude", "agy"],
+      agents: [],
       agentsProvided: false,
       yes: false,
       quiet: false,
