@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.26
+
+- **Interactive `ctx install`:** Running `ctx install` without `--agent` now shows an interactive multi-select prompt (↑/↓ to navigate, Space to toggle, Enter to confirm) letting you pick which agents to install in one go.
+- **Removed positional agent args:** `ctx install codex`, `ctx install claude`, `ctx install agy` no longer work as positional shortcuts. Use `ctx install` (interactive) or `ctx install --agent <name>` (direct).
+
 ## 0.5.25
 
 - **Fix Windows JSON parse crash:** All `readJsonFile`/`readHooksFile` helpers now catch corrupt JSON and warn instead of crashing, allowing fresh config to be generated automatically.

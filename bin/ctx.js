@@ -41,11 +41,8 @@ function usage() {
   return `ContextOS (ctx)
 
 Usage:
-  ctx install
-  ctx install codex
-  ctx install claude
-  ctx install agy
-  ctx install --agent codex
+  ctx install                  (interactive agent selection)
+  ctx install --agent codex    (direct install for a specific agent)
   ctx install --agent claude
   ctx install --agent agy
   ctx install --quiet
@@ -81,6 +78,12 @@ Usage:
   ctx --version
 `;
 }
+
+const SUPPORTED_AGENTS = [
+  { label: "Codex",             value: "codex",  selected: true },
+  { label: "Claude Code",      value: "claude", selected: true },
+  { label: "Antigravity (agy)", value: "agy",    selected: true }
+];
 
 function normalizeInstallAgent(agent) {
   const normalized = String(agent || "").trim().toLowerCase();
@@ -581,8 +584,7 @@ const command = args[0];
 function installAgentFromArgs(args) {
   const agentFlag = args.indexOf("--agent");
   if (agentFlag >= 0) return normalizeInstallAgent(args[agentFlag + 1] || "");
-  const firstValue = args.slice(1).find((arg) => !arg.startsWith("--"));
-  return normalizeInstallAgent(firstValue || "codex");
+  return null; // no --agent flag → interactive selection
 }
 
 try {
@@ -591,11 +593,28 @@ try {
   } else if (command === "--version" || command === "-v") {
     console.log(packageVersion());
   } else if (command === "install") {
-    await install({
-      copy: args.includes("--copy"),
-      inject: args.includes("--inject") || !args.includes("--quiet"),
-      agent: installAgentFromArgs(args)
-    });
+    const copy = args.includes("--copy");
+    const inject = args.includes("--inject") || !args.includes("--quiet");
+    const explicitAgent = installAgentFromArgs(args);
+
+    if (explicitAgent) {
+      // Direct mode: ctx install --agent <name>
+      await install({ copy, inject, agent: explicitAgent });
+    } else {
+      // Interactive mode: ctx install
+      const selected = await multiSelect({
+        message: "Select agents to install:",
+        options: SUPPORTED_AGENTS
+      });
+      if (!selected.length) {
+        console.log("No agents selected. Nothing to install.");
+      } else {
+        for (const agent of selected) {
+          await install({ copy, inject, agent });
+          console.log("");
+        }
+      }
+    }
   } else if (command === "setup") {
     await setup({ args: args.slice(1), cwd: process.cwd() });
   } else if (command === "debug") {
