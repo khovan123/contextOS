@@ -42,6 +42,8 @@ export function handleStopPayload(payload, { contextPath, reportPath, historyPat
     cwd,
     prompt: promptContext?.prompt || "",
     relevantFiles: promptContext?.relevantFiles || [],
+    suggestedSkills: promptContext?.suggestedSkills || [],
+    suggestedWorkflows: promptContext?.suggestedWorkflows || [],
     scheduled,
     gitSnapshot,
     compliance,

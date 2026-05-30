@@ -125,7 +125,7 @@ describe("hook contracts", () => {
     expect(output.continue).toBe(true);
     expect(output).not.toHaveProperty("message");
     expect(output).not.toHaveProperty("hookSpecificOutput");
-    expect(output.systemMessage).toContain("ContextOS report");
+    expect(output.systemMessage).toContain("ContextOS Report");
     expect(output.systemMessage).toContain("Rule Outcomes");
     expect(fs.existsSync(reportPath)).toBe(true);
   });

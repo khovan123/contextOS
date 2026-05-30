@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { formatEvidence, formatReport } from "../plugins/ctx/lib/reporter.js";
 
 describe("reporter evidence", () => {
-  it("formats detailed rule evidence", () => {
+  it("formats detailed rule evidence in markdown", () => {
     const output = formatEvidence({
       prompt: "Recheck authen flow",
       efficiencyScore: 50,
@@ -33,39 +33,67 @@ describe("reporter evidence", () => {
       ]
     });
 
-    expect(output).toContain("ContextOS evidence");
-    expect(output).toContain("Evidence Table");
+    expect(output).toContain("ContextOS Evidence");
+    expect(output).toContain("Evidence Details");
     expect(output).toContain("FOLLOWED");
     expect(output).toContain("found required zod");
-    expect(output).toContain("Keywords");
-    expect(output).toContain("Matched line: src/auth.ts:1");
+    expect(output).toContain("src/auth.ts:1");
     expect(output).toContain("UNKNOWN");
     expect(output).toContain("UNMEASURABLE");
     expect(output).toContain("0.40");
   });
 
-  it("keeps stop report lines compact for terminal display", () => {
+  it("formats report in markdown with proper sections", () => {
     const output = formatReport({
       efficiencyScore: 0,
       injectedRuleCount: 1,
       changedFiles: ["src/auth.ts"],
       relevantFiles: [],
+      suggestedSkills: [{ name: "debugger", description: "Debug specialist" }],
+      suggestedWorkflows: [{ name: "TDD", chain: ["test", "code", "review"] }],
       followed: [],
       ignored: [
         {
           rule: {
-            content: "Never use console.log in committed code because it leaks debugging noise into production logs and makes review output hard to scan."
+            content: "Never use console.log in committed code."
           },
-          evidence: "found forbidden console.log in src/auth.ts:42 with a long diagnostic line that would otherwise wrap badly"
+          evidence: "found forbidden console.log in src/auth.ts:42"
         }
       ],
       unknown: []
     });
 
-    expect(output).toContain("Suggestion: fix ignored rule evidence first");
-    for (const line of output.split("\n")) {
-      expect(line.length).toBeLessThanOrEqual(120);
+    expect(output).toContain("# ContextOS Report");
+    expect(output).toContain("## Summary");
+    expect(output).toContain("## Rule Outcomes");
+    expect(output).toContain("## Suggested Skills");
+    expect(output).toContain("**debugger**");
+    expect(output).toContain("## Suggested Workflows");
+    expect(output).toContain("**TDD**");
+    expect(output).toContain("test → code → review");
+    expect(output).toContain("Suggestion:");
+  });
+
+  it("shows all items without truncation", () => {
+    const items = Array.from({ length: 10 }, (_, i) => ({
+      rule: { content: `Rule ${i + 1}` },
+      evidence: `Evidence ${i + 1}`
+    }));
+    const output = formatReport({
+      efficiencyScore: 100,
+      injectedRuleCount: 10,
+      changedFiles: [],
+      relevantFiles: [],
+      followed: items,
+      ignored: [],
+      unknown: []
+    });
+
+    // All 10 should appear, no "... N more"
+    for (let i = 1; i <= 10; i++) {
+      expect(output).toContain(`Rule ${i}`);
     }
+    expect(output).not.toContain("more");
   });
 
   it("filters system-user rules from stale reports at format time", () => {

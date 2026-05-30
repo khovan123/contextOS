@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.39
+
+- **Report layout fix:** Replaced ASCII table formatting with clean markdown output. Reports now render correctly in all agent UIs (Antigravity, Claude Code, Codex) without truncation or line-wrapping issues.
+- **Skills & workflows in report:** `Suggested Skills` and `Suggested Workflows` sections now appear in the compliance report when available. Data is passed through from `stop-hook.js` → `buildReport()` → `formatReport()`.
+- **No more truncation:** All rules now display in the report — removed the artificial item limits that caused `... N more` messages.
+- **Emoji status indicators:** Rule outcomes use ✅/❌/❓/⚠️ prefixes for quick scanning.
+
+
 ## 0.5.38
 
 - **Unified agent branding:** All user-facing text now shows `antigravity` instead of `agy`. Internal value remains `agy` for backward compatibility. Interactive prompts display "Antigravity" without the parenthetical alias.
