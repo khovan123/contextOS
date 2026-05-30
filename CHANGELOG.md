@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.38
+
+- **Unified agent branding:** All user-facing text now shows `antigravity` instead of `agy`. Internal value remains `agy` for backward compatibility. Interactive prompts display "Antigravity" without the parenthetical alias.
+- **`ctx help` command:** Added `help` as a recognized command (alongside `--help` and `-h`). Previously returned "Unknown command".
+- **`--help` in usage:** Added `ctx --help` line to the usage display so it's discoverable.
+- **Fix `--agents` flag parsing:** `ctx install --agents antigravity` now correctly skips the interactive prompt. Previously only `--agent` (singular) was recognized.
+- **Cleaner usage text:** Replaced hardcoded agent lists (`codex,claude,antigravity,copilot`) with `<names>` placeholder for future-proof documentation.
+
 ## 0.5.37
 
 - **Real-time animated progress bar for `ctx install`:** The progress spinner now updates in-place using raw stderr writes (`\r`) instead of being captured by `streamSetupOutput`. Uses a smooth 10-frame Braille spinner (`⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`) with a visual bar (`[████████░░░░]`) that animates at 80ms intervals.

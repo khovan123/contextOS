@@ -43,44 +43,45 @@ function usage() {
   return `ContextOS (ctx)
 
 Usage:
-  ctx install                                  Interactive multi-select agent installer
-  ctx install --agent <name>                   Install a specific agent (codex|claude|agy|copilot)
-  ctx install --copy                           Legacy: copy plugin folder only (no hooks/mcp)
-  ctx setup                                    Interactive full setup wizard
-  ctx setup --yes                              Auto-confirm all setup prompts
-  ctx setup --agents codex,claude,agy,copilot  Pre-select agents to install
-  ctx setup --no-rules                         Skip AGENTS.md rule sync
-  ctx setup --no-skills                        Skip skill sync
-  ctx setup --quiet                            Quiet mode (minimal output)
-  ctx debug -- "task"                          Debug a task with ContextOS tracing
-  ctx report                                   Show last ContextOS compliance report
-  ctx evidence                                 Show evidence from last report
-  ctx stats                                    Show workspace statistics
-  ctx benchmark -- "task"                      Benchmark workspace for a task
-  ctx sync --rules                             Sync AGENTS.md rules to all agents
-  ctx sync --rules --agents codex,claude,agy,copilot   Sync rules to specific agents only
-  ctx sync --rules --dry-run                   Preview rule sync without writing
-  ctx sync --rules --no-import-codex-mcp       Skip importing Codex MCP servers
-  ctx sync --skills                            Sync skills across agents
-  ctx sync --skills --agents codex,claude,agy,copilot  Sync skills to specific agents only
-  ctx sync --skills --dry-run                  Preview skill sync without writing
-  ctx sync --skills --no-collect               Skip collecting new skills
-  ctx sync --skills --no-embeddings            Skip embedding generation
-  ctx sync --skills --verbose                  Verbose skill sync output
-  ctx sync --workflows                         Sync workflows across agents
-  ctx sync --workflows --agents codex,claude,agy,copilot  Sync workflows to specific agents
-  ctx sync --workflows --dry-run               Preview workflow sync without writing
-  ctx embeddings warm -- "task"                Pre-warm embedding caches for a task
-  ctx ruler -- <ruler args>                    Passthrough to ruler CLI
-  ctx skillshare -- <skillshare args>          Passthrough to skillshare CLI
-  ctx --version                                Show installed version
+  ctx install                                       Interactive multi-select agent installer
+  ctx install --agent <name>                        Install a specific agent (codex|claude|antigravity|copilot)
+  ctx install --copy                                Legacy: copy plugin folder only (no hooks/mcp)
+  ctx setup                                         Interactive full setup wizard
+  ctx setup --yes                                   Auto-confirm all setup prompts
+  ctx setup --agents <names>                        Pre-select agents to install
+  ctx setup --no-rules                              Skip AGENTS.md rule sync
+  ctx setup --no-skills                             Skip skill sync
+  ctx setup --quiet                                 Quiet mode (minimal output)
+  ctx debug -- "task"                               Debug a task with ContextOS tracing
+  ctx report                                        Show last ContextOS compliance report
+  ctx evidence                                      Show evidence from last report
+  ctx stats                                         Show workspace statistics
+  ctx benchmark -- "task"                           Benchmark workspace for a task
+  ctx sync --rules                                  Sync AGENTS.md rules to all agents
+  ctx sync --rules --agents <names>                 Sync rules to specific agents only
+  ctx sync --rules --dry-run                        Preview rule sync without writing
+  ctx sync --rules --no-import-codex-mcp            Skip importing Codex MCP servers
+  ctx sync --skills                                 Sync skills across agents
+  ctx sync --skills --agents <names>                Sync skills to specific agents only
+  ctx sync --skills --dry-run                       Preview skill sync without writing
+  ctx sync --skills --no-collect                    Skip collecting new skills
+  ctx sync --skills --no-embeddings                 Skip embedding generation
+  ctx sync --skills --verbose                       Verbose skill sync output
+  ctx sync --workflows                              Sync workflows across agents
+  ctx sync --workflows --agents <names>             Sync workflows to specific agents
+  ctx sync --workflows --dry-run                    Preview workflow sync without writing
+  ctx embeddings warm -- "task"                     Pre-warm embedding caches for a task
+  ctx ruler -- <ruler args>                         Passthrough to ruler CLI
+  ctx skillshare -- <skillshare args>               Passthrough to skillshare CLI
+  ctx --help                                        Show this help message
+  ctx --version                                     Show installed version
 `;
 }
 
 const SUPPORTED_AGENTS = [
   { label: "Codex",              value: "codex",   selected: false },
   { label: "Claude Code",       value: "claude",  selected: false },
-  { label: "Antigravity (agy)",  value: "agy",     selected: false },
+  { label: "Antigravity",         value: "agy",     selected: false },
   { label: "GitHub Copilot",     value: "copilot", selected: false }
 ];
 
@@ -92,10 +93,10 @@ function normalizeInstallAgent(agent) {
       "Install one agent per command:",
       "  ctx install --agent codex",
       "  ctx install --agent claude",
-      "  ctx install --agent agy",
+      "  ctx install --agent antigravity",
       "  ctx install --agent copilot",
       "",
-      "Do not run `ctx install --agent codex|claude|agy|copilot`: `|` is a shell pipe."
+      "Do not run `ctx install --agent codex|claude|antigravity|copilot`: `|` is a shell pipe."
     ].join("\n"));
   }
   if (normalized === "antigravity") return "agy";
@@ -542,7 +543,7 @@ async function setup({ args = [], cwd = process.cwd() } = {}) {
         options: [
           { label: "Codex",              value: "codex",   selected: options.agents.includes("codex") },
           { label: "Claude",             value: "claude",  selected: options.agents.includes("claude") },
-          { label: "Antigravity (agy)",  value: "agy",     selected: options.agents.includes("agy") },
+          { label: "Antigravity",         value: "agy",     selected: options.agents.includes("agy") },
           { label: "GitHub Copilot",     value: "copilot", selected: options.agents.includes("copilot") }
         ]
       });
@@ -570,7 +571,7 @@ async function setup({ args = [], cwd = process.cwd() } = {}) {
   for (const line of setupSummaryLines({ cwd, ...options })) console.log(`│  ${line}`);
   console.log("");
 
-  if (!options.agents.length) throw new Error("No agents selected. Use --agents codex,claude,agy,copilot.");
+  if (!options.agents.length) throw new Error("No agents selected. Use --agents codex,claude,antigravity,copilot.");
 
   for (const agent of options.agents) {
     console.log(`◇ Setting up ${agent}...`);
@@ -612,26 +613,33 @@ async function setup({ args = [], cwd = process.cwd() } = {}) {
 const args = process.argv.slice(2);
 const command = args[0];
 
-function installAgentFromArgs(args) {
-  const agentFlag = args.indexOf("--agent");
-  if (agentFlag >= 0) return normalizeInstallAgent(args[agentFlag + 1] || "");
-  return null; // no --agent flag → interactive selection
+function installAgentsFromArgs(args) {
+  const agentFlag = Math.max(args.indexOf("--agent"), args.indexOf("--agents"));
+  if (agentFlag >= 0) {
+    const value = args[agentFlag + 1] || "";
+    return parseAgentList(value).map(normalizeInstallAgent).filter(Boolean);
+  }
+  return null; // no flag → interactive selection
 }
 
 try {
-  if (!command || command === "--help" || command === "-h") {
+  if (!command || command === "--help" || command === "-h" || command === "help") {
     console.log(usage());
   } else if (command === "--version" || command === "-v") {
     console.log(packageVersion());
   } else if (command === "install") {
     const copy = args.includes("--copy");
-    const explicitAgent = installAgentFromArgs(args);
+    const explicitAgents = installAgentsFromArgs(args);
 
-    if (explicitAgent) {
-      // Direct mode: ctx install --agent <name>
-      console.log(`◇ Installing ${explicitAgent}...`);
-      await streamSetupOutput(() => install({ copy, agent: explicitAgent }));
-      console.log("");
+    if (explicitAgents && explicitAgents.length) {
+      // Direct mode: ctx install --agents antigravity,codex
+      for (const agent of explicitAgents) {
+        console.log(`◇ Installing ${agent}...`);
+        await streamSetupOutput(() => install({ copy, agent }));
+        console.log("");
+      }
+    } else if (explicitAgents && !explicitAgents.length) {
+      console.log("No valid agents specified. Use --agents codex,claude,antigravity,copilot.");
     } else {
       // Interactive mode: ctx install
       const selected = await multiSelect({
