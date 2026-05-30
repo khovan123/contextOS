@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.28
+
+- **Consistent `◇`/`│` UI formatting for all install and setup output:** All progress bars, detail lines, and status messages from `ctx install` and `ctx setup` are now captured and re-emitted with `◇` step headers and `│`-indented detail lines. Added `captureSetupOutput` helper that intercepts both `console.log` and `process.stderr.write` to ensure nothing leaks unprefixed.
+- **Fix broken `syncSkills` call in setup:** Restored the missing `syncSkills()` invocation that was accidentally dropped during a previous edit.
+
 ## 0.5.27
 
 - **Fix Windows `spawnSync`/`execFileSync` ENOENT across all modules:** Added `shell: true` to every remaining child-process invocation in `ruler-sync.js`, `skillshare-sync.js`, `passthrough.js`, and `measure.js`. Without this, Windows cannot resolve `.cmd`/`.ps1` shims (e.g. `npm.cmd`, `ruler.cmd`, `skillshare.cmd`) via PATH, causing `ctx setup` to crash during the Ruler/Skillshare installation step.

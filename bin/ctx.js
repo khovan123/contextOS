@@ -98,6 +98,29 @@ function normalizeInstallAgent(agent) {
   return normalized;
 }
 
+/**
+ * Capture all console.log and process.stderr.write output from an async fn.
+ * Returns an array of clean text lines (no \r, no trailing whitespace).
+ */
+async function captureSetupOutput(fn) {
+  const lines = [];
+  const origLog = console.log;
+  const origStderrWrite = process.stderr.write;
+  console.log = (...args) => lines.push(args.map(String).join(" "));
+  process.stderr.write = (chunk) => {
+    const text = String(chunk).replace(/\r/g, "").trim();
+    if (text) lines.push(text);
+    return true;
+  };
+  try {
+    await fn();
+  } finally {
+    console.log = origLog;
+    process.stderr.write = origStderrWrite;
+  }
+  return lines;
+}
+
 function createInstallProgress({ quiet = false } = {}) {
   const enabled = !quiet && process.stderr.isTTY;
   const frames = ["-", "\\", "|", "/"];
@@ -537,24 +560,26 @@ async function setup({ args = [], cwd = process.cwd() } = {}) {
   if (!options.agents.length) throw new Error("No agents selected. Use --agents codex,claude,agy.");
 
   for (const agent of options.agents) {
-    console.log(`● Setting up ${agent}...`);
-    await install({ agent, copy: false });
+    console.log(`◇ Setting up ${agent}...`);
+    const lines = await captureSetupOutput(() => install({ agent, copy: false }));
+    for (const line of lines) console.log(`│  ${line}`);
   }
 
   if (options.syncRules) {
-    console.log("● Syncing project rules and MCP servers...");
+    console.log("◇ Syncing project rules and MCP servers...");
     const syncAgents = options.agents.map((agent) => agent === "agy" ? "antigravity" : agent).join(",");
     const syncArgs = ["--rules", "--agents", syncAgents];
     if (options.yes) syncArgs.push("--yes");
-    await syncRules({ cwd, rootDir, args: syncArgs });
+    const lines = await captureSetupOutput(() => syncRules({ cwd, rootDir, args: syncArgs }));
+    for (const line of lines) console.log(`│  ${line}`);
   }
 
   if (options.syncSkills) {
-    console.log("● Syncing skills...");
+    console.log("◇ Syncing skills...");
     const skillAgents = options.agents.map((agent) => agent === "agy" ? "antigravity" : agent).join(",");
     const syncArgs = ["--skills", "--agents", skillAgents];
     if (options.yes) syncArgs.push("--yes");
-    await syncSkills({
+    const lines = await captureSetupOutput(() => syncSkills({
       cwd,
       args: syncArgs,
       rebuildSkillEmbeddings: async ({ cwd: skillCwd, sourceDir }) => warmSkillEmbeddings({
@@ -563,14 +588,15 @@ async function setup({ args = [], cwd = process.cwd() } = {}) {
         allowRemote: !isModelCacheReady(contextOSDataDir()),
         skills: scanSkills({ cwd: skillCwd, roots: [sourceDir] })
       })
-    });
+    }));
+    for (const line of lines) console.log(`│  ${line}`);
   }
 
   console.log("");
-  console.log("╭─ ContextOS is ready ───────────────────────────────────────╮");
-  console.log("│ Next: restart/open your agent from this project directory. │");
-  console.log("│ Try: ctx debug -- \"Recheck authen flow\"                  │");
-  console.log("╰───────────────────────────────────────────────────────────╯");
+  console.log("◇ ContextOS is ready");
+  console.log("│  Next: restart/open your agent from this project directory.");
+  console.log("│  Try: ctx debug -- \"Recheck authen flow\"");
+  console.log("");
 }
 
 const args = process.argv.slice(2);
@@ -593,7 +619,10 @@ try {
 
     if (explicitAgent) {
       // Direct mode: ctx install --agent <name>
-      await install({ copy, agent: explicitAgent });
+      console.log(`◇ Installing ${explicitAgent}...`);
+      const lines = await captureSetupOutput(() => install({ copy, agent: explicitAgent }));
+      for (const line of lines) console.log(`│  ${line}`);
+      console.log("");
     } else {
       // Interactive mode: ctx install
       const selected = await multiSelect({
@@ -604,7 +633,9 @@ try {
         console.log("No agents selected. Nothing to install.");
       } else {
         for (const agent of selected) {
-          await install({ copy, agent });
+          console.log(`◇ Installing ${agent}...`);
+          const lines = await captureSetupOutput(() => install({ copy, agent }));
+          for (const line of lines) console.log(`│  ${line}`);
           console.log("");
         }
       }
