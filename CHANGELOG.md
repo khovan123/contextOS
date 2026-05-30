@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.37
+
+- **Real-time animated progress bar for `ctx install`:** The progress spinner now updates in-place using raw stderr writes (`\r`) instead of being captured by `streamSetupOutput`. Uses a smooth 10-frame Braille spinner (`⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`) with a visual bar (`[████████░░░░]`) that animates at 80ms intervals.
+- **Clean install output:** Reduced verbose per-agent install summary from 10+ lines of paths to a compact 4-line summary (Hooks →, MCP →, Embeddings count, restart instruction). Removed redundant "embedding model already cached" log line from `warmInstallEmbeddings`.
+- **Fix `streamSetupOutput` breaking spinner:** Previously intercepted `process.stderr.write` and converted `\r` carriage returns to newlines, preventing in-place updates. Now only intercepts `console.log` for `│  ` prefixed output, leaving stderr untouched for spinner rendering.
+
 ## 0.5.36
 
 - **Fix ctx_score_context MCP output not rendering in Antigravity editor:** The `content` text block returned by the MCP tool previously only contained raw telemetry JSON, which editors cannot render as user-facing context. Now the tool uses `scheduleContext()` to produce the same human-readable markdown (Critical ContextOS rules, Suggested files, Skills, Workflows) that the hook path generates, and returns it as the primary `content[0].text` block. Telemetry JSON is pushed to a secondary content block. This ensures Antigravity (and any MCP-compatible editor) displays the scored rules and file suggestions.
