@@ -7,6 +7,8 @@
 - **Prefixed install output (`runPrefixed`):** All child-process output during installation (including interactive npx prompts like "Ok to proceed?") is piped through a line-by-line prefixer that prepends `│  ` to every line. This keeps the visual box style consistent and prevents raw command output from breaking the layout. `stdin` remains inherited so users can still answer interactive prompts.
 - **`multiSelect` hint support:** The multi-select component now accepts an optional `hint` property on each option, rendered as a dimmed indented line below the label. Used for URLs but available for any contextual sub-text.
 - **Library install metadata:** `skill-library.js` now exports `getInstallCommands(libraryId)` returning structured install info (command, verify step, type) for each library source, keeping install logic out of the main CLI.
+- **Setup fallback when no skills found:** During `ctx setup`, if `syncSkills` completes but `detectExistingSkills` finds zero skills on the machine, the CLI now automatically offers the community skill library installer. After successful install, `syncSkills` re-runs to distribute the newly installed skills to all selected agents.
+- **Reusable `runCommunitySkillInstaller()`:** Extracted the fetch → select → install flow into a shared function used by both `ctx skills` and the `ctx setup` fallback. Returns the number of successfully installed sources for downstream branching.
 
 ## 0.5.40
 

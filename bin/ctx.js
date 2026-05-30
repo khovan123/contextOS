@@ -28,7 +28,7 @@ import { installCopilotHooks } from "../plugins/ctx/lib/copilot-hooks.js";
 import { installCopilotMcp } from "../plugins/ctx/lib/copilot-mcp.js";
 import { syncRules } from "../plugins/ctx/lib/ruler-sync.js";
 import { writeInnerGitignore, ensureRootGitignore } from "../plugins/ctx/lib/gitignore.js";
-import { syncSkills } from "../plugins/ctx/lib/skillshare-sync.js";
+import { syncSkills, detectExistingSkills } from "../plugins/ctx/lib/skillshare-sync.js";
 import { scanSkills, warmSkillEmbeddings } from "../plugins/ctx/lib/skill-discoverer.js";
 import { parsePassthroughArgs, runPassthrough } from "../plugins/ctx/lib/passthrough.js";
 import { parseAgentList, parseSetupArgs, setupSummaryLines } from "../plugins/ctx/lib/setup-wizard.js";
@@ -65,6 +65,115 @@ function runPrefixed(cmd) {
     pipe(child.stderr, process.stderr);
     child.on("close", (code) => code === 0 ? resolve() : reject(new Error(`exit code ${code}`)));
   });
+}
+
+/**
+ * Interactive community skill library installer.
+ * Fetches library metadata, shows a multiSelect, and runs install commands.
+ * @param {string[]} agents - Agent names to filter libraries for.
+ * @returns {Promise<number>} Number of successfully installed sources.
+ */
+async function runCommunitySkillInstaller(agents = []) {
+  const RESET = "\x1B[0m";
+  const DIM = "\x1B[2m";
+  const CYAN = "\x1B[36m";
+  const GREEN = "\x1B[32m";
+  const YELLOW = "\x1B[33m";
+  const BOLD = "\x1B[1m";
+
+  console.log("Fetching community skill libraries...\n");
+  const libraryResults = await fetchSkillsForAgents(agents, { dataDir: contextOSDataDir() });
+
+  const totalSkills = libraryResults.reduce((sum, r) => sum + r.count, 0);
+  if (totalSkills === 0) {
+    console.log("No skills found. Check your network connection or try --refresh.");
+    return 0;
+  }
+
+  // Compact header
+  console.log(`${CYAN}◇${RESET} ${BOLD}Community skill libraries available:${RESET}`);
+  console.log(`${DIM}│${RESET}  Browse and install curated skills from the community.`);
+  console.log(`${DIM}│${RESET}`);
+
+  const allLibs = getAllLibraries();
+  const availableLibs = allLibs.filter((lib) => {
+    const result = libraryResults.find((r) => r.library.id === lib.id);
+    return result && result.count > 0;
+  });
+
+  if (availableLibs.length === 0) {
+    console.log("No installable libraries available.");
+    return 0;
+  }
+
+  const selectedSources = await multiSelect({
+    message: "Select skill sources to install:",
+    options: availableLibs.map((lib) => {
+      const result = libraryResults.find((r) => r.library.id === lib.id);
+      return {
+        label: `${lib.name} (${result?.count || 0} skills)`,
+        value: lib.id,
+        hint: lib.url,
+        selected: false
+      };
+    })
+  });
+
+  if (!selectedSources || selectedSources.length === 0) {
+    console.log(`\n${DIM}No sources selected.${RESET}`);
+    return 0;
+  }
+
+  // Install each selected source
+  let successCount = 0;
+  for (const libId of selectedSources) {
+    const lib = allLibs.find((l) => l.id === libId);
+    if (!lib) continue;
+
+    const installInfo = getInstallCommands(libId);
+    if (!installInfo) {
+      console.log(`${YELLOW}⚠${RESET}  No install info for ${lib.name}. Visit: ${lib.url}`);
+      continue;
+    }
+
+    console.log("");
+    console.log(`${CYAN}◇${RESET} ${BOLD}Installing from ${lib.name}${RESET}`);
+
+    if (installInfo.type === "manual") {
+      console.log(`${DIM}│${RESET}  ${installInfo.instructions}`);
+      console.log(`${DIM}│${RESET}  ${DIM}URL: ${lib.url}${RESET}`);
+      continue;
+    }
+
+    const installCmd = installInfo.fullInstall;
+    if (installCmd) {
+      console.log(`${DIM}│${RESET}  ${GREEN}$ ${installCmd}${RESET}`);
+      console.log(`${DIM}│${RESET}`);
+
+      try {
+        await runPrefixed(installCmd);
+        successCount++;
+
+        if (installInfo.verify) {
+          try { await runPrefixed(installInfo.verify); } catch { /* best-effort */ }
+        }
+        console.log(`${DIM}│${RESET}`);
+        console.log(`${GREEN}✔${RESET} ${lib.name} installed successfully.`);
+      } catch (err) {
+        console.error(`${YELLOW}⚠${RESET}  Install failed for ${lib.name}. Try manually:`);
+        console.error(`   ${installCmd}`);
+        console.error(`   ${DIM}${err.message}${RESET}`);
+      }
+    }
+  }
+
+  // Summary
+  console.log("");
+  if (successCount > 0) {
+    console.log(`${GREEN}✔${RESET} ${BOLD}${successCount} source${successCount > 1 ? "s" : ""} installed.${RESET}`);
+    console.log(`${DIM}│${RESET}  Restart your agent to pick up new skills.`);
+  }
+  return successCount;
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -626,7 +735,8 @@ async function setup({ args = [], cwd = process.cwd() } = {}) {
     const skillAgents = options.agents.map((agent) => agent === "agy" ? "antigravity" : agent).join(",");
     const syncArgs = ["--skills", "--agents", skillAgents];
     if (options.yes) syncArgs.push("--yes");
-    await streamSetupOutput(() => syncSkills({
+
+    const doSyncSkills = async () => streamSetupOutput(() => syncSkills({
       cwd,
       args: syncArgs,
       rebuildSkillEmbeddings: async ({ cwd: skillCwd, sourceDir }) => warmSkillEmbeddings({
@@ -636,6 +746,25 @@ async function setup({ args = [], cwd = process.cwd() } = {}) {
         skills: scanSkills({ cwd: skillCwd, roots: [sourceDir] })
       })
     }));
+
+    await doSyncSkills();
+
+    // Fallback: if no skills were found, offer community library installer
+    const existing = detectExistingSkills({ cwd });
+    const totalExisting = existing.reduce((sum, e) => sum + e.count, 0);
+    if (totalExisting === 0) {
+      console.log("");
+      console.log(`${YELLOW}⚠${RESET}  No skills found on this machine.`);
+      console.log(`${DIM}│${RESET}  Install community skills to get started.`);
+      console.log("");
+
+      const installed = await runCommunitySkillInstaller(options.agents);
+      if (installed > 0) {
+        console.log("");
+        console.log("◇ Re-syncing skills after install...");
+        await doSyncSkills();
+      }
+    }
   }
 
   console.log("");
@@ -643,12 +772,6 @@ async function setup({ args = [], cwd = process.cwd() } = {}) {
   console.log("│  Next: restart/open your agent from this project directory.");
   console.log("│  Try: ctx debug -- \"Recheck authen flow\"");
   console.log("");
-
-  // Recommend community skills based on selected agents
-  try {
-    const libraryResults = await fetchSkillsForAgents(options.agents, { dataDir: contextOSDataDir() });
-    printSkillRecommendations(libraryResults);
-  } catch { /* skill library is best-effort */ }
 }
 
 const args = process.argv.slice(2);
@@ -748,105 +871,9 @@ try {
     const YELLOW = "\x1B[33m";
     const BOLD = "\x1B[1m";
 
-    console.log("Fetching community skill libraries...\n");
-    const libraryResults = await fetchSkillsForAgents(agents, {
-      dataDir: contextOSDataDir()
-    });
-
-    const totalSkills = libraryResults.reduce((sum, r) => sum + r.count, 0);
-    if (totalSkills === 0) {
-      console.log("No skills found. Check your network connection or try --refresh.");
-      process.exit(1);
-    }
-
-    // Compact header
-    console.log(`${CYAN}◇${RESET} ${BOLD}Community skill libraries available:${RESET}`);
-    console.log(`${DIM}│${RESET}  Browse and install curated skills from the community.`);
-    console.log(`${DIM}│${RESET}`);
-
-    // Multi-select which sources to install from
-    const allLibs = getAllLibraries();
-    const availableLibs = allLibs.filter((lib) => {
-      const result = libraryResults.find((r) => r.library.id === lib.id);
-      return result && result.count > 0;
-    });
-
-    if (availableLibs.length === 0) {
-      console.log("No installable libraries available.");
-      process.exit(0);
-    }
-
-    const selectedSources = await multiSelect({
-      message: "Select skill sources to install:",
-      options: availableLibs.map((lib) => {
-        const result = libraryResults.find((r) => r.library.id === lib.id);
-        return {
-          label: `${lib.name} (${result?.count || 0} skills)`,
-          value: lib.id,
-          hint: lib.url,
-          selected: false
-        };
-      })
-    });
-
-    if (!selectedSources || selectedSources.length === 0) {
-      console.log(`\n${DIM}No sources selected.${RESET}`);
-      process.exit(0);
-    }
-
-    // Install each selected source using its provided commands
-    let successCount = 0;
-    for (const libId of selectedSources) {
-      const lib = allLibs.find((l) => l.id === libId);
-      if (!lib) continue;
-
-      const installInfo = getInstallCommands(libId);
-      if (!installInfo) {
-        console.log(`${YELLOW}⚠${RESET}  No install info for ${lib.name}. Visit: ${lib.url}`);
-        continue;
-      }
-
-      console.log("");
-      console.log(`${CYAN}◇${RESET} ${BOLD}Installing from ${lib.name}${RESET}`);
-
-      if (installInfo.type === "manual") {
-        console.log(`${DIM}│${RESET}  ${installInfo.instructions}`);
-        console.log(`${DIM}│${RESET}  ${DIM}URL: ${lib.url}${RESET}`);
-        continue;
-      }
-
-      const installCmd = installInfo.fullInstall;
-      if (installCmd) {
-        console.log(`${DIM}│${RESET}  ${GREEN}$ ${installCmd}${RESET}`);
-        console.log(`${DIM}│${RESET}`);
-
-        try {
-          await runPrefixed(installCmd);
-          successCount++;
-
-          // Run verify command if available
-          if (installInfo.verify) {
-            try {
-              await runPrefixed(installInfo.verify);
-            } catch { /* verify is best-effort */ }
-          }
-          console.log(`${DIM}│${RESET}`);
-          console.log(`${GREEN}✔${RESET} ${lib.name} installed successfully.`);
-        } catch (err) {
-          console.error(`${YELLOW}⚠${RESET}  Install failed for ${lib.name}. Try manually:`);
-          console.error(`   ${installCmd}`);
-          console.error(`   ${DIM}${err.message}${RESET}`);
-        }
-      }
-    }
-
-    // Final summary
-    console.log("");
-    if (successCount > 0) {
-      console.log(`${GREEN}✔${RESET} ${BOLD}${successCount} source${successCount > 1 ? "s" : ""} installed.${RESET}`);
-      console.log(`${DIM}│${RESET}  Restart your agent to pick up new skills.`);
-    } else {
-      console.log(`${DIM}No installations were completed.${RESET}`);
+    const installed = await runCommunitySkillInstaller(agents);
+    if (installed === 0) {
+      console.log(`\n${DIM}No installations were completed.${RESET}`);
     }
     console.log("");
   } else if (command === "sync") {
