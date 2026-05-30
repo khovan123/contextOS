@@ -64,7 +64,11 @@ try {
   assert.ok(first.structuredContent.scoredRules.length > 0);
   assert.ok(first.structuredContent.suggestedFiles.length > 0);
   assert.ok(first.structuredContent.scoredRules[0].score >= 0.5);
-  assert.ok(JSON.parse(first.content[0].text).rulesParsed > 0);
+  // First content block is human-readable context; last block is telemetry JSON
+  assert.ok(first.content.length >= 2, "expected at least 2 content blocks (context + telemetry)");
+  assert.ok(/Critical ContextOS rules|Suggested files|upload|moderation/i.test(first.content[0].text), "first content block should be human-readable context");
+  const telemetryBlock = first.content[first.content.length - 1];
+  assert.ok(JSON.parse(telemetryBlock.text).rulesParsed > 0);
 
   const semanticResults = await Promise.all(semanticPrompts.map((prompt) => callScore(client, cwd, prompt)));
   for (const result of semanticResults) {

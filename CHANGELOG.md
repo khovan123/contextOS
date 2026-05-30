@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.36
+
+- **Fix ctx_score_context MCP output not rendering in Antigravity editor:** The `content` text block returned by the MCP tool previously only contained raw telemetry JSON, which editors cannot render as user-facing context. Now the tool uses `scheduleContext()` to produce the same human-readable markdown (Critical ContextOS rules, Suggested files, Skills, Workflows) that the hook path generates, and returns it as the primary `content[0].text` block. Telemetry JSON is pushed to a secondary content block. This ensures Antigravity (and any MCP-compatible editor) displays the scored rules and file suggestions.
+- **Updated MCP protocol smoke test:** Assertions now validate the two-block content structure — human-readable context first, telemetry JSON last.
+
 ## 0.5.35
 
 - **Add GitHub Copilot agent support:** New `copilot` agent for `ctx install --agent copilot` and `ctx setup`. Creates `.github/copilot-instructions.md` with ContextOS integration marker and configures `ctx-mcp` MCP server in `.vscode/mcp.json`. Copilot is now recognized by Ruler (`ctx sync --rules`) and Skillshare (`ctx sync --skills`) alongside existing codex, claude, and agy agents.

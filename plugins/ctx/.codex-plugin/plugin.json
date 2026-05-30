@@ -1,6 +1,6 @@
 {
   "name": "ctx",
-  "version": "0.5.35",
+  "version": "0.5.36",
   "description": "Inject task-relevant AGENTS.md rules into Codex through plugin hooks.",
   "author": {
     "name": "ContextOS"

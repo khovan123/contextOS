@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
 import { scoreContext } from "../lib/score-context.js";
+import { scheduleContext } from "../lib/scheduler.js";
 
 export function createContextOSMcpServer({ dataDir }) {
   const server = new McpServer({
@@ -51,13 +52,31 @@ export function createContextOSMcpServer({ dataDir }) {
       skills: args.skills,
       workflows: args.workflows
     });
+
+    // Format the same human-readable context that the hook path produces
+    const scheduled = scheduleContext({
+      rules: result.scoredRules,
+      relevantFiles: result.suggestedFiles,
+      suggestedSkills: result.suggestedSkills,
+      suggestedWorkflows: result.suggestedWorkflows
+    });
+
+    const contextText = scheduled.additionalContext || "";
+    const contentBlocks = [];
+
+    // Primary block: human-readable rules, files, skills, workflows
+    if (contextText) {
+      contentBlocks.push({ type: "text", text: contextText });
+    }
+
+    // Secondary block: telemetry metadata
+    contentBlocks.push({
+      type: "text",
+      text: JSON.stringify(result.telemetry)
+    });
+
     return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify(result.telemetry)
-        }
-      ],
+      content: contentBlocks,
       structuredContent: {
         scoredRules: result.scoredRules,
         suggestedFiles: result.suggestedFiles,
@@ -70,3 +89,4 @@ export function createContextOSMcpServer({ dataDir }) {
 
   return server;
 }
+
