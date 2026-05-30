@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.30
+
+- **Fix Windows skillshare post-install hang:** After the PowerShell installer adds skillshare to PATH, the current Node.js process still has the old `process.env.PATH`. Now injects the known Windows install directory (`%LOCALAPPDATA%\\Programs\\skillshare`) into `process.env.PATH` immediately after install, so `skillshare --version`, `skillshare init`, and subsequent calls resolve without restarting the terminal.
+
 ## 0.5.29
 
 - **Fix Windows skillshare install `iex` not recognized:** The PowerShell pipe `irm ... | iex` was being intercepted by `cmd.exe` (the outer shell via `shell: true`) instead of PowerShell. Switched to `execSync` with properly double-quoted `-Command` argument so the pipe stays inside PowerShell's scope.
