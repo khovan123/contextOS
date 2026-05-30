@@ -34,6 +34,8 @@ import { parsePassthroughArgs, runPassthrough } from "../plugins/ctx/lib/passthr
 import { parseAgentList, parseSetupArgs, setupSummaryLines } from "../plugins/ctx/lib/setup-wizard.js";
 import { multiSelect } from "../plugins/ctx/lib/multi-select.js";
 import { syncWorkflows, warmWorkflowEmbeddings } from "../plugins/ctx/lib/workflow-discoverer.js";
+import { checkForUpdate } from "../plugins/ctx/lib/update-notifier.js";
+import { fetchSkillsForAgents, printSkillRecommendations, getAllLibraries } from "../plugins/ctx/lib/skill-library.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
@@ -70,6 +72,9 @@ Usage:
   ctx sync --workflows                              Sync workflows across agents
   ctx sync --workflows --agents <names>             Sync workflows to specific agents
   ctx sync --workflows --dry-run                    Preview workflow sync without writing
+  ctx skills                                        Browse community skill libraries
+  ctx skills --agents <names>                       Filter skills for specific agents
+  ctx skills --refresh                              Force refresh skill library cache
   ctx embeddings warm -- "task"                     Pre-warm embedding caches for a task
   ctx ruler -- <ruler args>                         Passthrough to ruler CLI
   ctx skillshare -- <skillshare args>               Passthrough to skillshare CLI
@@ -608,6 +613,12 @@ async function setup({ args = [], cwd = process.cwd() } = {}) {
   console.log("│  Next: restart/open your agent from this project directory.");
   console.log("│  Try: ctx debug -- \"Recheck authen flow\"");
   console.log("");
+
+  // Recommend community skills based on selected agents
+  try {
+    const libraryResults = await fetchSkillsForAgents(options.agents, { dataDir: contextOSDataDir() });
+    printSkillRecommendations(libraryResults);
+  } catch { /* skill library is best-effort */ }
 }
 
 const args = process.argv.slice(2);
@@ -621,6 +632,8 @@ function installAgentsFromArgs(args) {
   }
   return null; // no flag → interactive selection
 }
+
+const notifyUpdate = checkForUpdate({ currentVersion: packageVersion(), dataDir: contextOSDataDir() });
 
 try {
   if (!command || command === "--help" || command === "-h" || command === "help") {
@@ -654,6 +667,11 @@ try {
           await streamSetupOutput(() => install({ copy, agent }));
           console.log("");
         }
+        // Recommend community skills based on selected agents
+        try {
+          const libraryResults = await fetchSkillsForAgents(selected, { dataDir: contextOSDataDir() });
+          printSkillRecommendations(libraryResults);
+        } catch { /* skill library is best-effort */ }
       }
     }
   } else if (command === "setup") {
@@ -682,6 +700,31 @@ try {
     const task = marker >= 0 ? args.slice(marker + 1).join(" ") : args.slice(1).join(" ");
     if (!task.trim()) throw new Error('Usage: ctx benchmark -- "task"');
     console.log(formatBenchmark(benchmarkWorkspace({ cwd: process.cwd(), task })));
+  } else if (command === "skills") {
+    // Browse community skill libraries
+    const agentsFlag = args.indexOf("--agents");
+    const forceRefresh = args.includes("--refresh");
+    let agents;
+    if (agentsFlag >= 0 && args[agentsFlag + 1]) {
+      agents = args[agentsFlag + 1].split(",").map((a) => a.trim()).filter(Boolean);
+    } else {
+      agents = ["codex", "claude", "agy", "copilot"];
+    }
+    console.log("Fetching community skill libraries...\n");
+    const libraryResults = await fetchSkillsForAgents(agents, {
+      dataDir: contextOSDataDir()
+    });
+    printSkillRecommendations(libraryResults);
+    console.log("");
+    const totalSkills = libraryResults.reduce((sum, r) => sum + r.count, 0);
+    if (totalSkills === 0) {
+      console.log("No skills found. Check your network connection or try --refresh.");
+    } else {
+      console.log(`Total: ${totalSkills} skills across ${libraryResults.filter((r) => r.count > 0).length} libraries.`);
+      console.log("");
+      console.log("To install skills, visit the library URLs above or use:");
+      console.log("  ctx sync --skills       Sync skills across agents via skillshare");
+    }
   } else if (command === "sync") {
     if (args.includes("--workflows")) {
       await syncWorkflows({
@@ -719,4 +762,6 @@ try {
 } catch (error) {
   console.error(error.message);
   process.exitCode = 1;
+} finally {
+  await notifyUpdate();
 }

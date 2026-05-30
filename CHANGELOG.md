@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.40
+
+- **Update notifier:** `ctx` now checks npm for newer versions in the background (once per day, 3s timeout). If a newer release exists, a boxed notice is printed at the very end of any command: `Update available: 0.5.39 → 0.5.40`. Check result is cached in `$CONTEXTOS_DATA/.update-check.json` to avoid repeated network calls.
+- **Community skill library browser (`ctx skills`):** New command to browse curated skill libraries from the community. Fetches and parses README files from 4 sources:
+  - [antigravity-awesome-skills](https://github.com/sickn33/antigravity-awesome-skills) — 1,400+ universal skills
+  - [awesome-claude-skills](https://github.com/ComposioHQ/awesome-claude-skills) — Claude Code skills & workflows
+  - [awesome-codex-skills](https://github.com/ComposioHQ/awesome-codex-skills) — Codex CLI skills & automations
+  - [awesome-copilot](https://github.com/github/awesome-copilot) — GitHub Copilot instructions & agents
+  Results are cached for 24 hours. Use `--agents <names>` to filter and `--refresh` to force refetch.
+- **Post-install skill recommendations:** After interactive `ctx install` or `ctx setup`, a styled recommendation panel shows top 5 skills from each relevant library with descriptions and repo URLs. This guides new users toward useful community skills immediately after setup.
+- **Test stability:** Increased timeout for MCP bridge fallback test to prevent CI flakiness.
+
 ## 0.5.39
 
 - **Report layout fix:** Replaced ASCII table formatting with clean markdown output. Reports now render correctly in all agent UIs (Antigravity, Claude Code, Codex) without truncation or line-wrapping issues.

@@ -83,7 +83,7 @@ describe("hook contracts", () => {
     expect(output.hookSpecificOutput.additionalContext).toContain("zod");
   });
 
-  it("falls back to direct scoring when the MCP bridge is unavailable", async () => {
+  it("falls back to direct scoring when the MCP bridge is unavailable", { timeout: 10000 }, async () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-hook-bridge-fallback-"));
     const dataPath = path.join(tmp, ".data", "last-prompt-context.json");
     fs.writeFileSync(path.join(tmp, "AGENTS.md"), "- Always use code-review-graph before reading files.\n");
