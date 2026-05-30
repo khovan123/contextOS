@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.29
+
+- **Fix Windows skillshare install `iex` not recognized:** The PowerShell pipe `irm ... | iex` was being intercepted by `cmd.exe` (the outer shell via `shell: true`) instead of PowerShell. Switched to `execSync` with properly double-quoted `-Command` argument so the pipe stays inside PowerShell's scope.
+
 ## 0.5.28
 
 - **Consistent `◇`/`│` UI formatting for all install and setup output:** All progress bars, detail lines, and status messages from `ctx install` and `ctx setup` are now captured and re-emitted with `◇` step headers and `│`-indented detail lines. Added `captureSetupOutput` helper that intercepts both `console.log` and `process.stderr.write` to ensure nothing leaks unprefixed.

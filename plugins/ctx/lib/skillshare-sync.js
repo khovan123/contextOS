@@ -120,7 +120,7 @@ export async function installSkillshare({
 
   const osName = detectOS(platform);
   if (osName === "windows") {
-    run("powershell", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", `irm ${INSTALL_PS_URL} | iex`], { stdio: "inherit", dryRun });
+    runShellCommand(`powershell -NoProfile -ExecutionPolicy Bypass -Command "irm ${INSTALL_PS_URL} | iex"`, { stdio: "inherit", dryRun });
   } else {
     runShellCommand(`curl -fsSL ${INSTALL_SH_URL} | sh`, { stdio: "inherit", dryRun });
   }
