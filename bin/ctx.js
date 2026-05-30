@@ -41,41 +41,39 @@ function usage() {
   return `ContextOS (ctx)
 
 Usage:
-  ctx install                  (interactive agent selection)
-  ctx install --agent codex    (direct install for a specific agent)
-  ctx install --agent claude
-  ctx install --agent agy
-  ctx install --quiet
-  ctx install --inject
-  ctx install --copy
-  ctx setup
-  ctx setup --yes
-  ctx setup --agents codex,claude,agy
-  ctx setup --no-rules
-  ctx setup --no-skills
-  ctx setup --quiet
-  ctx debug -- "task"
-  ctx report
-  ctx evidence
-  ctx stats
-  ctx benchmark -- "task"
-  ctx sync --rules
-  ctx sync --rules --agents codex,claude,antigravity
-  ctx sync --rules --dry-run
-  ctx sync --rules --no-import-codex-mcp
-  ctx sync --skills
-  ctx sync --workflows
-  ctx sync --workflows --agents codex,claude,agy
-  ctx sync --workflows --dry-run
-  ctx sync --skills --dry-run
-  ctx sync --skills --no-collect
-  ctx sync --skills --no-embeddings
-  ctx sync --skills --verbose
-  ctx sync --skills --agents codex,claude,antigravity
-  ctx embeddings warm -- "task"
-  ctx ruler -- <ruler args>
-  ctx skillshare -- <skillshare args>
-  ctx --version
+  ctx install                                  Interactive multi-select agent installer
+  ctx install --agent <name>                   Install a specific agent (codex|claude|agy)
+  ctx install --quiet                          Install without prompt injection (logging only)
+  ctx install --inject                         Explicitly enable prompt context injection
+  ctx install --copy                           Legacy: copy plugin folder only (no hooks/mcp)
+  ctx setup                                    Interactive full setup wizard
+  ctx setup --yes                              Auto-confirm all setup prompts
+  ctx setup --agents codex,claude,agy          Pre-select agents to install
+  ctx setup --no-rules                         Skip AGENTS.md rule sync
+  ctx setup --no-skills                        Skip skill sync
+  ctx setup --quiet                            Quiet mode (minimal output)
+  ctx debug -- "task"                          Debug a task with ContextOS tracing
+  ctx report                                   Show last ContextOS compliance report
+  ctx evidence                                 Show evidence from last report
+  ctx stats                                    Show workspace statistics
+  ctx benchmark -- "task"                      Benchmark workspace for a task
+  ctx sync --rules                             Sync AGENTS.md rules to all agents
+  ctx sync --rules --agents codex,claude,agy   Sync rules to specific agents only
+  ctx sync --rules --dry-run                   Preview rule sync without writing
+  ctx sync --rules --no-import-codex-mcp       Skip importing Codex MCP servers
+  ctx sync --skills                            Sync skills across agents
+  ctx sync --skills --agents codex,claude,agy  Sync skills to specific agents only
+  ctx sync --skills --dry-run                  Preview skill sync without writing
+  ctx sync --skills --no-collect               Skip collecting new skills
+  ctx sync --skills --no-embeddings            Skip embedding generation
+  ctx sync --skills --verbose                  Verbose skill sync output
+  ctx sync --workflows                         Sync workflows across agents
+  ctx sync --workflows --agents codex,claude,agy  Sync workflows to specific agents
+  ctx sync --workflows --dry-run               Preview workflow sync without writing
+  ctx embeddings warm -- "task"                Pre-warm embedding caches for a task
+  ctx ruler -- <ruler args>                    Passthrough to ruler CLI
+  ctx skillshare -- <skillshare args>          Passthrough to skillshare CLI
+  ctx --version                                Show installed version
 `;
 }
 
