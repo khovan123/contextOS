@@ -25,7 +25,7 @@ function runCommand(command, args = [], { cwd = process.cwd(), stdio = "pipe", d
   return { stdout: stdout || "" };
 }
 
-function runShell(command, { cwd = process.cwd(), stdio = "inherit", dryRun = false } = {}) {
+function runShell(command, { cwd = process.cwd(), stdio = "pipe", dryRun = false } = {}) {
   if (dryRun) return { stdout: "", skipped: true };
   const stdout = execSync(command, { cwd, stdio, encoding: "utf8" });
   return { stdout: stdout || "" };
@@ -120,7 +120,7 @@ export async function installSkillshare({
 
   const osName = detectOS(platform);
   if (osName === "windows") {
-    runShellCommand(`powershell -NoProfile -ExecutionPolicy Bypass -Command "irm ${INSTALL_PS_URL} | iex"`, { stdio: "inherit", dryRun });
+    runShellCommand(`powershell -NoProfile -ExecutionPolicy Bypass -Command "irm ${INSTALL_PS_URL} | iex"`, { stdio: "pipe", dryRun });
     // The installer adds to the system PATH, but the current Node process
     // still has the old PATH. Inject the known install dir so subsequent
     // skillshare calls in this session can resolve the binary.
@@ -129,7 +129,7 @@ export async function installSkillshare({
       process.env.PATH = `${winInstallDir}${path.delimiter}${process.env.PATH}`;
     }
   } else {
-    runShellCommand(`curl -fsSL ${INSTALL_SH_URL} | sh`, { stdio: "inherit", dryRun });
+    runShellCommand(`curl -fsSL ${INSTALL_SH_URL} | sh`, { stdio: "pipe", dryRun });
   }
 
   const check = checkSkillshareInstalled({ run });
@@ -352,13 +352,13 @@ export async function syncSkills({
       logger("[ctx] No existing skills found.");
     }
 
-    run("skillshare", ["init"], { cwd, stdio: "inherit", dryRun: options.dryRun });
+    run("skillshare", ["init"], { cwd, stdio: "pipe", dryRun: options.dryRun });
     logger(statusLine("Initializing skillshare...", options.dryRun ? "dry-run" : "✓ initialized"));
 
     if (existing.length && !options.noCollect) {
-      run("skillshare", ["backup"], { cwd, stdio: "inherit", dryRun: options.dryRun });
+      run("skillshare", ["backup"], { cwd, stdio: "pipe", dryRun: options.dryRun });
       logger(statusLine("Backing up...", options.dryRun ? "dry-run" : "✓ backup created"));
-      run("skillshare", ["collect", "--all"], { cwd, stdio: "inherit", dryRun: options.dryRun });
+      run("skillshare", ["collect", "--all"], { cwd, stdio: "pipe", dryRun: options.dryRun });
       const collected = countSkillFiles(skillshareSourceDir({ home }));
       logger(statusLine("Collecting from all agents...", options.dryRun ? "dry-run" : `✓ ${collected} skills collected`));
     }

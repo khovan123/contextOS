@@ -94,13 +94,13 @@ export async function installRuler({ run = runCommand, yes = false, dryRun = fal
   if (!accepted) {
     throw new Error("Ruler is required for ctx sync --rules. Install it with `npm install -g @intellectronica/ruler` or rerun with --yes.");
   }
-  run("npm", ["install", "-g", "@intellectronica/ruler"], { stdio: "inherit", dryRun });
+  run("npm", ["install", "-g", "@intellectronica/ruler"], { stdio: "pipe", dryRun });
 }
 
 export function ensureRulerInit({ cwd = process.cwd(), run = runCommand, dryRun = false } = {}) {
   const tomlPath = rulerTomlPath(cwd);
   if (fs.existsSync(tomlPath)) return { created: false, tomlPath };
-  run("ruler", ["init"], { cwd, stdio: "inherit", dryRun });
+  run("ruler", ["init"], { cwd, stdio: "pipe", dryRun });
   return { created: true, tomlPath };
 }
 
@@ -444,7 +444,7 @@ export function injectCtxMcp({ tomlPath, mcpServerPath, agents = DEFAULT_AGENTS,
 }
 
 export function runRulerApply({ agents = DEFAULT_AGENTS, cwd = process.cwd(), run = runCommand, dryRun = false } = {}) {
-  run("ruler", ["apply", "--agents", normalizeAgentList(agents).join(",")], { cwd, stdio: "inherit", dryRun });
+  run("ruler", ["apply", "--agents", normalizeAgentList(agents).join(",")], { cwd, stdio: "pipe", dryRun });
 }
 
 function fileContains(filePath, pattern) {

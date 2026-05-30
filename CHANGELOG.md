@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.31
+
+- **Complete stdio audit — eliminate all output leakage:** Changed every remaining `stdio: "inherit"` in `skillshare-sync.js` and `ruler-sync.js` to `stdio: "pipe"`. When subprocess calls use `inherit`, child processes write directly to the parent's fd — bypassing both `console.log` and `process.stderr.write` interception in `captureSetupOutput`. With `pipe`, all subprocess output is captured as return values and re-emitted through `console.log`, ensuring the `◇`/`│` formatting is applied consistently. Also changed `runShell` default from `"inherit"` to `"pipe"` to prevent future regressions.
+
 ## 0.5.30
 
 - **Fix Windows skillshare post-install hang:** After the PowerShell installer adds skillshare to PATH, the current Node.js process still has the old `process.env.PATH`. Now injects the known Windows install directory (`%LOCALAPPDATA%\\Programs\\skillshare`) into `process.env.PATH` immediately after install, so `skillshare --version`, `skillshare init`, and subsequent calls resolve without restarting the terminal.
