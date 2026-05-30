@@ -99,7 +99,7 @@ describe("skillshare sync", () => {
 
     expect(calls.map(([command, args]) => `${command} ${args.join(" ")}`)).toEqual([
       "skillshare --version",
-      "skillshare init",
+      "skillshare init --no-copy --no-git --no-skill --all-targets",
       "skillshare backup",
       "skillshare collect --all",
       "skillshare sync --quiet --agents codex,claude"
@@ -202,7 +202,7 @@ describe("skillshare sync", () => {
 
     expect(calls.map(([, args]) => args.join(" "))).toEqual([
       "--version",
-      "init",
+      "init --no-copy --no-git --no-skill --all-targets",
       "sync --dry-run --quiet --agents codex,claude,antigravity"
     ]);
     expect(result.embeddings.skipped).toBe(true);

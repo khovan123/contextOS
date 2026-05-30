@@ -412,7 +412,10 @@ export async function syncSkills({
       logger("[ctx] No existing skills found.");
     }
 
-    run("skillshare", ["init"], { cwd, stdio: "pipe", dryRun: options.dryRun });
+    // --no-copy --no-git --no-skill --all-targets: fully non-interactive init.
+    // skillshare init is interactive by default; with stdin routed to NUL
+    // (deadlock prevention) the Go binary hangs waiting for terminal input.
+    run("skillshare", ["init", "--no-copy", "--no-git", "--no-skill", "--all-targets"], { cwd, stdio: "pipe", dryRun: options.dryRun });
     logger(statusLine("Initializing skillshare...", options.dryRun ? "dry-run" : "✓ initialized"));
 
     if (existing.length && !options.noCollect) {

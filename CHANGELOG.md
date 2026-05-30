@@ -5,6 +5,7 @@
 - **Real-time streaming output during install/setup:** Replaced `captureSetupOutput` (buffered) with `streamSetupOutput` — now prints each line immediately with `│  ` prefix as it arrives, eliminating the perceived "hang" during long-running downloads and installs.
 - **Fix codex CLI output missing `│` prefix:** Changed `runCodex` from `stdio: "inherit"` to `stdio: ["ignore", "pipe", "pipe"]`. Output now flows through `console.log` → `streamSetupOutput` → `│  ` prefix, ensuring lines like "Added marketplace..." are consistently formatted.
 - **Async streaming for skillshare/ruler install:** Replaced blocking `execSync`/`runShell` calls in `installSkillshare` and `installRuler` with async `spawn` + line-by-line streaming. Download progress from PowerShell/curl/npm is now visible in real time instead of being buffered until completion.
+- **Fix `skillshare init` hang on Windows:** `skillshare init` is interactive by default (prompts for copy source, git, skill install). With stdin routed to NUL (deadlock prevention), the Go binary hangs waiting for terminal input that never arrives. Fixed by passing `--no-copy --no-git --no-skill --all-targets` flags for fully non-interactive initialization.
 
 ## 0.5.32
 
