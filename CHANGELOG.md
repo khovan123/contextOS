@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.32
+
+- **Fix Windows terminal hang during skillshare/ruler install:** `execSync` with `stdio: "pipe"` creates a stdin pipe whose write-end is held by Node while it blocks on `waitpid`. If the child process (PowerShell installer, npm, etc.) reads from stdin, it blocks waiting for data/EOF that never comes — classic deadlock. Fixed by normalizing `stdio: "pipe"` to `["ignore", "pipe", "pipe"]` in both `runCommand` and `runShell`. This routes stdin to NUL (`/dev/null`) for immediate EOF, while still capturing stdout/stderr through pipes for `◇`/`│` formatting.
+
 ## 0.5.31
 
 - **Complete stdio audit — eliminate all output leakage:** Changed every remaining `stdio: "inherit"` in `skillshare-sync.js` and `ruler-sync.js` to `stdio: "pipe"`. When subprocess calls use `inherit`, child processes write directly to the parent's fd — bypassing both `console.log` and `process.stderr.write` interception in `captureSetupOutput`. With `pipe`, all subprocess output is captured as return values and re-emitted through `console.log`, ensuring the `◇`/`│` formatting is applied consistently. Also changed `runShell` default from `"inherit"` to `"pipe"` to prevent future regressions.

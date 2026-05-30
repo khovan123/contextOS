@@ -19,15 +19,23 @@ function statusLine(label, value) {
   return `[ctx] ${label.padEnd(38)} ${value}`;
 }
 
+function normalizeStdio(stdio) {
+  // "pipe" creates a stdin pipe whose write-end is held by Node while
+  // execSync/execFileSync blocks on waitpid — if the child reads stdin
+  // it deadlocks.  Route stdin to NUL (/dev/null) so the child sees
+  // immediate EOF, while still piping stdout/stderr for capture.
+  return stdio === "pipe" ? ["ignore", "pipe", "pipe"] : stdio;
+}
+
 function runCommand(command, args = [], { cwd = process.cwd(), stdio = "pipe", dryRun = false } = {}) {
   if (dryRun) return { stdout: "", skipped: true };
-  const stdout = execFileSync(command, args, { cwd, stdio, encoding: "utf8", shell: true });
+  const stdout = execFileSync(command, args, { cwd, stdio: normalizeStdio(stdio), encoding: "utf8", shell: true });
   return { stdout: stdout || "" };
 }
 
 function runShell(command, { cwd = process.cwd(), stdio = "pipe", dryRun = false } = {}) {
   if (dryRun) return { stdout: "", skipped: true };
-  const stdout = execSync(command, { cwd, stdio, encoding: "utf8" });
+  const stdout = execSync(command, { cwd, stdio: normalizeStdio(stdio), encoding: "utf8" });
   return { stdout: stdout || "" };
 }
 
