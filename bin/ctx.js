@@ -369,23 +369,14 @@ function tryRunCodex(args) {
 
 function runCodex(args) {
   try {
-    const stdout = execFileSync("codex", args, {
+    execFileSync("codex", args, {
       stdio: ["ignore", "pipe", "pipe"],
       encoding: "utf8",
       shell: true
     });
-    if (stdout && stdout.trim()) {
-      for (const line of stdout.trim().split(/\r?\n/)) {
-        console.log(line);
-      }
-    }
+    // Suppress stdout (e.g. "Added marketplace…", "Added global MCP server…")
+    // — the progress spinner already provides feedback.
   } catch (error) {
-    // Log any output captured before the error
-    if (error.stdout && error.stdout.trim()) {
-      for (const line of error.stdout.trim().split(/\r?\n/)) {
-        console.log(line);
-      }
-    }
     const status = typeof error.status === "number" ? error.status : 1;
     throw new Error(`codex ${args.join(" ")} failed with exit code ${status}. Make sure Codex CLI is installed and authenticated.`);
   }

@@ -5,6 +5,8 @@
 - **Real-time animated progress bar for `ctx install`:** The progress spinner now updates in-place using raw stderr writes (`\r`) instead of being captured by `streamSetupOutput`. Uses a smooth 10-frame Braille spinner (`⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`) with a visual bar (`[████████░░░░]`) that animates at 80ms intervals.
 - **Clean install output:** Reduced verbose per-agent install summary from 10+ lines of paths to a compact 4-line summary (Hooks →, MCP →, Embeddings count, restart instruction). Removed redundant "embedding model already cached" log line from `warmInstallEmbeddings`.
 - **Fix `streamSetupOutput` breaking spinner:** Previously intercepted `process.stderr.write` and converted `\r` carriage returns to newlines, preventing in-place updates. Now only intercepts `console.log` for `│  ` prefixed output, leaving stderr untouched for spinner rendering.
+- **Suppress codex command noise:** `runCodex()` no longer prints verbose stdout lines like "Added marketplace `contextos`" and "Added global MCP server 'ctx-mcp'" — the progress spinner already provides feedback.
+- **Clean context formatting:** Removed absolute paths from rules, skills, and workflows in scheduler output. Removed duplicate "ContextOS reminders" section. Truncated long skill descriptions to 80 chars. Capped rules at 5 per section instead of 8. Context now renders as clean, readable markdown:
 
 ## 0.5.36
 

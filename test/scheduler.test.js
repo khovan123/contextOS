@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { scheduleContext } from "../plugins/ctx/lib/scheduler.js";
 
 describe("scheduler", () => {
-  it("puts high-score rules at the beginning and end", () => {
+  it("puts high-score rules at the beginning", () => {
     const scheduled = scheduleContext({
       rules: [
         { id: "r1", content: "Always use zod for validation.", sourcePath: "/repo/AGENTS.md", score: 0.9 },
@@ -25,14 +25,20 @@ describe("scheduler", () => {
     expect(scheduled.midRules).toHaveLength(1);
     expect(scheduled.droppedRules).toHaveLength(1);
     expect(scheduled.additionalContext).toContain("## Critical ContextOS rules");
-    expect(scheduled.additionalContext).toContain("## ContextOS reminders");
-    expect(scheduled.additionalContext.match(/Always use zod/g)).toHaveLength(2);
+    // Rules should appear once (no duplicate "reminders" section)
+    expect(scheduled.additionalContext.match(/Always use zod/g)).toHaveLength(1);
+    // No absolute paths in rule output
+    expect(scheduled.additionalContext).not.toContain("/repo/AGENTS.md");
     expect(scheduled.additionalContext).toContain("- src/auth/login.ts");
     expect(scheduled.additionalContext).toContain("## Skills to activate for this task");
     expect(scheduled.additionalContext).toContain("zod-validator");
+    // No absolute paths in skill output
+    expect(scheduled.additionalContext).not.toContain(".codex/skills/");
     expect(scheduled.additionalContext).toContain("## Suggested workflow for this task");
     expect(scheduled.additionalContext).toContain("Primary Workflow");
     expect(scheduled.additionalContext).toContain("planner -> tester -> code-reviewer");
+    // No "see: …" path in workflow output
+    expect(scheduled.additionalContext).not.toContain("see:");
   });
 
   it("trims output to max chars", () => {

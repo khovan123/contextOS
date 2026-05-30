@@ -1,3 +1,4 @@
+
 const MAX_CONTEXT_CHARS = 4000;
 
 export function scheduleContext({ rules = [], relevantFiles = [], suggestedSkills = [], suggestedWorkflows = [], maxChars = MAX_CONTEXT_CHARS } = {}) {
@@ -8,7 +9,7 @@ export function scheduleContext({ rules = [], relevantFiles = [], suggestedSkill
 
   const sections = [];
   if (high.length) {
-    sections.push(section("Critical ContextOS rules", high.slice(0, 8).map(formatRule)));
+    sections.push(section("Critical ContextOS rules", high.slice(0, 5).map(formatRule)));
   }
   if (relevantFiles.length) {
     sections.push(section("Suggested files to check", relevantFiles.map((file) => `- ${file.path}`)));
@@ -20,10 +21,7 @@ export function scheduleContext({ rules = [], relevantFiles = [], suggestedSkill
     sections.push(section("Suggested workflow for this task", suggestedWorkflows.map(formatWorkflow)));
   }
   if (mid.length) {
-    sections.push(section("Additional relevant rules", mid.slice(0, 8).map(formatRule)));
-  }
-  if (high.length) {
-    sections.push(section("ContextOS reminders", high.slice(0, 5).map(formatRule)));
+    sections.push(section("Additional relevant rules", mid.slice(0, 5).map(formatRule)));
   }
 
   const additionalContext = trimToLimit(sections.filter(Boolean).join("\n\n"), maxChars);
@@ -57,24 +55,28 @@ function section(title, lines) {
   return `## ${title}\n${lines.join("\n")}`;
 }
 
+
 function formatRule(rule) {
-  const source = rule.sourcePath && rule.sourcePath !== "unknown" ? ` (${rule.sourcePath})` : "";
-  return `- ${rule.content}${source}`;
+  return `- ${rule.content}`;
 }
 
 function formatSkill(skill) {
-  const description = skill.description ? `: ${skill.description}` : "";
-  const location = skill.path ? ` (${skill.path})` : "";
-  return `- ${skill.name}${description}${location}`;
+  const desc = skill.description
+    ? `: ${truncate(skill.description, 80)}`
+    : "";
+  return `- ${skill.name}${desc}`;
 }
 
 function formatWorkflow(workflow) {
   const name = workflow.title || workflow.name;
   const hint = workflow.hint ? `: ${workflow.hint}` : "";
   const chain = workflow.chain?.length ? `\n  chain: ${workflow.chain.join(" -> ")}` : "";
-  const location = workflow.relativePath || workflow.path;
-  const source = location ? `\n  see: ${location}` : "";
-  return `- ${name}${hint}${chain}${source}`;
+  return `- ${name}${hint}${chain}`;
+}
+
+function truncate(text, maxLen) {
+  if (text.length <= maxLen) return text;
+  return `${text.slice(0, maxLen - 1)}…`;
 }
 
 function trimToLimit(value, maxChars) {
