@@ -332,7 +332,7 @@ async function warmInstallEmbeddings() {
 
 function tryRunCodex(args) {
   try {
-    execFileSync("codex", args, { stdio: "ignore" });
+    execFileSync("codex", args, { stdio: "ignore", shell: true });
   } catch {
     // Best effort cleanup for repeat installs.
   }
@@ -340,7 +340,7 @@ function tryRunCodex(args) {
 
 function runCodex(args) {
   try {
-    execFileSync("codex", args, { stdio: "inherit" });
+    execFileSync("codex", args, { stdio: "inherit", shell: true });
   } catch (error) {
     const status = typeof error.status === "number" ? error.status : 1;
     throw new Error(`codex ${args.join(" ")} failed with exit code ${status}. Make sure Codex CLI is installed and authenticated.`);

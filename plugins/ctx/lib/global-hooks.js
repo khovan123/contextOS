@@ -6,16 +6,25 @@ const QUIET_CODE_REVIEW_GRAPH_STATUS_COMMAND =
   "git rev-parse --git-dir >/dev/null 2>&1 && code-review-graph status >/dev/null 2>&1 || true";
 
 function shellQuote(value) {
-  return `'${String(value).replaceAll("'", "'\\''")}'`;
+  const s = String(value);
+  if (process.platform === "win32") {
+    return `"${s.replaceAll('"', '\\"')}"`;
+  }
+  return `'${s.replaceAll("'", "'\\''")}'`;
 }
 
 function readHooksFile(hooksPath) {
   if (!fs.existsSync(hooksPath)) return { hooks: {} };
   const raw = fs.readFileSync(hooksPath, "utf8").trim();
   if (!raw) return { hooks: {} };
-  const parsed = JSON.parse(raw);
-  if (!parsed.hooks || typeof parsed.hooks !== "object") parsed.hooks = {};
-  return parsed;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed.hooks || typeof parsed.hooks !== "object") parsed.hooks = {};
+    return parsed;
+  } catch {
+    console.warn(`[ctx] warning: corrupt JSON in ${hooksPath}, overwriting with defaults`);
+    return { hooks: {} };
+  }
 }
 
 function isContextOSHookEntry(entry) {

@@ -3,14 +3,23 @@ import os from "node:os";
 import path from "node:path";
 
 function shellQuote(value) {
-  return `'${String(value).replaceAll("'", "'\\''")}'`;
+  const s = String(value);
+  if (process.platform === "win32") {
+    return `"${s.replaceAll('"', '\\"')}"`;
+  }
+  return `'${s.replaceAll("'", "'\\''")}'`;
 }
 
 function readJsonFile(filePath, fallback) {
   if (!fs.existsSync(filePath)) return fallback;
   const raw = fs.readFileSync(filePath, "utf8").trim();
   if (!raw) return fallback;
-  return JSON.parse(raw);
+  try {
+    return JSON.parse(raw);
+  } catch {
+    console.warn(`[ctx] warning: corrupt JSON in ${filePath}, overwriting with defaults`);
+    return fallback;
+  }
 }
 
 function commandFor(installRoot, scriptName, { injectPromptContext = true } = {}) {

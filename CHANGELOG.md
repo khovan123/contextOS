@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.25
+
+- **Fix Windows JSON parse crash:** All `readJsonFile`/`readHooksFile` helpers now catch corrupt JSON and warn instead of crashing, allowing fresh config to be generated automatically.
+- **Fix Windows shell quoting:** `shellQuote` now uses double-quotes on Windows (`process.platform === "win32"`) instead of POSIX single-quotes which are not recognized by cmd.exe/PowerShell.
+- **Fix Codex CLI invocation on Windows:** `runCodex`/`tryRunCodex` now pass `shell: true` to `execFileSync` so Windows can resolve `codex.cmd` via PATH.
+
 ## 0.5.24
 
 - **Interactive agent selection:** Replaces the comma-separated text input in `ctx setup` with an interactive multi-select prompt — use ↑/↓ to navigate, Space to toggle agents on/off, and Enter to confirm.

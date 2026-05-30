@@ -6,7 +6,12 @@ function readJsonFile(filePath, fallback) {
   if (!fs.existsSync(filePath)) return fallback;
   const raw = fs.readFileSync(filePath, "utf8").trim();
   if (!raw) return fallback;
-  return JSON.parse(raw);
+  try {
+    return JSON.parse(raw);
+  } catch {
+    console.warn(`[ctx] warning: corrupt JSON in ${filePath}, overwriting with defaults`);
+    return fallback;
+  }
 }
 
 export function antigravityMcpConfigPaths() {
