@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 
 import { defaultDataRoot } from "./workspace-data.js";
 
@@ -98,7 +98,46 @@ export async function installRuler({ run = runCommand, yes = false, dryRun = fal
   if (!accepted) {
     throw new Error("Ruler is required for ctx sync --rules. Install it with `npm install -g @intellectronica/ruler` or rerun with --yes.");
   }
-  run("npm", ["install", "-g", "@intellectronica/ruler"], { stdio: "pipe", dryRun });
+  if (dryRun) {
+    run("npm", ["install", "-g", "@intellectronica/ruler"], { stdio: "pipe", dryRun });
+  } else {
+    console.log("Installing ruler...");
+    await spawnCommand("npm", ["install", "-g", "@intellectronica/ruler"]);
+  }
+}
+
+/**
+ * Spawn a child process and stream stdout/stderr line-by-line in real time.
+ * stdin is closed immediately to prevent deadlocks on Windows.
+ */
+function spawnCommand(command, args = []) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      stdio: ["ignore", "pipe", "pipe"],
+      shell: true
+    });
+    const streamLines = (stream) => {
+      let buffer = "";
+      stream.on("data", (chunk) => {
+        buffer += chunk.toString();
+        const lines = buffer.split(/\r?\n/);
+        buffer = lines.pop() || "";
+        for (const line of lines) {
+          if (line.trim()) console.log(line);
+        }
+      });
+      stream.on("end", () => {
+        if (buffer.trim()) console.log(buffer.trim());
+      });
+    };
+    if (child.stdout) streamLines(child.stdout);
+    if (child.stderr) streamLines(child.stderr);
+    child.on("close", (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`${command} ${args.join(" ")} exited with code ${code}`));
+    });
+    child.on("error", reject);
+  });
 }
 
 export function ensureRulerInit({ cwd = process.cwd(), run = runCommand, dryRun = false } = {}) {

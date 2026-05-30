@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
-import { execFileSync, execSync } from "node:child_process";
+import { execFileSync, execSync, spawn } from "node:child_process";
 
 const DEFAULT_AGENTS = ["codex", "claude", "antigravity"];
 const INSTALL_SH_URL = "https://raw.githubusercontent.com/runkids/skillshare/main/install.sh";
@@ -127,17 +127,31 @@ export async function installSkillshare({
   }
 
   const osName = detectOS(platform);
-  if (osName === "windows") {
-    runShellCommand(`powershell -NoProfile -ExecutionPolicy Bypass -Command "irm ${INSTALL_PS_URL} | iex"`, { stdio: "pipe", dryRun });
-    // The installer adds to the system PATH, but the current Node process
-    // still has the old PATH. Inject the known install dir so subsequent
-    // skillshare calls in this session can resolve the binary.
-    const winInstallDir = path.join(os.homedir(), "AppData", "Local", "Programs", "skillshare");
-    if (!dryRun && !process.env.PATH.includes(winInstallDir)) {
-      process.env.PATH = `${winInstallDir}${path.delimiter}${process.env.PATH}`;
+
+  if (dryRun) {
+    // dry-run keeps the old sync path
+    if (osName === "windows") {
+      runShellCommand(`powershell -NoProfile -ExecutionPolicy Bypass -Command "irm ${INSTALL_PS_URL} | iex"`, { stdio: "pipe", dryRun });
+    } else {
+      runShellCommand(`curl -fsSL ${INSTALL_SH_URL} | sh`, { stdio: "pipe", dryRun });
     }
   } else {
-    runShellCommand(`curl -fsSL ${INSTALL_SH_URL} | sh`, { stdio: "pipe", dryRun });
+    console.log("Installing skillshare...");
+    if (osName === "windows") {
+      await spawnShellStreaming("powershell", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", `irm ${INSTALL_PS_URL} | iex`]);
+    } else {
+      await spawnShellStreaming("sh", ["-c", `curl -fsSL ${INSTALL_SH_URL} | sh`]);
+    }
+  }
+
+  // The installer adds to the system PATH, but the current Node process
+  // still has the old PATH. Inject the known install dir so subsequent
+  // skillshare calls in this session can resolve the binary.
+  if (!dryRun && osName === "windows") {
+    const winInstallDir = path.join(os.homedir(), "AppData", "Local", "Programs", "skillshare");
+    if (!process.env.PATH.includes(winInstallDir)) {
+      process.env.PATH = `${winInstallDir}${path.delimiter}${process.env.PATH}`;
+    }
   }
 
   const check = checkSkillshareInstalled({ run });
@@ -145,6 +159,44 @@ export async function installSkillshare({
     throw new Error("skillshare install finished but `skillshare --version` still failed. Check PATH or install skillshare manually.");
   }
   return check;
+}
+
+/**
+ * Spawn a child process and stream its stdout/stderr line-by-line in real time
+ * via console.log (which will be intercepted by streamSetupOutput for │ prefix).
+ * stdin is closed immediately to prevent deadlocks.
+ */
+function spawnShellStreaming(command, args = []) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      stdio: ["ignore", "pipe", "pipe"],
+      shell: false
+    });
+
+    const streamLines = (stream) => {
+      let buffer = "";
+      stream.on("data", (chunk) => {
+        buffer += chunk.toString();
+        const lines = buffer.split(/\r?\n/);
+        buffer = lines.pop() || "";
+        for (const line of lines) {
+          if (line.trim()) console.log(line);
+        }
+      });
+      stream.on("end", () => {
+        if (buffer.trim()) console.log(buffer.trim());
+      });
+    };
+
+    if (child.stdout) streamLines(child.stdout);
+    if (child.stderr) streamLines(child.stderr);
+
+    child.on("close", (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`${command} exited with code ${code}`));
+    });
+    child.on("error", reject);
+  });
 }
 
 export function detectExistingSkills({ cwd = process.cwd(), home = os.homedir() } = {}) {

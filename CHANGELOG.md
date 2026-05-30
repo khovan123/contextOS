@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.33
+
+- **Real-time streaming output during install/setup:** Replaced `captureSetupOutput` (buffered) with `streamSetupOutput` — now prints each line immediately with `│  ` prefix as it arrives, eliminating the perceived "hang" during long-running downloads and installs.
+- **Fix codex CLI output missing `│` prefix:** Changed `runCodex` from `stdio: "inherit"` to `stdio: ["ignore", "pipe", "pipe"]`. Output now flows through `console.log` → `streamSetupOutput` → `│  ` prefix, ensuring lines like "Added marketplace..." are consistently formatted.
+- **Async streaming for skillshare/ruler install:** Replaced blocking `execSync`/`runShell` calls in `installSkillshare` and `installRuler` with async `spawn` + line-by-line streaming. Download progress from PowerShell/curl/npm is now visible in real time instead of being buffered until completion.
+
 ## 0.5.32
 
 - **Fix Windows terminal hang during skillshare/ruler install:** `execSync` with `stdio: "pipe"` creates a stdin pipe whose write-end is held by Node while it blocks on `waitpid`. If the child process (PowerShell installer, npm, etc.) reads from stdin, it blocks waiting for data/EOF that never comes — classic deadlock. Fixed by normalizing `stdio: "pipe"` to `["ignore", "pipe", "pipe"]` in both `runCommand` and `runShell`. This routes stdin to NUL (`/dev/null`) for immediate EOF, while still capturing stdout/stderr through pipes for `◇`/`│` formatting.

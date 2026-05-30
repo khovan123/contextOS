@@ -97,19 +97,23 @@ function normalizeInstallAgent(agent) {
   if (normalized === "antigravity") return "agy";
   return normalized;
 }
-
 /**
- * Capture all console.log and process.stderr.write output from an async fn.
- * Returns an array of clean text lines (no \r, no trailing whitespace).
+ * Intercept console.log and process.stderr.write from an async fn,
+ * printing each line immediately with "│  " prefix for real-time feedback.
+ * Returns the collected lines array (for callers that inspect it).
  */
-async function captureSetupOutput(fn) {
+async function streamSetupOutput(fn) {
   const lines = [];
   const origLog = console.log;
   const origStderrWrite = process.stderr.write;
-  console.log = (...args) => lines.push(args.map(String).join(" "));
+  const emit = (text) => {
+    lines.push(text);
+    origLog(`│  ${text}`);
+  };
+  console.log = (...args) => emit(args.map(String).join(" "));
   process.stderr.write = (chunk) => {
     const text = String(chunk).replace(/\r/g, "").trim();
-    if (text) lines.push(text);
+    if (text) emit(text);
     return true;
   };
   try {
@@ -363,8 +367,23 @@ function tryRunCodex(args) {
 
 function runCodex(args) {
   try {
-    execFileSync("codex", args, { stdio: "inherit", shell: true });
+    const stdout = execFileSync("codex", args, {
+      stdio: ["ignore", "pipe", "pipe"],
+      encoding: "utf8",
+      shell: true
+    });
+    if (stdout && stdout.trim()) {
+      for (const line of stdout.trim().split(/\r?\n/)) {
+        console.log(line);
+      }
+    }
   } catch (error) {
+    // Log any output captured before the error
+    if (error.stdout && error.stdout.trim()) {
+      for (const line of error.stdout.trim().split(/\r?\n/)) {
+        console.log(line);
+      }
+    }
     const status = typeof error.status === "number" ? error.status : 1;
     throw new Error(`codex ${args.join(" ")} failed with exit code ${status}. Make sure Codex CLI is installed and authenticated.`);
   }
@@ -561,8 +580,7 @@ async function setup({ args = [], cwd = process.cwd() } = {}) {
 
   for (const agent of options.agents) {
     console.log(`◇ Setting up ${agent}...`);
-    const lines = await captureSetupOutput(() => install({ agent, copy: false }));
-    for (const line of lines) console.log(`│  ${line}`);
+    await streamSetupOutput(() => install({ agent, copy: false }));
   }
 
   if (options.syncRules) {
@@ -570,8 +588,7 @@ async function setup({ args = [], cwd = process.cwd() } = {}) {
     const syncAgents = options.agents.map((agent) => agent === "agy" ? "antigravity" : agent).join(",");
     const syncArgs = ["--rules", "--agents", syncAgents];
     if (options.yes) syncArgs.push("--yes");
-    const lines = await captureSetupOutput(() => syncRules({ cwd, rootDir, args: syncArgs }));
-    for (const line of lines) console.log(`│  ${line}`);
+    await streamSetupOutput(() => syncRules({ cwd, rootDir, args: syncArgs }));
   }
 
   if (options.syncSkills) {
@@ -579,7 +596,7 @@ async function setup({ args = [], cwd = process.cwd() } = {}) {
     const skillAgents = options.agents.map((agent) => agent === "agy" ? "antigravity" : agent).join(",");
     const syncArgs = ["--skills", "--agents", skillAgents];
     if (options.yes) syncArgs.push("--yes");
-    const lines = await captureSetupOutput(() => syncSkills({
+    await streamSetupOutput(() => syncSkills({
       cwd,
       args: syncArgs,
       rebuildSkillEmbeddings: async ({ cwd: skillCwd, sourceDir }) => warmSkillEmbeddings({
@@ -589,7 +606,6 @@ async function setup({ args = [], cwd = process.cwd() } = {}) {
         skills: scanSkills({ cwd: skillCwd, roots: [sourceDir] })
       })
     }));
-    for (const line of lines) console.log(`│  ${line}`);
   }
 
   console.log("");
@@ -620,8 +636,7 @@ try {
     if (explicitAgent) {
       // Direct mode: ctx install --agent <name>
       console.log(`◇ Installing ${explicitAgent}...`);
-      const lines = await captureSetupOutput(() => install({ copy, agent: explicitAgent }));
-      for (const line of lines) console.log(`│  ${line}`);
+      await streamSetupOutput(() => install({ copy, agent: explicitAgent }));
       console.log("");
     } else {
       // Interactive mode: ctx install
@@ -634,8 +649,7 @@ try {
       } else {
         for (const agent of selected) {
           console.log(`◇ Installing ${agent}...`);
-          const lines = await captureSetupOutput(() => install({ copy, agent }));
-          for (const line of lines) console.log(`│  ${line}`);
+          await streamSetupOutput(() => install({ copy, agent }));
           console.log("");
         }
       }
