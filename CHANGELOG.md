@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.5.43
+
+- **Robust MCP TOML handling:** Added `smol-toml` parsing for Codex MCP config while preserving comments, ordering, multiline arrays, and nested tool approval sections during telemetry proxy rewrites.
+- **Embedding-only file retrieval:** Removed filename heuristic fallback. File suggestions now flow through local file-path embeddings, relative import expansion, and optional `code-review-graph` retrieval.
+- **Fast stale-socket fallback:** Added a separate 100ms `ctx-mcp` socket connect timeout while keeping a bounded 2s response timeout for active scoring requests.
+- **Bridge disconnect resilience:** `ctx-mcp` now ignores per-client socket errors when a timed-out hook disconnects while scoring is still in progress, preventing an `EPIPE` from crashing the long-running MCP server.
+- **Bridge revision fallback:** `ctx refresh` invalidates the private hook bridge socket after syncing an active marketplace update. Hook clients also reject stale `ctx-mcp` bridge responses and discard the same-inode socket, then fall back to direct scoring until Codex restarts the long-running MCP process.
+- **Hook deadline fail-open:** `on-prompt.js` now has an 8.5s hard deadline, exits cleanly after writing JSON, and caps direct fallback scoring when the MCP bridge is unavailable. This prevents Codex's 10s hook timeout from killing the hook and causing broken-pipe noise.
+- **Automatic empty-context recovery:** Prompt hooks no longer return an empty `hookSpecificOutput` block. When no rules/files/skills/workflows are available from enabled sections, ContextOS records `emptyContextReason` and starts a detached `autowarm` rebuild with cooldown so the next prompt can use fresh file, skill, workflow, import-graph, and graph-embedding indexes without making the current hook walk the repo.
+- **PostToolUse stdin drain:** Existing `code-review-graph update --skip-flows` PostToolUse hooks are normalized to drain hook stdin before running, preventing Codex broken-pipe errors when the update command exits early.
+- **Smooth skill installs:** `ctx skills` and the setup community installer now use a portable shell runner instead of hard-coded `sh`, report installer environment problems without crashing, repair unsafe skill symlinks before/after install, and automatically run `skillshare sync` after successful `ctx skills` installs.
+- **Graph strategy detection:** `ctx install` now reports detected `code-review-graph` and `codegraph` backends. `codegraph` remains adapter-pending until its MCP contract is implemented.
+- **Internal graph telemetry:** Direct `graph-retriever.js` calls now emit `InternalGraphRetrieval` events so compliance tracking observes graph usage even when retrieval bypasses the MCP proxy.
+- **Automatic graph embedding refresh:** `ctx install` now refreshes local `code-review-graph` node embeddings after ContextOS warmup when the project already has a graph database. Missing graph runtimes remain fail-open.
+- **Automatic active marketplace refresh:** Added `ctx refresh`, and made `ctx embeddings warm` sync the current package into the active Codex marketplace before rebuilding indexes. This removes the manual `rsync` step during local updates.
+- **Consistent standard installs:** Every non-legacy `ctx install` agent path, including installs invoked by `ctx setup`, now syncs the active Codex marketplace before rebuilding file/import indexes and refreshing available code-review-graph embeddings.
+- **Indexed file retrieval hot path:** Prompt scoring now queries persisted file vectors from `embeddings.db` and persisted one-hop import adjacency directly. Repository walking is limited to install and explicit embedding warmup rebuilds.
+- **File retrieval timeout:** Raised the indexed file-vector lookup timeout from 80ms to 1000ms so warm local SQLite searches can return Suggested files instead of silently falling back to an empty list on larger project indexes.
+- **Parallel context retrieval:** Rules, file suggestions, skills, and workflows now score concurrently through `Promise.all()`.
+- **Interactive prompt section config:** Added `ctx --config`, a multi-select panel for toggling injected critical rules, suggested files, suggested skills, and suggested workflows. Choices persist globally in `~/.ctx/contextos/output-config.json`, and saved summaries remain inside the `│` panel.
+- **Compact prompt summaries:** Prompt injection now shows file basenames without full paths, emits skills as a deduplicated comma-separated inline list without descriptions, and keeps workflows to names plus chains.
+- **Skill suggestion precision:** Skill keyword ranking now ignores generic setup/runtime tokens such as `node`, `package`, `setup`, `sync`, and `graph`, and deduplicates repeated skill names found across agent roots.
+- **Project-aware skill hints:** Skill ranking now reads bounded root/workspace manifest hints and known mobile config files such as `app.json`, `app.config.*`, and `eas.json`. URL tokens are stripped before scoring, and EAS domain eligibility prevents semantic fallback from reviving unrelated mobile skills, so specialized Expo/EAS skills outrank unrelated GitHub-linked descriptions.
+- **Silent Stop hooks:** Stop hooks now persist compliance reports without printing them after every task. Run `ctx report` or `ctx evidence` for the detailed output.
+- **Plugin version guard:** Plugin validation now requires the Codex plugin manifest version to match `package.json`.
+
 ## 0.5.42
 
 - **Setup fallback when no skills found:** During `ctx setup`, if `syncSkills` completes but `detectExistingSkills` finds zero skills on the machine, the CLI now automatically offers the community skill library installer. After successful install, `syncSkills` re-runs to distribute the newly installed skills to all selected agents.

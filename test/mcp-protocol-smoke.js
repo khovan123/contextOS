@@ -8,6 +8,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
 import { modelCacheDir, warmRuleEmbeddings } from "../plugins/ctx/lib/embedding-scorer.js";
+import { warmFileEmbeddings } from "../plugins/ctx/lib/file-embedding-retriever.js";
 import { defaultDataRoot } from "../plugins/ctx/lib/workspace-data.js";
 import { createContextOSMcpServer } from "../plugins/ctx/mcp/contextos-server.js";
 
@@ -56,6 +57,7 @@ try {
       allowRemote: false
     });
   }
+  await warmFileEmbeddings({ cwd, dataDir, allowRemote: false });
 
   ({ client, server } = await startInMemoryMcp({ dataDir }));
 

@@ -6,7 +6,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 
 import { isModelCacheReady, modelCacheDir } from "../lib/embedding-scorer.js";
 import { scoreContext } from "../lib/score-context.js";
-import { ctxMcpSocketPath } from "../lib/ctx-mcp-client.js";
+import { CTX_MCP_BRIDGE_REVISION, ctxMcpSocketPath } from "../lib/ctx-mcp-client.js";
 import { defaultDataRoot } from "../lib/workspace-data.js";
 import { createContextOSMcpServer } from "./contextos-server.js";
 
@@ -33,6 +33,9 @@ function startBridge() {
   fs.rmSync(socketPath, { force: true });
   const bridge = net.createServer((socket) => {
     let raw = "";
+    socket.on("error", () => {
+      // Clients may time out and close while scoring is still in progress.
+    });
     socket.on("data", (chunk) => {
       raw += chunk.toString("utf8");
       if (raw.includes("\n")) handleBridgeRequest(socket, raw);
@@ -68,9 +71,10 @@ async function handleBridgeRequest(socket, raw) {
       skills: payload.skills,
       workflows: payload.workflows
     });
-    socket.end(JSON.stringify(result));
+    socket.end(JSON.stringify({ ...result, bridgeRevision: CTX_MCP_BRIDGE_REVISION }));
   } catch (error) {
     socket.end(JSON.stringify({
+      bridgeRevision: CTX_MCP_BRIDGE_REVISION,
       error: error?.message || String(error),
       scoredRules: [],
       suggestedFiles: [],

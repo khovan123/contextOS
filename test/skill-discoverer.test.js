@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { parseSkillFrontmatter, scanSkills, suggestSkills } from "../plugins/ctx/lib/skill-discoverer.js";
+import { parseSkillFrontmatter, projectSkillHints, scanSkills, suggestSkills } from "../plugins/ctx/lib/skill-discoverer.js";
 
 describe("skill discoverer", () => {
   it("parses SKILL.md YAML frontmatter", () => {
@@ -125,6 +125,101 @@ describe("skill discoverer", () => {
     });
 
     expect(suggested[0].name).toBe("payment-integration");
+  });
+
+  it("does not suggest unrelated skills from generic setup and package tokens", async () => {
+    const skills = Array.from({ length: 301 }, (_, index) => ({
+      name: `unrelated-${index}`,
+      description: "Use for unrelated maintenance tasks.",
+      path: `/skills/unrelated-${index}/SKILL.md`
+    }));
+    skills.push(
+      {
+        name: "azure-postgres-ts",
+        description: "Connect to Azure Database for PostgreSQL Flexible Server from Node.js using the pg package.",
+        path: "/skills/azure-postgres-ts/SKILL.md"
+      },
+      {
+        name: "devcontainer-setup",
+        description: "Use when setting up isolated Node.js development environments.",
+        path: "/skills/devcontainer-setup/SKILL.md"
+      }
+    );
+
+    const suggested = await suggestSkills({
+      prompt: "ctx setup sync package rebuild graph embeddings",
+      skills,
+      limit: 3
+    });
+
+    expect(suggested).toEqual([]);
+  });
+
+  it("deduplicates repeated skill names across roots", async () => {
+    const suggested = await suggestSkills({
+      prompt: "create payment checkout webhook integration",
+      skills: [
+        {
+          name: "payment-integration",
+          description: "Use when creating payment checkout sessions and billing webhooks.",
+          path: "/skills/one/payment-integration/SKILL.md"
+        },
+        {
+          name: "payment-integration",
+          description: "Use when creating payment checkout sessions and billing webhooks.",
+          path: "/skills/two/payment-integration/SKILL.md"
+        }
+      ],
+      dataDir: fs.mkdtempSync(path.join(os.tmpdir(), "ctx-skill-dedupe-")),
+      timeoutMs: 1
+    });
+
+    expect(suggested.map((skill) => skill.name)).toEqual(["payment-integration"]);
+  });
+
+  it("prefers Expo EAS workflow skills using bounded project hints", async () => {
+    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-skill-expo-"));
+    fs.mkdirSync(path.join(cwd, "webapp"), { recursive: true });
+    fs.writeFileSync(path.join(cwd, "package.json"), JSON.stringify({
+      workspaces: ["webapp"]
+    }));
+    fs.writeFileSync(path.join(cwd, "webapp", "package.json"), JSON.stringify({
+      dependencies: { expo: "^53.0.0", "react-native": "^0.79.0" }
+    }));
+    fs.writeFileSync(path.join(cwd, "webapp", "eas.json"), "{}");
+
+    const suggested = await suggestSkills({
+      cwd,
+      dataDir: fs.mkdtempSync(path.join(os.tmpdir(), "ctx-skill-expo-cache-")),
+      timeoutMs: 1,
+      prompt: "handle https://github.com/example/app/issues/116 EAS config iOS Android preview production",
+      skills: [
+        {
+          name: "audit-skills",
+          description: "Audit mobile Android and iOS applications.",
+          path: "/skills/audit/SKILL.md"
+        },
+        {
+          name: "expo-api-routes",
+          description: "Create Expo Router API routes with EAS Hosting.",
+          path: "/skills/expo-api/SKILL.md"
+        },
+        {
+          name: "llm-app-patterns",
+          description: "Production-ready LLM patterns inspired by https://github.com/example/llm.",
+          path: "/skills/llm/SKILL.md"
+        },
+        {
+          name: "expo-cicd-workflows",
+          description: "Write EAS workflow YAML files for Expo projects and build pipelines.",
+          path: "/skills/expo/SKILL.md"
+        }
+      ]
+    });
+
+    expect(projectSkillHints({ cwd })).toEqual(expect.arrayContaining(["expo", "react", "native", "eas", "json"]));
+    expect(suggested[0].name).toBe("expo-cicd-workflows");
+    expect(suggested.map((skill) => skill.name)).not.toContain("audit-skills");
   });
 });
 

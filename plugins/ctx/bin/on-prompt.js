@@ -1,12 +1,18 @@
 #!/usr/bin/env node
-import { readStdinJson, writeJson, failOpen, logDebug, pluginRuntimeFile, pluginDataRoot, resolveHookCwd } from "../lib/hook-io.js";
+import { armHookDeadline, exitAfterStdout, readStdinJson, writeJson, failOpen, logDebug, pluginRuntimeFile, pluginDataRoot, resolveHookCwd } from "../lib/hook-io.js";
 import { handlePromptPayload } from "../lib/prompt-hook.js";
 import { appendTelemetry } from "../lib/telemetry.js";
 
 const started = Date.now();
+const fallback = {
+  continue: true,
+  suppressOutput: true
+};
+let deadline;
 
 try {
   const payload = await readStdinJson();
+  deadline = armHookDeadline("UserPromptSubmit", fallback);
   const cwd = resolveHookCwd(payload);
   const normalized = { ...payload, cwd };
 
@@ -18,13 +24,10 @@ try {
     mcpDataDir: pluginDataRoot(),
     started
   }));
+  deadline.clear();
+  exitAfterStdout(0);
 } catch (error) {
-  failOpen("UserPromptSubmit", error, {
-    continue: true,
-    suppressOutput: true,
-    hookSpecificOutput: {
-      hookEventName: "UserPromptSubmit",
-      additionalContext: ""
-    }
-  });
+  deadline?.clear();
+  failOpen("UserPromptSubmit", error, fallback);
+  exitAfterStdout(0);
 }

@@ -5,7 +5,7 @@ import path from "node:path";
 import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import { fileURLToPath } from "node:url";
-import { execFileSync, execSync, spawn } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 
 import { readAgentsChain } from "../plugins/ctx/lib/reader.js";
 import { filterActionableRules, parseRules, scoreRules } from "../plugins/ctx/lib/analyzer.js";
@@ -19,23 +19,27 @@ import { scoreContext } from "../plugins/ctx/lib/score-context.js";
 import { defaultDataRoot, workspaceDataDir, workspaceMarkerPath } from "../plugins/ctx/lib/workspace-data.js";
 import { installMcpTelemetryProxies } from "../plugins/ctx/lib/mcp-proxy-install.js";
 import { benchmarkWorkspace, formatBenchmark } from "../plugins/ctx/lib/benchmark.js";
-import { copyDir, copyPackageRoot } from "../plugins/ctx/lib/package-install.js";
+import { copyDir, copyPackageRoot, syncPackageRoot } from "../plugins/ctx/lib/package-install.js";
 import { installClaudeHooks } from "../plugins/ctx/lib/claude-hooks.js";
 import { installClaudeMcp } from "../plugins/ctx/lib/claude-mcp.js";
 import { installAntigravityHooks } from "../plugins/ctx/lib/antigravity-hooks.js";
 import { installAntigravityMcp } from "../plugins/ctx/lib/antigravity-mcp.js";
 import { installCopilotHooks } from "../plugins/ctx/lib/copilot-hooks.js";
 import { installCopilotMcp } from "../plugins/ctx/lib/copilot-mcp.js";
-import { syncRules } from "../plugins/ctx/lib/ruler-sync.js";
+import { readCodexMcpServers, syncRules } from "../plugins/ctx/lib/ruler-sync.js";
+import { detectGraphStrategy, embedCodeReviewGraph, formatCodeReviewGraphEmbedding, formatGraphStrategy } from "../plugins/ctx/lib/graph-strategy.js";
 import { writeInnerGitignore, ensureRootGitignore } from "../plugins/ctx/lib/gitignore.js";
-import { syncSkills, detectExistingSkills } from "../plugins/ctx/lib/skillshare-sync.js";
+import { repairSkillSymlinks, syncSkills, detectExistingSkills } from "../plugins/ctx/lib/skillshare-sync.js";
 import { scanSkills, warmSkillEmbeddings } from "../plugins/ctx/lib/skill-discoverer.js";
 import { parsePassthroughArgs, runPassthrough } from "../plugins/ctx/lib/passthrough.js";
 import { parseAgentList, parseSetupArgs, setupSummaryLines } from "../plugins/ctx/lib/setup-wizard.js";
 import { multiSelect } from "../plugins/ctx/lib/multi-select.js";
+import { configureOutputSections } from "../plugins/ctx/lib/output-config.js";
 import { syncWorkflows, warmWorkflowEmbeddings } from "../plugins/ctx/lib/workflow-discoverer.js";
 import { checkForUpdate } from "../plugins/ctx/lib/update-notifier.js";
 import { fetchSkillsForAgents, printSkillRecommendations, getAllLibraries, getInstallCommands } from "../plugins/ctx/lib/skill-library.js";
+import { invalidateCtxMcpSocket } from "../plugins/ctx/lib/ctx-mcp-client.js";
+import { runPrefixedCommand } from "../plugins/ctx/lib/shell-runner.js";
 
 /**
  * Run a shell command with all output lines prefixed by │  
@@ -43,28 +47,7 @@ import { fetchSkillsForAgents, printSkillRecommendations, getAllLibraries, getIn
  * stdin is inherited so interactive prompts (e.g. npx "Ok to proceed?") still work.
  */
 function runPrefixed(cmd) {
-  const DIM = "\x1B[2m";
-  const RST = "\x1B[0m";
-  const pfx = `${DIM}│${RST}  `;
-  return new Promise((resolve, reject) => {
-    const child = spawn("sh", ["-c", cmd], { stdio: ["inherit", "pipe", "pipe"] });
-    function pipe(stream, target) {
-      let needPrefix = true;
-      stream.on("data", (buf) => {
-        const str = buf.toString();
-        let out = "";
-        for (const ch of str) {
-          if (needPrefix) { out += pfx; needPrefix = false; }
-          out += ch;
-          if (ch === "\n") needPrefix = true;
-        }
-        target.write(out);
-      });
-    }
-    pipe(child.stdout, process.stdout);
-    pipe(child.stderr, process.stderr);
-    child.on("close", (code) => code === 0 ? resolve() : reject(new Error(`exit code ${code}`)));
-  });
+  return runPrefixedCommand(cmd);
 }
 
 /**
@@ -151,7 +134,15 @@ async function runCommunitySkillInstaller(agents = []) {
       console.log(`${DIM}│${RESET}`);
 
       try {
+        const beforeRepair = repairSkillSymlinks({ cwd: process.cwd(), home: os.homedir() });
+        if (beforeRepair.repaired.length || beforeRepair.removedBroken.length) {
+          console.log(`${DIM}│${RESET}  Repaired ${beforeRepair.repaired.length} skill links before install.`);
+        }
         await runPrefixed(installCmd);
+        const afterRepair = repairSkillSymlinks({ cwd: process.cwd(), home: os.homedir() });
+        if (afterRepair.repaired.length || afterRepair.removedBroken.length) {
+          console.log(`${DIM}│${RESET}  Repaired ${afterRepair.repaired.length} skill links after install.`);
+        }
         successCount++;
 
         if (installInfo.verify) {
@@ -160,9 +151,9 @@ async function runCommunitySkillInstaller(agents = []) {
         console.log(`${DIM}│${RESET}`);
         console.log(`${GREEN}✔${RESET} ${lib.name} installed successfully.`);
       } catch (err) {
-        console.error(`${YELLOW}⚠${RESET}  Install failed for ${lib.name}. Try manually:`);
-        console.error(`   ${installCmd}`);
-        console.error(`   ${DIM}${err.message}${RESET}`);
+        console.error(`${YELLOW}⚠${RESET}  Install failed for ${lib.name}.`);
+        console.error(`${DIM}│${RESET}  ${DIM}${err.message}${RESET}`);
+        console.error(`${DIM}│${RESET}  ContextOS will continue setup; rerun \`ctx skills\` after fixing the environment.`);
       }
     }
   }
@@ -214,6 +205,8 @@ Usage:
   ctx skills                                        Browse community skill libraries
   ctx skills --agents <names>                       Filter skills for specific agents
   ctx skills --refresh                              Force refresh skill library cache
+  ctx --config                                      Choose prompt context sections to show
+  ctx refresh                                       Sync active Codex marketplace and rebuild indexes
   ctx embeddings warm -- "task"                     Pre-warm embedding caches for a task
   ctx ruler -- <ruler args>                         Passthrough to ruler CLI
   ctx skillshare -- <skillshare args>               Passthrough to skillshare CLI
@@ -366,8 +359,12 @@ async function install({ copy = false, agent = "codex" } = {}) {
   }
   const progress = createInstallProgress({ quiet: false });
   progress.start(`installing ${agent || "codex"}`);
+  const graphStrategy = graphStrategyForInstall();
 
   try {
+    progress.step(5, "syncing active marketplace");
+    syncActiveCodexMarketplace();
+
     if (agent === "claude") {
       progress.step(10, "copying package");
       const installRoot = copyPackageRoot({ rootDir, targetRoot: agentInstallRoot("claude") });
@@ -383,7 +380,9 @@ async function install({ copy = false, agent = "codex" } = {}) {
       progress.done("claude ✓");
       console.log(`Hooks → ${hooksPath}`);
       console.log(`MCP   → ${mcpConfigPath}`);
+      console.log(`Graph → ${graphStrategy}`);
       console.log(`Embeddings: ${warmResult.fileCount || 0} files, ${warmResult.skillCount || 0} skills`);
+      console.log(`Graph embeddings: ${formatCodeReviewGraphEmbedding(warmResult.graphEmbedding)}`);
       console.log("Restart Claude Code to activate ContextOS.");
       return;
     }
@@ -403,7 +402,9 @@ async function install({ copy = false, agent = "codex" } = {}) {
       progress.done("antigravity ✓");
       console.log(`Hooks → ${hooksPath}`);
       console.log(`MCP   → ${mcpConfigPaths.join(", ")}`);
+      console.log(`Graph → ${graphStrategy}`);
       console.log(`Embeddings: ${warmResult.fileCount || 0} files, ${warmResult.skillCount || 0} skills`);
+      console.log(`Graph embeddings: ${formatCodeReviewGraphEmbedding(warmResult.graphEmbedding)}`);
       console.log("Restart Antigravity to activate ContextOS.");
       return;
     }
@@ -423,7 +424,9 @@ async function install({ copy = false, agent = "codex" } = {}) {
       progress.done("copilot ✓");
       console.log(`Instructions → ${hooksPath}`);
       console.log(`MCP          → ${mcpConfigPath}`);
+      console.log(`Graph        → ${graphStrategy}`);
       console.log(`Embeddings: ${warmResult.fileCount || 0} files, ${warmResult.skillCount || 0} skills`);
+      console.log(`Graph embeddings: ${formatCodeReviewGraphEmbedding(warmResult.graphEmbedding)}`);
       console.log("Restart VS Code to activate ContextOS.");
       return;
     }
@@ -433,8 +436,7 @@ async function install({ copy = false, agent = "codex" } = {}) {
     }
 
     progress.step(10, "copying marketplace");
-    const marketplaceRoot = path.join(codexHome(), "marketplaces", "contextos");
-    copyPackageRoot({ rootDir, targetRoot: marketplaceRoot });
+    const marketplaceRoot = activeCodexMarketplaceRoot();
 
     progress.step(25, "refreshing codex plugin");
     tryRunCodex(["plugin", "remove", "ctx@contextos"]);
@@ -459,12 +461,27 @@ async function install({ copy = false, agent = "codex" } = {}) {
     console.log(`Hooks   → ${hooksPath}`);
     console.log(`MCP     → ctx-mcp installed`);
     console.log(`Proxies → ${proxyResult.wrapped.length ? proxyResult.wrapped.map((item) => item.name).join(", ") : "none changed"}`);
+    console.log(`Graph   → ${graphStrategy}`);
     console.log(`Embeddings: ${warmResult.fileCount || 0} files, ${warmResult.skillCount || 0} skills`);
+    console.log(`Graph embeddings: ${formatCodeReviewGraphEmbedding(warmResult.graphEmbedding)}`);
     console.log("Restart Codex to activate ContextOS.");
   } catch (error) {
     progress.fail("install failed");
     throw error;
   }
+}
+
+function graphStrategyForInstall() {
+  let mcpServerNames = [];
+  try {
+    mcpServerNames = readCodexMcpServers().map((server) => server.name);
+  } catch {
+    // Graph detection is diagnostic and must not block installation.
+  }
+  return formatGraphStrategy(detectGraphStrategy({
+    cwd: process.cwd(),
+    mcpServerNames
+  }));
 }
 
 async function warmInstallEmbeddings() {
@@ -501,7 +518,21 @@ async function warmInstallEmbeddings() {
       allowRemote: !modelReady
     })
     : { count: 0 };
-  return { ...result, modelAlreadyCached: modelReady, fileCount: fileResult.count, skillCount: skillResult.count, workflowCount: workflowResult.count };
+  const graphEmbedding = embedCodeReviewGraph({ cwd: process.cwd() });
+  return { ...result, modelAlreadyCached: modelReady, fileCount: fileResult.count, skillCount: skillResult.count, workflowCount: workflowResult.count, graphEmbedding };
+}
+
+function activeCodexMarketplaceRoot() {
+  return path.join(codexHome(), "marketplaces", "contextos");
+}
+
+function syncActiveCodexMarketplace() {
+  const result = syncPackageRoot({
+    rootDir,
+    targetRoot: activeCodexMarketplaceRoot()
+  });
+  writeInnerGitignore(result.targetRoot);
+  return result;
 }
 
 function tryRunCodex(args) {
@@ -611,7 +642,23 @@ async function debug(task) {
   console.log(scheduled.additionalContext || "(empty)");
 }
 
-async function warmEmbeddings(task) {
+async function warmEmbeddings(task, { syncMarketplace = true, quiet = false } = {}) {
+  const warmResult = await warmWorkspaceIndexes({ task });
+  const marketplaceSync = syncMarketplace ? syncActiveCodexMarketplace() : null;
+  if (quiet) return { ...warmResult, marketplaceSync };
+  console.log(`Warmed ${warmResult.ruleCount} embeddings`);
+  console.log(`Warmed ${warmResult.fileCount} file path embeddings`);
+  console.log(`Warmed ${warmResult.skillCount} skill embeddings`);
+  console.log(`Warmed ${warmResult.workflowCount} workflow embeddings`);
+  console.log(`Cache: ${warmResult.cachePath}`);
+  console.log(`Graph embeddings: ${formatCodeReviewGraphEmbedding(warmResult.graphEmbedding)}`);
+  if (marketplaceSync) {
+    console.log(`Marketplace: ${marketplaceSync.synced ? "synced" : "already active"} (${marketplaceSync.targetRoot})`);
+  }
+  return { ...warmResult, marketplaceSync };
+}
+
+async function warmWorkspaceIndexes({ task = "project context" } = {}) {
   const cwd = process.cwd();
   const merged = readAgentsChain({ cwd });
   const rules = scoreRules(filterActionableRules(parseRules(merged.content)), task, []);
@@ -637,11 +684,26 @@ async function warmEmbeddings(task) {
     dataDir: contextOSDataDir(),
     allowRemote: true
   });
-  console.log(`Warmed ${result.count} embeddings`);
-  console.log(`Warmed ${fileResult.count} file path embeddings`);
-  console.log(`Warmed ${skillResult.count} skill embeddings`);
-  console.log(`Warmed ${workflowResult.count} workflow embeddings`);
-  console.log(`Cache: ${result.cachePath}`);
+  const graphEmbedding = embedCodeReviewGraph({ cwd });
+  return {
+    ruleCount: result.count,
+    fileCount: fileResult.count,
+    skillCount: skillResult.count,
+    workflowCount: workflowResult.count,
+    cachePath: result.cachePath,
+    graphEmbedding
+  };
+}
+
+async function refresh() {
+  const marketplaceSync = syncActiveCodexMarketplace();
+  const invalidatedBridge = invalidateCtxMcpSocket(contextOSDataDir());
+  const warmResult = await warmInstallEmbeddings();
+  console.log(`Marketplace: ${marketplaceSync.synced ? "synced" : "already active"} (${marketplaceSync.targetRoot})`);
+  console.log(`Indexes: ${warmResult.fileCount || 0} file paths rebuilt`);
+  console.log(`Graph embeddings: ${formatCodeReviewGraphEmbedding(warmResult.graphEmbedding)}`);
+  if (invalidatedBridge) console.log("Bridge: stale private socket invalidated");
+  console.log("Restart Codex if ctx-mcp was already running.");
 }
 
 function printSetupBanner() {
@@ -793,6 +855,11 @@ try {
     console.log(usage());
   } else if (command === "--version" || command === "-v") {
     console.log(packageVersion());
+  } else if (command === "--config" || command === "config") {
+    await configureOutputSections({
+      dataRoot: contextOSDataDir(),
+      select: multiSelect
+    });
   } else if (command === "install") {
     const copy = args.includes("--copy");
     const explicitAgents = installAgentsFromArgs(args);
@@ -834,6 +901,12 @@ try {
     const task = marker >= 0 ? args.slice(marker + 1).join(" ") : args.slice(1).join(" ");
     if (!task.trim()) throw new Error('Usage: ctx debug -- "task"');
     await debug(task);
+  } else if (command === "refresh") {
+    await refresh();
+  } else if (command === "autowarm") {
+    const marker = args.indexOf("--");
+    const task = marker >= 0 ? args.slice(marker + 1).join(" ") : args.slice(1).join(" ");
+    await warmEmbeddings(task || "project context", { syncMarketplace: false, quiet: true });
   } else if (command === "embeddings") {
     if (args[1] === "warm") {
       const marker = args.indexOf("--");
@@ -874,6 +947,18 @@ try {
     const installed = await runCommunitySkillInstaller(agents);
     if (installed === 0) {
       console.log(`\n${DIM}No installations were completed.${RESET}`);
+    } else {
+      console.log(`${CYAN}◇${RESET} ${BOLD}Syncing installed skills${RESET}`);
+      await streamSetupOutput(() => syncSkills({
+        cwd: process.cwd(),
+        args: ["--skills", "--agents", agents.map((agent) => agent === "agy" ? "antigravity" : agent).join(","), "--yes"],
+        rebuildSkillEmbeddings: async ({ cwd, sourceDir }) => warmSkillEmbeddings({
+          cwd,
+          dataDir: contextOSDataDir(),
+          allowRemote: !isModelCacheReady(contextOSDataDir()),
+          skills: scanSkills({ cwd, roots: [sourceDir] })
+        })
+      }));
     }
     console.log("");
   } else if (command === "sync") {

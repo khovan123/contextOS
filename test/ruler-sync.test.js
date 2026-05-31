@@ -138,6 +138,27 @@ describe("ruler sync", () => {
     ]);
   });
 
+  it("unwraps multiline ContextOS telemetry proxy args from Codex config", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-codex-mcp-multiline-"));
+    const configPath = path.join(tmp, "config.toml");
+    fs.writeFileSync(configPath, `[mcp_servers.code-review-graph]
+command = "node"
+args = [
+  "/home/me/.ctx/contextos/plugins/ctx/mcp/proxy.js",
+  "--name",
+  "code-review-graph",
+  "--",
+  "npx",
+  "-y",
+  "code-review-graph",
+]
+`);
+
+    expect(readCodexMcpServers({ configPath })).toEqual([
+      { name: "code-review-graph", command: "npx", args: ["-y", "code-review-graph"] }
+    ]);
+  });
+
   it("imports Codex MCP servers into ruler.toml without duplicating existing entries", () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-ruler-import-mcp-"));
     const tomlPath = path.join(tmp, ".ruler", "ruler.toml");

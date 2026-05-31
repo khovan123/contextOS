@@ -3,6 +3,9 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 
+import { appendTelemetry } from "./telemetry.js";
+import { workspaceDataDir } from "./workspace-data.js";
+
 const DEFAULT_TIMEOUT_MS = 80;
 const MAX_GRAPH_QUERIES = 10;
 const DEFAULT_CRG_PYTHON = path.join(
@@ -25,17 +28,47 @@ export function findGraphRelevantFiles({
   rules = [],
   seedFiles = [],
   limit = 6,
-  timeoutMs = Number(process.env.CONTEXTOS_GRAPH_TIMEOUT_MS || DEFAULT_TIMEOUT_MS)
+  timeoutMs = Number(process.env.CONTEXTOS_GRAPH_TIMEOUT_MS || DEFAULT_TIMEOUT_MS),
+  python = process.env.CONTEXTOS_CRG_PYTHON || DEFAULT_CRG_PYTHON,
+  telemetryPath,
+  graphSearch = runCodeReviewGraphSearch,
+  appendTelemetryEvent = appendTelemetry
 } = {}) {
   if (process.env.CONTEXTOS_GRAPH_RETRIEVAL === "0") return [];
   if (!hasGraphIndex(cwd)) return [];
 
-  const python = process.env.CONTEXTOS_CRG_PYTHON || DEFAULT_CRG_PYTHON;
   if (!fs.existsSync(python)) return [];
 
   const queries = buildGraphQueries({ task, rules, seedFiles });
   if (!queries.length) return [];
 
+  try {
+    const raw = graphSearch({ cwd, python, queries, limit, timeoutMs });
+    const files = mergeGraphResults({ cwd, results: raw, limit });
+    recordGraphRetrievalTelemetry({
+      cwd,
+      telemetryPath,
+      appendTelemetryEvent,
+      queryCount: queries.length,
+      resultCount: files.length,
+      status: "ok"
+    });
+    return files;
+  } catch (error) {
+    recordGraphRetrievalTelemetry({
+      cwd,
+      telemetryPath,
+      appendTelemetryEvent,
+      queryCount: queries.length,
+      resultCount: 0,
+      status: "error",
+      error
+    });
+    return [];
+  }
+}
+
+export function runCodeReviewGraphSearch({ cwd, python, queries, limit, timeoutMs }) {
   const script = `
 import json
 import sys
@@ -79,22 +112,56 @@ for query in queries:
 print(json.dumps(results))
 `;
 
+  const output = execFileSync(python, ["-c", script], {
+    cwd,
+    input: JSON.stringify({ repoRoot: cwd, queries, limit }),
+    encoding: "utf8",
+    timeout: timeoutMs,
+    env: {
+      ...process.env,
+      MPLCONFIGDIR: process.env.MPLCONFIGDIR || path.join(os.tmpdir(), "contextos-mpl")
+    },
+    stdio: ["pipe", "pipe", "ignore"]
+  });
+  return JSON.parse(output || "[]");
+}
+
+export function recordGraphRetrievalTelemetry({
+  cwd,
+  telemetryPath,
+  appendTelemetryEvent = appendTelemetry,
+  queryCount = 0,
+  resultCount = 0,
+  status,
+  error
+}) {
   try {
-    const output = execFileSync(python, ["-c", script], {
-      cwd,
-      input: JSON.stringify({ repoRoot: cwd, queries, limit }),
-      encoding: "utf8",
-      timeout: timeoutMs,
-      env: {
-        ...process.env,
-        MPLCONFIGDIR: process.env.MPLCONFIGDIR || path.join(os.tmpdir(), "contextos-mpl")
+    appendTelemetryEvent({
+      telemetryPath: telemetryPath || path.join(workspaceDataDir({ cwd }), "telemetry.jsonl"),
+      event: "InternalGraphRetrieval",
+      payload: {
+        cwd,
+        source: "graph-retriever",
+        method: "internal",
+        ...(status === "ok"
+          ? {
+            mcp: "code-review-graph",
+            toolName: "code-review-graph.semantic_search_nodes"
+          }
+          : {})
       },
-      stdio: ["pipe", "pipe", "ignore"]
+      extra: {
+        source: "graph-retriever",
+        backend: "code-review-graph",
+        method: "internal",
+        status,
+        queryCount,
+        resultCount,
+        ...(error ? { error: String(error.message || error).slice(0, 200) } : {})
+      }
     });
-    const raw = JSON.parse(output || "[]");
-    return mergeGraphResults({ cwd, results: raw, limit });
   } catch {
-    return [];
+    // Graph retrieval must remain fail-open when telemetry storage is unavailable.
   }
 }
 
@@ -165,7 +232,7 @@ function mergeGraphResults({ cwd, results, limit }) {
       source: "graph",
       reasons: []
     };
-    existing.score += 1;
+    existing.score += 1 + Number(result.score || 0);
     existing.reasons.push(`graph:${result.query}`);
     byPath.set(normalized, existing);
   }

@@ -4,6 +4,8 @@ import path from "node:path";
 const CONTEXTOS_COMMAND_MARKER = "/contextos/plugins/ctx/bin/on-";
 const QUIET_CODE_REVIEW_GRAPH_STATUS_COMMAND =
   "git rev-parse --git-dir >/dev/null 2>&1 && code-review-graph status >/dev/null 2>&1 || true";
+const DRAINED_CODE_REVIEW_GRAPH_UPDATE_COMMAND =
+  "cat >/dev/null; git rev-parse --git-dir >/dev/null 2>&1 && code-review-graph update --skip-flows || true";
 
 function shellQuote(value) {
   const s = String(value);
@@ -45,6 +47,23 @@ function quietCodeReviewGraphSessionStart(entries = []) {
         return {
           ...hook,
           command: QUIET_CODE_REVIEW_GRAPH_STATUS_COMMAND
+        };
+      }
+      return hook;
+    })
+  }));
+}
+
+function drainCodeReviewGraphPostToolUse(entries = []) {
+  return entries.map((entry) => ({
+    ...entry,
+    hooks: (entry.hooks || []).map((hook) => {
+      if (typeof hook.command === "string" && hook.command.includes("code-review-graph update --skip-flows")) {
+        return {
+          ...hook,
+          command: hook.command.includes("cat >/dev/null")
+            ? hook.command
+            : DRAINED_CODE_REVIEW_GRAPH_UPDATE_COMMAND
         };
       }
       return hook;
@@ -105,6 +124,7 @@ export function buildGlobalHooksConfig(existingConfig, { marketplaceRoot, inject
   }
 
   config.hooks.SessionStart = quietCodeReviewGraphSessionStart(config.hooks.SessionStart);
+  config.hooks.PostToolUse = drainCodeReviewGraphPostToolUse(config.hooks.PostToolUse);
 
   return config;
 }

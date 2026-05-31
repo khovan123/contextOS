@@ -10,6 +10,15 @@ const DEFAULT_EMBEDDING_CANDIDATES = 120;
 const DEFAULT_SEMANTIC_CATALOG_LIMIT = 300;
 const SCAN_CACHE_TTL_MS = 5 * 60 * 1000;
 const MAX_DESCRIPTION_CHARS = 500;
+const GENERIC_SKILL_TOKENS = new Set([
+  "active", "agent", "agents", "code", "config", "configuration", "create", "development",
+  "environment", "file", "files", "graph", "install", "integration", "local", "node", "package",
+  "project", "refresh", "rebuild", "setup", "skill", "skills", "sync", "tool", "tools", "using",
+  "build", "production", "https", "http", "com", "www"
+]);
+const SPECIALIZED_SKILL_TOKENS = new Set([
+  "android", "cicd", "eas", "expo", "ios", "postgres", "postgresql", "react-native"
+]);
 
 const scanCache = new Map();
 
@@ -154,13 +163,14 @@ export async function suggestSkills({
   prompt = "",
   skills = [],
   dataDir,
+  cwd = process.cwd(),
   limit = DEFAULT_LIMIT,
   timeoutMs = Number(process.env.CONTEXTOS_SKILL_EMBEDDING_TIMEOUT_MS || process.env.CONTEXTOS_EMBEDDING_TIMEOUT_MS || 800)
 } = {}) {
   if (!String(prompt || "").trim() || !skills.length) return [];
-  const base = scoreSkillsByKeyword({ prompt, skills });
+  const base = scoreSkillsByKeyword({ prompt, skills, projectHints: projectSkillHints({ cwd }) });
   if (skills.length > DEFAULT_SEMANTIC_CATALOG_LIMIT) {
-    return finalizeSkillScores(base, limit);
+    return finalizeSkillScores(base, limit, { minimumKeywordScore: 0.5 });
   }
 
   const embeddingCandidates = selectEmbeddingCandidates(base);
@@ -176,8 +186,9 @@ export async function suggestSkills({
   return finalizeSkillScores(embedding.rules, limit);
 }
 
-function finalizeSkillScores(skills, limit) {
-  return skills
+function finalizeSkillScores(skills, limit, { minimumKeywordScore = 0.35 } = {}) {
+  const ranked = skills
+    .filter((rule) => rule.domainEligible !== false)
     .map((rule) => ({
       name: rule.name,
       description: rule.description,
@@ -188,9 +199,21 @@ function finalizeSkillScores(skills, limit) {
       embeddingScore: rule.embeddingScore,
       reasons: rule.reasons || []
     }))
-    .filter((skill) => Number(skill.keywordScore || 0) >= 0.35 || Number(skill.embeddingScore || 0) >= 0.62)
-    .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name))
+    .filter((skill) => Number(skill.keywordScore || 0) >= minimumKeywordScore || Number(skill.embeddingScore || 0) >= 0.62)
+    .sort((a, b) => b.score - a.score || scopePriority(b.scope) - scopePriority(a.scope) || a.name.localeCompare(b.name));
+  const seen = new Set();
+  return ranked
+    .filter((skill) => {
+      const key = normalize(skill.name);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
     .slice(0, limit);
+}
+
+function scopePriority(scope) {
+  return scope === "project" ? 1 : 0;
 }
 
 function selectEmbeddingCandidates(skills) {
@@ -217,21 +240,30 @@ export async function warmSkillEmbeddings({
   });
 }
 
-function scoreSkillsByKeyword({ prompt, skills }) {
-  const normalizedPrompt = normalize(prompt);
+function scoreSkillsByKeyword({ prompt, skills, projectHints = [] }) {
+  const normalizedPrompt = normalizePrompt(prompt);
   const promptTokens = new Set(normalizedPrompt.split(/\s+/).filter(Boolean));
+  const projectTokens = new Set(projectHints);
   return skills.map((skill, index) => {
     const enriched = skill.searchTokens ? skill : enrichSkill(skill);
     const name = String(enriched.name || "");
     const description = truncateDescription(enriched.description || "");
     const content = `${name} ${description}`;
-    const matches = enriched.searchTokens.filter((token) => promptTokens.has(token) && token.length > 2);
+    const matches = filterSkillMatches(
+      enriched.searchTokens.filter((token) => promptTokens.has(token) && token.length > 2 && !GENERIC_SKILL_TOKENS.has(token)),
+      { normalizedPrompt, enriched }
+    );
+    const projectMatches = enriched.searchTokens.filter((token) => projectTokens.has(token) && SPECIALIZED_SKILL_TOKENS.has(token));
     const normalizedName = enriched.normalizedName;
     const nameTokens = enriched.nameTokens;
     const nameHit = normalizedPrompt.includes(normalizedName);
     const nameTokenHit = nameTokens.length > 1 && nameTokens.every((token) => promptTokens.has(token));
     const scopeBonus = enriched.scope === "project" ? 0.08 : 0;
-    const score = Math.min(1, (matches.length ? 0.25 + matches.length * 0.08 : 0) + (nameHit ? 0.2 : 0) + (nameTokenHit ? 0.18 : 0) + scopeBonus);
+    const intentBonus = skillIntentBonus(normalizedPrompt, enriched);
+    const domainEligible = isSkillDomainEligible(normalizedPrompt, enriched);
+    const matchScore = matches.reduce((sum, token) => sum + (SPECIALIZED_SKILL_TOKENS.has(token) ? 0.2 : 0.08), 0);
+    const projectBonus = matches.length && intentBonus ? Math.min(0.16, projectMatches.length * 0.04) : 0;
+    const score = Math.min(1, (matches.length ? 0.25 + matchScore : 0) + projectBonus + intentBonus + (nameHit ? 0.2 : 0) + (nameTokenHit ? 0.18 : 0) + scopeBonus);
     return {
       id: `skill-${index + 1}`,
       name,
@@ -241,13 +273,77 @@ function scoreSkillsByKeyword({ prompt, skills }) {
       content,
       score,
       keywordScore: score,
+      domainEligible,
       reasons: [
         ...(matches.length ? [`keyword:${matches.slice(0, 4).join(",")}`] : []),
+        ...(projectBonus ? [`project:${projectMatches.slice(0, 4).join(",")}`] : []),
+        ...(intentBonus ? ["intent-match"] : []),
         ...(nameHit || nameTokenHit ? ["name-match"] : [])
       ],
       originalOrder: index
     };
   });
+}
+
+function filterSkillMatches(matches, { normalizedPrompt, enriched }) {
+  if (!/\beas\b/.test(normalizedPrompt)) return matches;
+  const skillText = normalize(`${enriched.name} ${enriched.description}`);
+  if (/\b(eas|expo|cicd)\b/.test(skillText)) return matches;
+  return matches.filter((token) => token !== "android" && token !== "ios");
+}
+
+function isSkillDomainEligible(normalizedPrompt, enriched) {
+  if (!/\beas\b/.test(normalizedPrompt)) return true;
+  const skillText = normalize(`${enriched.name} ${enriched.description}`);
+  if (!/\b(android|ios)\b/.test(skillText)) return true;
+  return /\b(eas|expo|cicd)\b/.test(skillText);
+}
+
+function skillIntentBonus(normalizedPrompt, enriched) {
+  const skillText = normalize(`${enriched.name} ${enriched.description}`);
+  if (/\beas\b/.test(normalizedPrompt)
+    && /\b(eas|expo)\b/.test(skillText)
+    && /\b(cicd|workflow|workflows|build|deploy|deployment|pipeline|pipelines)\b/.test(skillText)) {
+    return 0.28;
+  }
+  return 0;
+}
+
+export function projectSkillHints({ cwd = process.cwd() } = {}) {
+  const hints = new Set();
+  const packagePaths = [path.join(cwd, "package.json")];
+  const rootPackage = readJson(path.join(cwd, "package.json"));
+  for (const workspace of rootPackage?.workspaces || []) {
+    if (typeof workspace !== "string" || workspace.includes("*")) continue;
+    packagePaths.push(path.join(cwd, workspace, "package.json"));
+  }
+
+  for (const packagePath of packagePaths) {
+    const packageDir = path.dirname(packagePath);
+    const packageJson = readJson(packagePath);
+    addHintText(hints, JSON.stringify({
+      name: packageJson?.name,
+      description: packageJson?.description,
+      dependencies: Object.keys(packageJson?.dependencies || {}),
+      devDependencies: Object.keys(packageJson?.devDependencies || {})
+    }));
+    for (const fileName of ["app.json", "app.config.js", "app.config.ts", "eas.json"]) {
+      if (fs.existsSync(path.join(packageDir, fileName))) addHintText(hints, fileName);
+    }
+  }
+  return [...hints];
+}
+
+function readJson(filePath) {
+  try {
+    return JSON.parse(fs.readFileSync(filePath, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function addHintText(hints, value) {
+  for (const token of normalize(value).split(/\s+/).filter(Boolean)) hints.add(token);
 }
 
 function enrichSkill(skill) {
@@ -267,4 +363,8 @@ function enrichSkill(skill) {
 
 function normalize(value) {
   return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function normalizePrompt(value) {
+  return normalize(String(value || "").replace(/https?:\/\/\S+/gi, " "));
 }

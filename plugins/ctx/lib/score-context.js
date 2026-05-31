@@ -17,45 +17,73 @@ export async function scoreContext({
   skills = null,
   workflows = null,
   embeddingTimeoutMs = 5000,
-  fileEmbeddingTimeoutMs = Number(process.env.CONTEXTOS_FILE_EMBEDDING_TIMEOUT_MS || 80)
+  fileEmbeddingTimeoutMs = Number(process.env.CONTEXTOS_FILE_EMBEDDING_TIMEOUT_MS || 1000)
 } = {}) {
   const started = Date.now();
-  const merged = readAgentsChain({ cwd });
-  const rawRules = parseRules(merged.content);
-  const parsedRules = filterActionableRules(rawRules);
-  const baseScoredRules = scoreRules(parsedRules, prompt, openFiles);
-  const embedding = await enhanceRuleScoresWithEmbeddings(baseScoredRules, prompt, {
-    dataDir,
-    sources: merged.sources,
-    timeoutMs: embeddingTimeoutMs,
-    allowRemote: false
+  const ruleInputsPromise = Promise.resolve().then(() => {
+    const merged = readAgentsChain({ cwd });
+    const rawRules = parseRules(merged.content);
+    const parsedRules = filterActionableRules(rawRules);
+    return {
+      merged,
+      rawRules,
+      parsedRules,
+      baseScoredRules: scoreRules(parsedRules, prompt, openFiles)
+    };
   });
-  const scoredRules = embedding.rules;
-  const suggestedFiles = await findRelevantFiles({
-    cwd,
-    task: prompt,
-    rules: scoredRules,
-    dataDir,
-    limit: maxFiles,
-    fileEmbeddingTimeoutMs,
-    fileEmbeddingOptions: {
+
+  const rulesPromise = ruleInputsPromise.then(({ merged, baseScoredRules }) => {
+    return enhanceRuleScoresWithEmbeddings(baseScoredRules, prompt, {
+      dataDir,
+      sources: merged.sources,
+      timeoutMs: embeddingTimeoutMs,
       allowRemote: false
-    }
+    });
   });
-  const skillCatalog = Array.isArray(skills) ? skills : scanSkills({ cwd });
-  const suggestedSkills = await suggestSkills({
-    prompt,
-    skills: skillCatalog,
-    dataDir,
-    limit: maxSkills
+
+  const filesPromise = ruleInputsPromise.then(({ baseScoredRules }) => {
+    return findRelevantFiles({
+      cwd,
+      task: prompt,
+      rules: baseScoredRules,
+      dataDir,
+      limit: maxFiles,
+      fileEmbeddingTimeoutMs,
+      fileEmbeddingOptions: {
+        allowRemote: false
+      }
+    });
   });
-  const workflowCatalog = Array.isArray(workflows) ? workflows : scanWorkflows({ cwd });
-  const suggestedWorkflows = await suggestWorkflows({
-    prompt,
-    workflows: workflowCatalog,
-    dataDir,
-    limit: maxWorkflows
+
+  const skillsPromise = Promise.resolve().then(async () => {
+    const catalog = Array.isArray(skills) ? skills : scanSkills({ cwd });
+    return {
+      catalog,
+      suggestions: await suggestSkills({ cwd, prompt, skills: catalog, dataDir, limit: maxSkills })
+    };
   });
+
+  const workflowsPromise = Promise.resolve().then(async () => {
+    const catalog = Array.isArray(workflows) ? workflows : scanWorkflows({ cwd });
+    return {
+      catalog,
+      suggestions: await suggestWorkflows({ prompt, workflows: catalog, dataDir, limit: maxWorkflows })
+    };
+  });
+
+  const [ruleInputs, embedding, suggestedFiles, skillResult, workflowResult] = await Promise.all([
+    ruleInputsPromise,
+    rulesPromise,
+    filesPromise,
+    skillsPromise,
+    workflowsPromise
+  ]);
+  const { merged, rawRules, parsedRules } = ruleInputs;
+  const scoredRules = embedding.rules;
+  const skillCatalog = skillResult.catalog;
+  const suggestedSkills = skillResult.suggestions;
+  const workflowCatalog = workflowResult.catalog;
+  const suggestedWorkflows = workflowResult.suggestions;
 
   return {
     cwd,

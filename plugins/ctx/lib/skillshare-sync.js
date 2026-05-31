@@ -4,6 +4,7 @@ import path from "node:path";
 import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import { execFileSync, execSync, spawn } from "node:child_process";
+import { shellInvocation } from "./shell-runner.js";
 
 const DEFAULT_AGENTS = ["codex", "claude", "antigravity", "copilot"];
 const INSTALL_SH_URL = "https://raw.githubusercontent.com/runkids/skillshare/main/install.sh";
@@ -141,7 +142,8 @@ export async function installSkillshare({
     if (osName === "windows") {
       await spawnShellStreaming("powershell", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", `irm ${INSTALL_PS_URL} | iex`]);
     } else {
-      await spawnShellStreaming("sh", ["-c", `curl -fsSL ${INSTALL_SH_URL} | sh`]);
+      const shell = shellInvocation(`curl -fsSL ${INSTALL_SH_URL} | sh`, { platform: process.platform });
+      await spawnShellStreaming(shell.command, shell.args);
     }
   }
 
@@ -206,14 +208,52 @@ export function detectExistingSkills({ cwd = process.cwd(), home = os.homedir() 
     .filter((entry) => entry.count > 0);
 }
 
+export function repairSkillSymlinks({
+  cwd = process.cwd(),
+  home = os.homedir(),
+  roots = skillRoots({ cwd, home }),
+  dryRun = false
+} = {}) {
+  const repaired = [];
+  const removedBroken = [];
+  for (const root of roots) {
+    let entries = [];
+    try {
+      entries = fs.readdirSync(root, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      if (!entry.isSymbolicLink()) continue;
+      const linkPath = path.join(root, entry.name);
+      const real = safeRealpath(linkPath);
+      if (!real) {
+        if (!dryRun) fs.rmSync(linkPath, { force: true, recursive: true });
+        removedBroken.push(linkPath);
+        continue;
+      }
+      if (!dryRun) {
+        fs.rmSync(linkPath, { force: true, recursive: true });
+        const stat = fs.statSync(real);
+        if (stat.isDirectory()) copyDirectory(real, linkPath);
+        else if (stat.isFile()) fs.copyFileSync(real, linkPath);
+      }
+      repaired.push(linkPath);
+    }
+  }
+  return { repaired: [...new Set(repaired)], removedBroken: [...new Set(removedBroken)] };
+}
+
 function skillRoots({ cwd, home }) {
   return uniquePaths([
     path.join(home, ".claude", "skills"),
     path.join(home, ".codex", "skills"),
+    path.join(home, ".agents", "skills"),
     path.join(home, ".gemini", "antigravity", "skills"),
     path.join(home, ".gemini", "antigravity-cli", "skills"),
     path.join(cwd, ".claude", "skills"),
     path.join(cwd, ".codex", "skills"),
+    path.join(cwd, ".agents", "skills"),
     path.join(cwd, ".gemini", "antigravity", "skills"),
     path.join(cwd, ".gemini", "antigravity-cli", "skills"),
     ...discoverSkillRoots({ cwd, home })
@@ -236,9 +276,11 @@ export function discoverSkillRoots({ cwd = process.cwd(), home = os.homedir() } 
     path.join(home, ".gemini"),
     path.join(home, ".codex"),
     path.join(home, ".claude"),
+    path.join(home, ".agents"),
     path.join(cwd, ".gemini"),
     path.join(cwd, ".codex"),
-    path.join(cwd, ".claude")
+    path.join(cwd, ".claude"),
+    path.join(cwd, ".agents")
   ]) {
     findSkillRoots(base, 0, roots);
   }
@@ -436,6 +478,13 @@ export async function syncSkills({
   }
 
   if (!options.noCollect) {
+    const repaired = repairSkillSymlinks({ cwd, home, dryRun: options.dryRun });
+    if (repaired.repaired.length || repaired.removedBroken.length) {
+      logger(statusLine("Repairing skill symlinks...", options.dryRun
+        ? `dry-run (${repaired.repaired.length} would copy, ${repaired.removedBroken.length} broken)`
+        : `✓ ${repaired.repaired.length} copied, ${repaired.removedBroken.length} broken removed`));
+    }
+
     const legacy = collectAntigravityLegacySkills({ cwd, home, dryRun: options.dryRun });
     if (legacy.copied.length || legacy.skipped.length) {
       const value = options.dryRun

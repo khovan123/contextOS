@@ -2,7 +2,7 @@ import fs from "node:fs";
 
 import { appendJsonLine, readJsonFile, writeJsonFile } from "./fs-utils.js";
 import { readGitSnapshot, checkCompliance } from "./measure.js";
-import { buildReport, formatReport } from "./reporter.js";
+import { buildReport } from "./reporter.js";
 import { loadRuntimeEvidence } from "./telemetry.js";
 import { filterActionableRules } from "./analyzer.js";
 import { resolveHookCwd } from "./hook-io.js";
@@ -54,7 +54,6 @@ export function handleStopPayload(payload, { contextPath, reportPath, historyPat
   if (historyPath) appendJsonLine(historyPath, report);
 
   return {
-    continue: true,
-    systemMessage: formatReport(report)
+    continue: true
   };
 }

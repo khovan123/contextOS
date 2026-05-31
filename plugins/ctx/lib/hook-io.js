@@ -12,7 +12,35 @@ export async function readStdinJson() {
 }
 
 export function writeJson(value) {
-  process.stdout.write(`${JSON.stringify(value)}\n`);
+  try {
+    process.stdout.write(`${JSON.stringify(value)}\n`);
+  } catch (error) {
+    if (error?.code !== "EPIPE") throw error;
+  }
+}
+
+export function exitAfterStdout(code = 0) {
+  if (process.stdout.writableNeedDrain) {
+    process.stdout.once("drain", () => process.exit(code));
+    return;
+  }
+  setImmediate(() => process.exit(code));
+}
+
+export function armHookDeadline(event, fallback, {
+  timeoutMs = Number(process.env.CONTEXTOS_HOOK_DEADLINE_MS || 8500)
+} = {}) {
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return { clear() {} };
+  const timer = setTimeout(() => {
+    logError(event, new Error(`${event} hook deadline exceeded after ${timeoutMs}ms`));
+    writeJson(fallback);
+    exitAfterStdout(0);
+  }, timeoutMs);
+  return {
+    clear() {
+      clearTimeout(timer);
+    }
+  };
 }
 
 export function resolveHookCwd(payload = {}) {

@@ -1,4 +1,3 @@
-import fs from "node:fs";
 import path from "node:path";
 import { findGraphRelevantFiles, mergeRelevantFiles } from "./graph-retriever.js";
 import { expandImportGraph } from "./import-graph.js";
@@ -14,10 +13,6 @@ const IMPORTANT_WORDS = [
   "always", "never", "must", "required", "important", "strictly", "mandatory",
   "luon", "khong bao gio", "bat buoc", "quan trong"
 ];
-
-const IGNORE_DIRS = new Set([
-  ".git", ".next", ".turbo", "coverage", "dist", "build", "node_modules", "vendor"
-]);
 
 const SEMANTIC_ALIASES = {
   duyet: ["moderation", "moderate", "review", "approve", "approval", "approved", "reject", "rejected"],
@@ -48,8 +43,6 @@ const SEMANTIC_ALIASES = {
   authentication: ["auth", "authen", "login"],
   recheck: ["check", "verify", "review"]
 };
-
-const MODERATION_TOKENS = new Set(["moderation", "moderate", "content-moderation", "approval", "approved", "reject", "rejected", "needs_review"]);
 
 const SYSTEM_USER_RULE_PATTERNS = [
   /\ball\s+shell\s+commands?\s+must\s+run\s+as\b/i,
@@ -287,45 +280,23 @@ export async function findRelevantFiles({
   fileEmbeddingTimeoutMs,
   fileEmbeddingOptions = {}
 } = {}) {
-  const rawTaskTokens = new Set(tokenize(task));
-  if (!rawTaskTokens.size) return [];
+  if (!String(task || "").trim()) return [];
 
-  const candidates = [];
-  walkFiles(cwd, (filePath) => {
-    const rel = path.relative(cwd, filePath);
-    const fileTokens = new Set(tokenize(rel));
-    const match = scoreFileTokens({ rawTaskTokens, fileTokens });
-    if (match.score > 0) {
-      candidates.push({
-        path: rel,
-        score: match.score,
-        reasons: match.reasons
-      });
-    }
-  });
-
-  const heuristicFiles = candidates
-    .sort((a, b) => b.score - a.score || a.path.localeCompare(b.path))
-    .slice(0, Math.max(limit * 2, 6));
-  const hasHighConfidenceHeuristics =
-    heuristicFiles.length >= limit &&
-    Number(heuristicFiles[0]?.score || 0) >= 8;
-  const embeddingFiles = hasHighConfidenceHeuristics
-    ? []
-    : await embeddingFileFinder({
-      cwd,
-      task,
-      dataDir,
-      timeoutMs: fileEmbeddingTimeoutMs,
-      embeddingOptions: fileEmbeddingOptions,
-      limit: Math.max(limit * 2, 6)
-    });
-  const importGraphFiles = expandImportGraph({
+  const embeddingFiles = await embeddingFileFinder({
     cwd,
-    seedFiles: mergeLocalFileCandidates([...heuristicFiles, ...embeddingFiles]).slice(0, limit),
+    task,
+    dataDir,
+    timeoutMs: fileEmbeddingTimeoutMs,
+    embeddingOptions: fileEmbeddingOptions,
     limit: Math.max(limit * 2, 6)
   });
-  const seedFiles = mergeLocalFileCandidates([...heuristicFiles, ...embeddingFiles, ...importGraphFiles])
+  const importGraphFiles = expandImportGraph({
+    cwd,
+    seedFiles: embeddingFiles.slice(0, limit),
+    dataDir,
+    limit: Math.max(limit * 2, 6)
+  });
+  const seedFiles = mergeLocalFileCandidates([...embeddingFiles, ...importGraphFiles])
     .slice(0, Math.max(limit * 3, 9));
 
   const graphFiles = findGraphRelevantFiles({
@@ -352,57 +323,4 @@ function mergeLocalFileCandidates(files) {
     });
   }
   return [...byPath.values()].sort((a, b) => b.score - a.score || a.path.localeCompare(b.path));
-}
-
-function scoreFileTokens({ rawTaskTokens, fileTokens }) {
-  let score = 0;
-  const reasons = new Set();
-  const hasModerationIntent = rawTaskTokens.has("kiem-duyet") || rawTaskTokens.has("kiemduyet") || rawTaskTokens.has("duyet");
-  const hasUploadIntent = rawTaskTokens.has("upload") || rawTaskTokens.has("tai-len") || rawTaskTokens.has("tailen");
-
-  for (const token of rawTaskTokens) {
-    if (fileTokens.has(token)) {
-      score += 3;
-      reasons.add(token);
-    }
-    for (const alias of SEMANTIC_ALIASES[token] || []) {
-      if (fileTokens.has(alias)) {
-        score += 2;
-        reasons.add(`${token}->${alias}`);
-      }
-    }
-  }
-
-  if (hasModerationIntent && [...fileTokens].some((token) => MODERATION_TOKENS.has(token))) {
-    score += 6;
-    reasons.add("domain:moderation");
-  }
-
-  if (hasUploadIntent && (fileTokens.has("upload") || fileTokens.has("uploaded") || fileTokens.has("resource"))) {
-    score += 2;
-    reasons.add("domain:upload");
-  }
-
-  return { score, reasons: [...reasons] };
-}
-
-function walkFiles(directory, onFile, depth = 0) {
-  if (depth > 6) return;
-  let entries = [];
-  try {
-    entries = fs.readdirSync(directory, { withFileTypes: true });
-  } catch {
-    return;
-  }
-  for (const entry of entries) {
-    if (entry.name.startsWith(".") && entry.name !== ".github") {
-      if (entry.name !== ".codex") continue;
-    }
-    const fullPath = path.join(directory, entry.name);
-    if (entry.isDirectory()) {
-      if (!IGNORE_DIRS.has(entry.name)) walkFiles(fullPath, onFile, depth + 1);
-    } else if (entry.isFile()) {
-      onFile(fullPath);
-    }
-  }
 }

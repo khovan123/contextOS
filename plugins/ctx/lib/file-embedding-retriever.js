@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
-import { enhanceRuleScoresWithEmbeddings, isModelCacheReady, warmRuleEmbeddings } from "./embedding-scorer.js";
+import { isModelCacheReady, searchIndexedEmbeddings, warmIndexedEmbeddings } from "./embedding-scorer.js";
+import { rebuildImportGraphIndex } from "./import-graph.js";
 
 const SOURCE_EXTENSIONS = new Set([
   ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".py", ".sql", ".md", ".json"
@@ -8,7 +9,7 @@ const SOURCE_EXTENSIONS = new Set([
 const IGNORE_DIRS = new Set([
   ".git", ".next", ".turbo", "coverage", "dist", "build", "node_modules", "vendor"
 ]);
-const DEFAULT_TIMEOUT_MS = 80;
+const DEFAULT_TIMEOUT_MS = 1000;
 const DEFAULT_MAX_FILES = 1200;
 
 export async function findEmbeddingRelevantFiles({
@@ -18,27 +19,17 @@ export async function findEmbeddingRelevantFiles({
   limit = 10,
   timeoutMs = Number(process.env.CONTEXTOS_FILE_EMBEDDING_TIMEOUT_MS || DEFAULT_TIMEOUT_MS),
   maxFiles = Number(process.env.CONTEXTOS_FILE_EMBEDDING_MAX_FILES || DEFAULT_MAX_FILES),
-  embeddingOptions = {}
+  embeddingOptions = {},
+  indexedSearcher = searchIndexedEmbeddings
 } = {}) {
   if (process.env.CONTEXTOS_FILE_EMBEDDINGS === "0") return [];
   if (!dataDir) return [];
   if (!String(task || "").trim()) return [];
 
-  const files = listSourceFiles(cwd, { maxFiles });
-  if (!files.length) return [];
-
-  const fileRules = files.map((filePath, index) => ({
-    id: `f${index + 1}`,
-    content: fileSearchText(filePath),
-    path: filePath,
-    score: 0,
-    reasons: [],
-    originalOrder: index
-  }));
-
-  const result = await enhanceRuleScoresWithEmbeddings(fileRules, task, {
+  const result = await indexedSearcher({
+    kind: fileIndexKind(cwd),
+    task,
     dataDir,
-    sources: [path.join(cwd, "AGENTS.md")],
     timeoutMs,
     allowRemote: false,
     ...embeddingOptions
@@ -46,12 +37,12 @@ export async function findEmbeddingRelevantFiles({
 
   if (result.status !== "enabled") return [];
 
-  return result.rules
+  return result.items
     .filter((rule) => Number(rule.embeddingScore || 0) >= 0.45)
-    .sort((a, b) => Number(b.embeddingScore || 0) - Number(a.embeddingScore || 0) || a.path.localeCompare(b.path))
+    .sort((a, b) => Number(b.embeddingScore || 0) - Number(a.embeddingScore || 0) || a.id.localeCompare(b.id))
     .slice(0, limit)
     .map((rule) => ({
-      path: rule.path,
+      path: rule.id,
       score: Math.round(Number(rule.embeddingScore || 0) * 10),
       source: "embedding",
       reasons: [`file-embedding:${Number(rule.embeddingScore || 0).toFixed(2)}`]
@@ -67,14 +58,20 @@ export async function warmFileEmbeddings({
   if (!dataDir) return { count: 0, cachePath: null };
   if (!allowRemote && !isModelCacheReady(dataDir)) return { count: 0, cachePath: null, status: "missing-model" };
   const files = listSourceFiles(cwd, { maxFiles });
-  const rules = files.map((filePath) => ({ content: fileSearchText(filePath) }));
-  return warmRuleEmbeddings({
-    rules,
+  rebuildImportGraphIndex({ cwd, files, dataDir });
+  const items = files.map((filePath) => ({ id: filePath, text: fileSearchText(filePath) }));
+  return warmIndexedEmbeddings({
+    kind: fileIndexKind(cwd),
+    items,
     task: "project file semantic retrieval",
     dataDir,
     sources: [path.join(cwd, "AGENTS.md")],
     allowRemote
   });
+}
+
+function fileIndexKind(cwd) {
+  return `file:${path.resolve(cwd)}`;
 }
 
 function listSourceFiles(cwd, { maxFiles }) {

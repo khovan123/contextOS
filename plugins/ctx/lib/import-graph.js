@@ -4,27 +4,14 @@ import path from "node:path";
 const JS_EXTENSIONS = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"];
 const IMPORT_RE = /\bimport\s+(?:[^'"]+\s+from\s+)?['"]([^'"]+)['"]|\brequire\(\s*['"]([^'"]+)['"]\s*\)/g;
 
-export function expandImportGraph({ cwd = process.cwd(), seedFiles = [], limit = 6 } = {}) {
+export function expandImportGraph({ cwd = process.cwd(), seedFiles = [], dataDir, limit = 6 } = {}) {
   const seeds = new Set(seedFiles.map((file) => normalizeRel(file.path)).filter(Boolean));
   if (!seeds.size) return [];
 
-  const files = [];
-  for (const root of importGraphRoots(cwd, [...seeds])) {
-    walkSourceFiles(root, (filePath) => files.push(path.relative(cwd, filePath)));
-  }
-  const fileSet = new Set(files);
-  const outgoing = new Map();
-  const incoming = new Map();
-
-  for (const rel of files) {
-    const imports = resolveImports({ cwd, rel, fileSet });
-    outgoing.set(rel, imports);
-    for (const target of imports) {
-      const importers = incoming.get(target) || new Set();
-      importers.add(rel);
-      incoming.set(target, importers);
-    }
-  }
+  const index = readImportGraphIndex({ cwd, dataDir });
+  if (!index) return [];
+  const outgoing = objectToMap(index.outgoing);
+  const incoming = objectToMap(index.incoming);
 
   const candidates = new Map();
   for (const seed of seeds) {
@@ -42,15 +29,27 @@ export function expandImportGraph({ cwd = process.cwd(), seedFiles = [], limit =
     .slice(0, limit);
 }
 
-function importGraphRoots(cwd, seedFiles) {
-  const roots = new Set();
-  for (const file of seedFiles) {
-    const parts = file.split(path.sep);
-    const rootParts = parts[0] === "services" && parts[1] ? parts.slice(0, 2) : parts.slice(0, 1);
-    const root = path.join(cwd, ...rootParts);
-    if (fs.existsSync(root)) roots.add(root);
+export function rebuildImportGraphIndex({ cwd = process.cwd(), files = [], dataDir } = {}) {
+  if (!dataDir) return { count: 0, path: null };
+  const normalizedFiles = [...new Set(files.map(normalizeRel).filter(Boolean))];
+  const fileSet = new Set(normalizedFiles);
+  const outgoing = {};
+  const incoming = {};
+
+  for (const rel of normalizedFiles) {
+    const imports = resolveImports({ cwd, rel, fileSet });
+    outgoing[rel] = imports;
+    for (const target of imports) {
+      incoming[target] = [...new Set([...(incoming[target] || []), rel])];
+    }
   }
-  return roots.size ? [...roots] : [cwd];
+
+  const indexPath = importGraphIndexPath(dataDir);
+  fs.mkdirSync(path.dirname(indexPath), { recursive: true });
+  const tmpPath = `${indexPath}.tmp-${process.pid}-${Date.now()}`;
+  fs.writeFileSync(tmpPath, `${JSON.stringify({ cwd: path.resolve(cwd), outgoing, incoming })}\n`, "utf8");
+  fs.renameSync(tmpPath, indexPath);
+  return { count: normalizedFiles.length, path: indexPath };
 }
 
 function addImportCandidate(candidates, filePath, reason, score) {
@@ -103,22 +102,20 @@ function normalizeRel(filePath) {
   return normalized;
 }
 
-function walkSourceFiles(directory, onFile, depth = 0) {
-  if (depth > 8) return;
-  let entries = [];
+function readImportGraphIndex({ cwd, dataDir }) {
+  if (!dataDir) return null;
   try {
-    entries = fs.readdirSync(directory, { withFileTypes: true });
+    const index = JSON.parse(fs.readFileSync(importGraphIndexPath(dataDir), "utf8"));
+    return index.cwd === path.resolve(cwd) ? index : null;
   } catch {
-    return;
+    return null;
   }
+}
 
-  for (const entry of entries) {
-    if (entry.name.startsWith(".") || ["node_modules", "dist", "build", "coverage", ".next"].includes(entry.name)) continue;
-    const fullPath = path.join(directory, entry.name);
-    if (entry.isDirectory()) {
-      walkSourceFiles(fullPath, onFile, depth + 1);
-    } else if (entry.isFile() && JS_EXTENSIONS.includes(path.extname(entry.name))) {
-      onFile(fullPath);
-    }
-  }
+function importGraphIndexPath(dataDir) {
+  return path.join(dataDir, "import-graph.json");
+}
+
+function objectToMap(value = {}) {
+  return new Map(Object.entries(value));
 }

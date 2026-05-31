@@ -74,6 +74,54 @@ export async function warmRuleEmbeddings({
   return { count: texts.length, cachePath: cache.path };
 }
 
+export async function searchIndexedEmbeddings({
+  kind,
+  task = "",
+  dataDir = defaultDataRoot(),
+  timeoutMs = Number(process.env.CONTEXTOS_EMBEDDING_TIMEOUT_MS || DEFAULT_TIMEOUT_MS),
+  allowRemote = process.env.CONTEXTOS_EMBEDDING_ALLOW_REMOTE === "1",
+  enabled = process.env.CONTEXTOS_EMBEDDINGS !== "0"
+} = {}) {
+  if (!enabled || !kind || !String(task || "").trim()) return { items: [], status: "disabled" };
+  const cachePath = path.join(dataDir, "embeddings.db");
+  if (!allowRemote && !fs.existsSync(cachePath)) return { items: [], status: "cold-cache", cachePath };
+
+  try {
+    return await withTimeout(searchIndexed({ kind, task, dataDir, allowRemote }), timeoutMs);
+  } catch (error) {
+    return { items: [], status: "fallback", error: error?.message || String(error) };
+  }
+}
+
+export async function warmIndexedEmbeddings({
+  kind,
+  items = [],
+  task = "",
+  dataDir = defaultDataRoot(),
+  sources = [],
+  allowRemote = true
+} = {}) {
+  if (!kind || !items.length) return { count: 0, cachePath: path.join(dataDir, "embeddings.db") };
+  if (!allowRemote && !isModelCacheReady(dataDir)) {
+    return { count: 0, cachePath: path.join(dataDir, "embeddings.db"), status: "missing-model" };
+  }
+
+  const cache = await openEmbeddingCache(dataDir);
+  const embedder = await getExtractor({ allowRemote, dataDir });
+  if (String(task || "").trim()) await getCachedEmbedding({ cache, embedder, text: task, sources });
+
+  const indexed = [];
+  for (const item of items) {
+    const text = String(item.text || "");
+    if (!item.id || !text.trim()) continue;
+    const vector = await getCachedEmbedding({ cache, embedder, text, sources });
+    indexed.push({ id: item.id, text, vector });
+  }
+  cache.replaceIndex(kind, indexed);
+  cache.close();
+  return { count: indexed.length, cachePath: cache.path };
+}
+
 async function enhanceRuleScores(rules, task, { dataDir, sources, allowRemote }) {
   const cache = await openEmbeddingCache(dataDir);
   const embedder = await getExtractor({ allowRemote, dataDir });
@@ -111,6 +159,20 @@ async function enhanceRuleScores(rules, task, { dataDir, sources, allowRemote })
     model: DEFAULT_MODEL,
     cachePath: cache.path
   };
+}
+
+async function searchIndexed({ kind, task, dataDir, allowRemote }) {
+  const cache = await openEmbeddingCache(dataDir);
+  const embedder = await getExtractor({ allowRemote, dataDir });
+  const taskEmbedding = await getCachedEmbedding({ cache, embedder, text: task, sources: [] });
+  const items = cache.listIndexed(kind)
+    .map((item) => ({
+      ...item,
+      embeddingScore: Number(similarityToScore(cosine(taskEmbedding, item.vector)).toFixed(3))
+    }))
+    .sort((a, b) => b.embeddingScore - a.embeddingScore || a.id.localeCompare(b.id));
+  cache.close();
+  return { items, status: "enabled", model: DEFAULT_MODEL, cachePath: cache.path };
 }
 
 async function getExtractor({ allowRemote, dataDir }) {
@@ -183,6 +245,30 @@ export async function openEmbeddingCache(dataDir) {
       );
       writeDatabaseAtomically(cachePath, db);
     },
+    listIndexed(kind) {
+      const stmt = db.prepare("SELECT id, text, vector FROM embedding_index WHERE kind = ? AND model = ?");
+      const items = [];
+      try {
+        stmt.bind([kind, DEFAULT_MODEL]);
+        while (stmt.step()) {
+          const row = stmt.getAsObject();
+          items.push({ id: row.id, text: row.text, vector: JSON.parse(row.vector) });
+        }
+      } finally {
+        stmt.free();
+      }
+      return items;
+    },
+    replaceIndex(kind, items) {
+      db.run("DELETE FROM embedding_index WHERE kind = ? AND model = ?", [kind, DEFAULT_MODEL]);
+      for (const item of items) {
+        db.run(
+          "INSERT INTO embedding_index (kind, id, text, model, vector, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+          [kind, item.id, item.text, DEFAULT_MODEL, JSON.stringify(item.vector), new Date().toISOString()]
+        );
+      }
+      writeDatabaseAtomically(cachePath, db);
+    },
     close() {
       writeDatabaseAtomically(cachePath, db);
       db.close();
@@ -216,6 +302,17 @@ function ensureEmbeddingSchema(db) {
       model TEXT NOT NULL,
       vector TEXT NOT NULL,
       updated_at TEXT NOT NULL
+    )
+  `);
+  db.run(`
+    CREATE TABLE IF NOT EXISTS embedding_index (
+      kind TEXT NOT NULL,
+      id TEXT NOT NULL,
+      text TEXT NOT NULL,
+      model TEXT NOT NULL,
+      vector TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (kind, id, model)
     )
   `);
 }
@@ -316,11 +413,16 @@ function similarityToScore(similarity) {
   return Math.max(0, Math.min(1, (similarity + 1) / 2));
 }
 
-function withTimeout(promise, timeoutMs) {
-  return Promise.race([
-    promise,
-    new Promise((_, reject) => {
-      setTimeout(() => reject(new Error(`embedding scorer timed out after ${timeoutMs}ms`)), timeoutMs);
-    })
-  ]);
+async function withTimeout(promise, timeoutMs) {
+  let timer;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`embedding scorer timed out after ${timeoutMs}ms`)), timeoutMs);
+      })
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }

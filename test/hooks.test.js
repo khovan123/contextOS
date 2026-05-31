@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { handlePromptPayload } from "../plugins/ctx/lib/prompt-hook.js";
 import { handleStopPayload } from "../plugins/ctx/lib/stop-hook.js";
 import { logError, persistRuntime } from "../plugins/ctx/lib/hook-io.js";
+import { defaultOutputConfig } from "../plugins/ctx/lib/output-config.js";
 
 function mockScoreContext({ rules = [{ content: "Always use zod for validation.", score: 1, reasons: ["mock"], sourcePath: "AGENTS.md" }] } = {}) {
   return async () => ({
@@ -33,7 +34,7 @@ describe("hook contracts", () => {
 
     const output = await handlePromptPayload(
       { prompt: "fix zod validation", cwd: tmp, hook_event_name: "UserPromptSubmit" },
-      { dataPath, scoreContextClient: mockScoreContext() }
+      { dataPath, scoreContextClient: mockScoreContext(), outputConfig: defaultOutputConfig() }
     );
 
     expect(output.continue).toBe(true);
@@ -61,8 +62,7 @@ describe("hook contracts", () => {
 
     expect(output.continue).toBe(true);
     expect(output.suppressOutput).toBe(true);
-    expect(output.hookSpecificOutput.hookEventName).toBe("UserPromptSubmit");
-    expect(output.hookSpecificOutput.additionalContext).toBe("");
+    expect(output).not.toHaveProperty("hookSpecificOutput");
   });
 
   it("still injects prompt context when runtime persistence fails", async () => {
@@ -75,7 +75,8 @@ describe("hook contracts", () => {
       {
         dataPath: path.join(blockedPath, "last-prompt-context.json"),
         historyPath: path.join(blockedPath, "history.jsonl"),
-        scoreContextClient: mockScoreContext()
+        scoreContextClient: mockScoreContext(),
+        outputConfig: defaultOutputConfig()
       }
     );
 
@@ -95,7 +96,8 @@ describe("hook contracts", () => {
         mcpDataDir: path.join(tmp, ".ctx-data"),
         scoreContextClient: async () => {
           throw new Error("ctx-mcp bridge socket not found");
-        }
+        },
+        outputConfig: defaultOutputConfig()
       }
     );
     const runtime = JSON.parse(fs.readFileSync(dataPath, "utf8"));
@@ -103,6 +105,79 @@ describe("hook contracts", () => {
     expect(output.continue).toBe(true);
     expect(output.hookSpecificOutput.additionalContext).toContain("code-review-graph");
     expect(runtime.telemetry.bridgeStatus).toBe("fallback");
+  });
+
+  it("fails open when direct fallback scoring exceeds the hook budget", async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-hook-direct-timeout-"));
+    const dataPath = path.join(tmp, ".data", "last-prompt-context.json");
+    fs.writeFileSync(path.join(tmp, "AGENTS.md"), "- Always use code-review-graph before reading files.\n");
+
+    const output = await handlePromptPayload(
+      { prompt: "review code changes", cwd: tmp, hook_event_name: "UserPromptSubmit" },
+      {
+        dataPath,
+        mcpDataDir: path.join(tmp, ".ctx-data"),
+        directFallbackTimeoutMs: 5,
+        scoreContextClient: async () => {
+          throw new Error("ctx-mcp bridge socket not found");
+        },
+        scoreContextDirectClient: () => new Promise(() => {}),
+        autoWarmWorkspace: () => ({ status: "disabled" }),
+        outputConfig: defaultOutputConfig()
+      }
+    );
+    const runtime = JSON.parse(fs.readFileSync(dataPath, "utf8"));
+
+    expect(output.continue).toBe(true);
+    expect(output).not.toHaveProperty("hookSpecificOutput");
+    expect(runtime.telemetry.bridgeStatus).toBe("fallback-failed");
+    expect(runtime.telemetry.directFallbackError).toContain("timed out");
+  });
+
+  it("omits empty hook context and records why it was empty", async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-hook-empty-config-"));
+    const dataPath = path.join(tmp, ".data", "last-prompt-context.json");
+
+    const output = await handlePromptPayload(
+      { prompt: "fix zod validation", cwd: tmp, hook_event_name: "UserPromptSubmit" },
+      {
+        dataPath,
+        scoreContextClient: mockScoreContext(),
+        outputConfig: {
+          sections: { rules: false, files: true, skills: false, workflows: false }
+        }
+      }
+    );
+    const runtime = JSON.parse(fs.readFileSync(dataPath, "utf8"));
+
+    expect(output).not.toHaveProperty("hookSpecificOutput");
+    expect(runtime.telemetry.emptyContextReason).toBe("available-sections-disabled:rules,skills,workflows");
+  });
+
+  it("schedules background warmup when no context candidates exist", async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-hook-auto-warm-"));
+    const dataPath = path.join(tmp, ".data", "last-prompt-context.json");
+
+    const output = await handlePromptPayload(
+      { prompt: "find billing adapter", cwd: tmp, hook_event_name: "UserPromptSubmit" },
+      {
+        dataPath,
+        scoreContextClient: async () => ({
+          scoredRules: [],
+          suggestedFiles: [],
+          suggestedSkills: [],
+          suggestedWorkflows: [],
+          telemetry: { elapsedMs: 1, modelStatus: "mock" }
+        }),
+        autoWarmWorkspace: ({ reason }) => ({ status: "started", reason }),
+        outputConfig: defaultOutputConfig()
+      }
+    );
+    const runtime = JSON.parse(fs.readFileSync(dataPath, "utf8"));
+
+    expect(output).not.toHaveProperty("hookSpecificOutput");
+    expect(runtime.telemetry.emptyContextReason).toBe("no-context-candidates");
+    expect(runtime.telemetry.autoWarm).toMatchObject({ status: "started", reason: "no-context-candidates" });
   });
 
   it("on-stop handler returns valid JSON when no git repo exists", () => {
@@ -125,8 +200,7 @@ describe("hook contracts", () => {
     expect(output.continue).toBe(true);
     expect(output).not.toHaveProperty("message");
     expect(output).not.toHaveProperty("hookSpecificOutput");
-    expect(output.systemMessage).toContain("ContextOS Report");
-    expect(output.systemMessage).toContain("Rule Outcomes");
+    expect(output).not.toHaveProperty("systemMessage");
     expect(fs.existsSync(reportPath)).toBe(true);
   });
 
@@ -221,8 +295,7 @@ describe("hook contracts", () => {
     expect(report.followed).toHaveLength(1);
     expect(report.followed[0]).toMatchObject({ kind: "runtime" });
     expect(report.followed[0].evidence).toContain("runtime telemetry observed code-review-graph");
-    expect(output.systemMessage).toContain("Runtime Telemetry");
-    expect(output.systemMessage).toContain("code-review-graph.semantic_search_nodes");
+    expect(output).not.toHaveProperty("systemMessage");
   });
 
   it("keeps diagnostic writes best-effort when data dir is not writable", () => {

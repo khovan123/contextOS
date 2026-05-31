@@ -34,3 +34,11 @@ export function copyPackageRoot({ rootDir, targetRoot }) {
   }
   return targetRoot;
 }
+
+export function syncPackageRoot({ rootDir, targetRoot }) {
+  if (path.resolve(rootDir) === path.resolve(targetRoot)) {
+    return { targetRoot, synced: false };
+  }
+  copyPackageRoot({ rootDir, targetRoot });
+  return { targetRoot, synced: true };
+}

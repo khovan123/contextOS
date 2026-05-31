@@ -6,6 +6,7 @@ import { stdin as input, stdout as output } from "node:process";
 import { execFileSync, spawn } from "node:child_process";
 
 import { defaultDataRoot } from "./workspace-data.js";
+import { formatTomlValue, readMcpServersFromToml } from "./toml-config.js";
 
 const DEFAULT_AGENTS = ["codex", "claude", "antigravity", "copilot"];
 const CTX_MCP_NAME = "ctx-mcp";
@@ -171,60 +172,12 @@ function hasTomlSection(content, sectionName) {
   return new RegExp(`^\\[${sectionName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\]\\s*$`, "m").test(content);
 }
 
-function findMcpServerSections(content) {
-  const lines = String(content || "").split(/\r?\n/);
-  const sections = [];
-  for (let index = 0; index < lines.length; index += 1) {
-    const match = lines[index].match(/^\[mcp_servers\.([^\].]+)\]\s*$/);
-    if (!match) continue;
-    let end = lines.length;
-    for (let cursor = index + 1; cursor < lines.length; cursor += 1) {
-      if (/^\[/.test(lines[cursor])) {
-        end = cursor;
-        break;
-      }
-    }
-    sections.push({
-      name: unquoteTomlKey(match[1]),
-      body: lines.slice(index + 1, end)
-    });
-  }
-  return sections;
-}
-
-function findStringValue(lines, key) {
-  const line = lines.find((item) => new RegExp(`^\\s*${escapeRegExp(key)}\\s*=`).test(item));
-  if (!line) return null;
-  const match = line.match(/=\s*"((?:\\.|[^"\\])*)"/);
-  return match ? unescapeTomlString(match[1]) : null;
-}
-
-function findArrayValue(lines, key) {
-  const line = lines.find((item) => new RegExp(`^\\s*${escapeRegExp(key)}\\s*=`).test(item));
-  if (!line) return [];
-  const arrayMatch = line.match(/=\s*\[(.*)\]\s*$/);
-  if (!arrayMatch) return [];
-  const values = [];
-  const pattern = /"((?:\\.|[^"\\])*)"/g;
-  let match;
-  while ((match = pattern.exec(arrayMatch[1]))) values.push(unescapeTomlString(match[1]));
-  return values;
-}
-
 function tomlString(value) {
-  return `"${String(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+  return formatTomlValue(value);
 }
 
 function tomlArray(values = []) {
-  return `[${values.map(tomlString).join(", ")}]`;
-}
-
-function unescapeTomlString(value) {
-  return String(value).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
-}
-
-function unquoteTomlKey(value) {
-  return value.replace(/^"|"$/g, "");
+  return formatTomlValue(values);
 }
 
 function escapeRegExp(value) {
@@ -246,19 +199,14 @@ function unwrapContextOSProxy(command, args = []) {
 export function readCodexMcpServers({ configPath = codexConfigPath() } = {}) {
   if (!fs.existsSync(configPath)) return [];
   const content = fs.readFileSync(configPath, "utf8");
-  const servers = [];
-  for (const section of findMcpServerSections(content)) {
-    const command = findStringValue(section.body, "command");
-    if (!command) continue;
-    const args = findArrayValue(section.body, "args");
+  return readMcpServersFromToml(content).map(({ name, command, args }) => {
     const unwrapped = unwrapContextOSProxy(command, args);
-    servers.push({
-      name: section.name,
+    return {
+      name,
       command: unwrapped.command,
       args: unwrapped.args
-    });
-  }
-  return servers;
+    };
+  });
 }
 
 export function readProjectMcpJsonServers({ cwd = process.cwd(), configPath = path.join(cwd, ".mcp.json") } = {}) {
@@ -302,17 +250,7 @@ function mergeMcpServers(...groups) {
 function readRulerMcpServers({ tomlPath } = {}) {
   if (!tomlPath || !fs.existsSync(tomlPath)) return [];
   const content = fs.readFileSync(tomlPath, "utf8");
-  const servers = [];
-  for (const section of findMcpServerSections(content)) {
-    const command = findStringValue(section.body, "command");
-    if (!command) continue;
-    servers.push({
-      name: section.name,
-      command,
-      args: findArrayValue(section.body, "args")
-    });
-  }
-  return servers;
+  return readMcpServersFromToml(content);
 }
 
 function readRulerMcpServer({ tomlPath, name } = {}) {

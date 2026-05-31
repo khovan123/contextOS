@@ -1,6 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { readMcpServersFromToml, updateMcpServerFields } from "./toml-config.js";
+
 const DEFAULT_EXCLUDES = new Set(["ctx-mcp"]);
 
 export function installMcpTelemetryProxies({ codexHome, marketplaceRoot, targets = null, excludes = DEFAULT_EXCLUDES } = {}) {
@@ -17,55 +19,46 @@ export function installMcpTelemetryProxies({ codexHome, marketplaceRoot, targets
 }
 
 export function rewriteMcpTelemetryProxies(toml, { proxyPath, targets = null, excludes = DEFAULT_EXCLUDES } = {}) {
-  const lines = String(toml || "").split(/\r?\n/);
-  const sections = findMcpServerSections(lines);
+  let content = String(toml || "");
+  const servers = readMcpServersFromToml(content);
   const wrapped = [];
   const skipped = [];
 
-  for (const section of sections.reverse()) {
-    const body = lines.slice(section.start + 1, section.end);
-    const command = findStringValue(body, "command");
-    const args = findArrayValue(body, "args") || [];
-    const shouldProxy = shouldProxyServer(section.name, { targets, excludes });
+  for (const server of servers) {
+    const { name, command, args } = server;
+    const shouldProxy = shouldProxyServer(name, { targets, excludes });
 
     if (command === "node" && args[0] === proxyPath && !shouldProxy) {
       const original = unwrapProxyArgs(args);
       if (original) {
-        const nextBody = replaceOrInsertServerField(
-          replaceOrInsertServerField(body, "command", tomlString(original.command)),
-          "args",
-          tomlArray(original.args)
-        );
-        lines.splice(section.start + 1, section.end - section.start - 1, ...nextBody);
-        skipped.push({ name: section.name, reason: "unwrapped-non-target" });
+        content = updateMcpServerFields(content, name, original);
+        skipped.push({ name, reason: "unwrapped-non-target" });
         continue;
       }
     }
 
     if (!shouldProxy) {
-      skipped.push({ name: section.name, reason: "not-targeted" });
+      skipped.push({ name, reason: "not-targeted" });
       continue;
     }
 
     if (!command) {
-      skipped.push({ name: section.name, reason: "missing-command" });
+      skipped.push({ name, reason: "missing-command" });
       continue;
     }
     if (command === "node" && args[0] === proxyPath) {
-      skipped.push({ name: section.name, reason: "already-wrapped" });
+      skipped.push({ name, reason: "already-wrapped" });
       continue;
     }
 
-    const nextBody = replaceOrInsertServerField(
-      replaceOrInsertServerField(body, "command", tomlString("node")),
-      "args",
-      tomlArray([proxyPath, "--name", section.name, "--", command, ...args])
-    );
-    lines.splice(section.start + 1, section.end - section.start - 1, ...nextBody);
-    wrapped.push({ name: section.name, command, args });
+    content = updateMcpServerFields(content, name, {
+      command: "node",
+      args: [proxyPath, "--name", name, "--", command, ...args]
+    });
+    wrapped.push({ name, command, args });
   }
 
-  return { content: lines.join("\n"), wrapped: wrapped.reverse(), skipped: skipped.reverse() };
+  return { content, wrapped, skipped };
 }
 
 function shouldProxyServer(name, { targets, excludes }) {
@@ -81,69 +74,4 @@ function unwrapProxyArgs(args) {
     command: args[separator + 1],
     args: args.slice(separator + 2)
   };
-}
-
-function findMcpServerSections(lines) {
-  const sections = [];
-  for (let index = 0; index < lines.length; index += 1) {
-    const match = lines[index].match(/^\[mcp_servers\.([^\].]+)\]\s*$/);
-    if (!match) continue;
-    let end = lines.length;
-    for (let cursor = index + 1; cursor < lines.length; cursor += 1) {
-      if (/^\[/.test(lines[cursor])) {
-        end = cursor;
-        break;
-      }
-    }
-    sections.push({ name: unquoteTomlKey(match[1]), start: index, end });
-  }
-  return sections;
-}
-
-function replaceOrInsertServerField(body, key, value) {
-  const next = [...body];
-  const index = next.findIndex((line) => new RegExp(`^\\s*${escapeRegExp(key)}\\s*=`).test(line));
-  const line = `${key} = ${value}`;
-  if (index >= 0) next[index] = line;
-  else next.unshift(line);
-  return next;
-}
-
-function findStringValue(lines, key) {
-  const line = lines.find((item) => new RegExp(`^\\s*${escapeRegExp(key)}\\s*=`).test(item));
-  if (!line) return null;
-  const match = line.match(/=\s*"((?:\\.|[^"\\])*)"/);
-  return match ? unescapeTomlString(match[1]) : null;
-}
-
-function findArrayValue(lines, key) {
-  const line = lines.find((item) => new RegExp(`^\\s*${escapeRegExp(key)}\\s*=`).test(item));
-  if (!line) return null;
-  const arrayMatch = line.match(/=\s*\[(.*)\]\s*$/);
-  if (!arrayMatch) return null;
-  const values = [];
-  const pattern = /"((?:\\.|[^"\\])*)"/g;
-  let match;
-  while ((match = pattern.exec(arrayMatch[1]))) values.push(unescapeTomlString(match[1]));
-  return values;
-}
-
-function tomlArray(values) {
-  return `[${values.map(tomlString).join(", ")}]`;
-}
-
-function tomlString(value) {
-  return `"${String(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
-}
-
-function unescapeTomlString(value) {
-  return String(value).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
-}
-
-function unquoteTomlKey(value) {
-  return value.replace(/^"|"$/g, "");
-}
-
-function escapeRegExp(value) {
-  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

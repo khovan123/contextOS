@@ -1,26 +1,36 @@
+import path from "node:path";
+
+import { loadOutputConfig } from "./output-config.js";
 
 const MAX_CONTEXT_CHARS = 4000;
 
-export function scheduleContext({ rules = [], relevantFiles = [], suggestedSkills = [], suggestedWorkflows = [], maxChars = MAX_CONTEXT_CHARS } = {}) {
+export function scheduleContext({
+  rules = [],
+  relevantFiles = [],
+  suggestedSkills = [],
+  suggestedWorkflows = [],
+  maxChars = MAX_CONTEXT_CHARS,
+  outputConfig = loadOutputConfig()
+} = {}) {
   const orderedRules = [...rules].sort(compareRulesForContext);
   const high = orderedRules.filter((rule) => rule.score >= 0.5);
   const mid = orderedRules.filter((rule) => rule.score >= 0.1 && rule.score < 0.5);
   const dropped = orderedRules.filter((rule) => rule.score < 0.1);
 
   const sections = [];
-  if (high.length) {
+  if (outputConfig.sections.rules && high.length) {
     sections.push(section("Critical ContextOS rules", high.slice(0, 5).map(formatRule)));
   }
-  if (relevantFiles.length) {
-    sections.push(section("Suggested files to check", relevantFiles.map((file) => `- ${file.path}`)));
+  if (outputConfig.sections.files && relevantFiles.length) {
+    sections.push(section("Suggested files to check", relevantFiles.map(formatFile)));
   }
-  if (suggestedSkills.length) {
-    sections.push(section("Skills to activate for this task", suggestedSkills.map(formatSkill)));
+  if (outputConfig.sections.skills && suggestedSkills.length) {
+    sections.push(inlineSection("Skills to activate for this task", suggestedSkills.map(formatSkill)));
   }
-  if (suggestedWorkflows.length) {
+  if (outputConfig.sections.workflows && suggestedWorkflows.length) {
     sections.push(section("Suggested workflow for this task", suggestedWorkflows.map(formatWorkflow)));
   }
-  if (mid.length) {
+  if (outputConfig.sections.rules && mid.length) {
     sections.push(section("Additional relevant rules", mid.slice(0, 5).map(formatRule)));
   }
 
@@ -51,8 +61,15 @@ function rulePriority(rule) {
 }
 
 function section(title, lines) {
-  if (!lines.length) return "";
-  return `## ${title}\n${lines.join("\n")}`;
+  const uniqueLines = [...new Set(lines)];
+  if (!uniqueLines.length) return "";
+  return `## ${title}\n${uniqueLines.join("\n")}`;
+}
+
+function inlineSection(title, values) {
+  const uniqueValues = [...new Set(values)];
+  if (!uniqueValues.length) return "";
+  return `## ${title}: ${uniqueValues.join(", ")}`;
 }
 
 
@@ -60,23 +77,18 @@ function formatRule(rule) {
   return `- ${rule.content}`;
 }
 
+function formatFile(file) {
+  return `- ${path.basename(file.path)}`;
+}
+
 function formatSkill(skill) {
-  const desc = skill.description
-    ? `: ${truncate(skill.description, 80)}`
-    : "";
-  return `- ${skill.name}${desc}`;
+  return skill.name;
 }
 
 function formatWorkflow(workflow) {
   const name = workflow.title || workflow.name;
-  const hint = workflow.hint ? `: ${workflow.hint}` : "";
   const chain = workflow.chain?.length ? `\n  chain: ${workflow.chain.join(" -> ")}` : "";
-  return `- ${name}${hint}${chain}`;
-}
-
-function truncate(text, maxLen) {
-  if (text.length <= maxLen) return text;
-  return `${text.slice(0, maxLen - 1)}…`;
+  return `- ${name}${chain}`;
 }
 
 function trimToLimit(value, maxChars) {

@@ -78,4 +78,28 @@ args = ["python", "-m", "code_review_graph", "serve"]
     expect(result.content).toContain('command = "node"');
     expect(result.content).toContain('args = ["/ctx/proxy.js", "--name", "code-review-graph", "--", "rtk", "python", "-m", "code_review_graph", "serve"]');
   });
+
+  it("wraps multiline args while preserving comments and approval sections", () => {
+    const input = `# keep this comment
+[mcp_servers."code-review-graph"]
+command = "/venv/bin/python"
+args = [
+  "-m",
+  "code_review_graph",
+  "serve",
+]
+
+[mcp_servers.code-review-graph.tools.detect_changes_tool]
+approval_mode = "approve"
+`;
+
+    const result = rewriteMcpTelemetryProxies(input, { proxyPath: "/ctx/proxy.js" });
+
+    expect(result.wrapped).toEqual([
+      { name: "code-review-graph", command: "/venv/bin/python", args: ["-m", "code_review_graph", "serve"] }
+    ]);
+    expect(result.content).toContain("# keep this comment");
+    expect(result.content).toContain("[mcp_servers.code-review-graph.tools.detect_changes_tool]");
+    expect(result.content).toContain('args = ["/ctx/proxy.js", "--name", "code-review-graph", "--", "/venv/bin/python", "-m", "code_review_graph", "serve"]');
+  });
 });

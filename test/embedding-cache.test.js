@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { isModelCacheReady, modelCacheDir } from "../plugins/ctx/lib/embedding-scorer.js";
+import { isModelCacheReady, modelCacheDir, openEmbeddingCache } from "../plugins/ctx/lib/embedding-scorer.js";
 
 describe("embedding model cache", () => {
   it("detects whether the required local MiniLM model files are present", () => {
@@ -22,5 +22,20 @@ describe("embedding model cache", () => {
     }
 
     expect(isModelCacheReady(dataDir)).toBe(true);
+  });
+
+  it("persists indexed document vectors for direct hot-path lookup", async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-index-cache-"));
+    let cache = await openEmbeddingCache(dataDir);
+    cache.replaceIndex("file:/repo", [
+      { id: "src/moderation.ts", text: "src moderation", vector: [0.1, 0.9] }
+    ]);
+    cache.close();
+
+    cache = await openEmbeddingCache(dataDir);
+    expect(cache.listIndexed("file:/repo")).toEqual([
+      { id: "src/moderation.ts", text: "src moderation", vector: [0.1, 0.9] }
+    ]);
+    cache.close();
   });
 });

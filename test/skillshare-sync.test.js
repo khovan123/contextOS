@@ -9,6 +9,7 @@ import {
   detectOS,
   discoverSkillRoots,
   parseSyncSkillsArgs,
+  repairSkillSymlinks,
   skillshareSourceDir,
   syncSkills
 } from "../plugins/ctx/lib/skillshare-sync.js";
@@ -175,6 +176,26 @@ describe("skillshare sync", () => {
     ]);
     expect(result.syncedCount).toBe(1);
     expect(fs.existsSync(path.join(skillshareSourceDir({ home }), "payment-integration", "SKILL.md"))).toBe(true);
+  });
+
+  it("materializes skill symlinks before installer and sync flows", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-skillshare-links-"));
+    const home = path.join(tmp, "home");
+    const realSkill = path.join(tmp, "real", "linked-skill");
+    const linkPath = path.join(home, ".agents", "skills", "linked-skill");
+    writeSkill(realSkill, "linked-skill");
+    fs.mkdirSync(path.dirname(linkPath), { recursive: true });
+    fs.symlinkSync(realSkill, linkPath, "dir");
+
+    const result = repairSkillSymlinks({
+      cwd: tmp,
+      home,
+      roots: [path.join(home, ".agents", "skills")]
+    });
+
+    expect(result.repaired).toEqual([linkPath]);
+    expect(fs.lstatSync(linkPath).isSymbolicLink()).toBe(false);
+    expect(fs.existsSync(path.join(linkPath, "SKILL.md"))).toBe(true);
   });
 
   it("does not collect or rebuild embeddings in dry-run mode", async () => {

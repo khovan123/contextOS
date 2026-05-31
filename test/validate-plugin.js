@@ -6,9 +6,11 @@ import path from "node:path";
 const pluginRoot = path.resolve("plugins", "ctx");
 const manifestPath = path.join(pluginRoot, ".codex-plugin", "plugin.json");
 const manifest = readJson(manifestPath);
+const packageJson = readJson(path.resolve("package.json"));
 
 assert.equal(manifest.name, "ctx", "plugin name must be ctx");
 assert.match(manifest.version, /^\d+\.\d+\.\d+$/, "version must be semver-like");
+assert.equal(manifest.version, packageJson.version, "plugin version must match package version");
 assert.equal(manifest.mcpServers, ".mcp.json", "plugin must reference .mcp.json");
 assert.ok(manifest.interface?.displayName, "interface.displayName is required");
 assert.ok(Array.isArray(manifest.interface?.capabilities), "interface.capabilities must be an array");

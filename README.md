@@ -102,7 +102,7 @@ The problem is not that agents cannot read `AGENTS.md`. The problem is that larg
 | Injection | Critical rules are placed with primacy + recency, not buried in the middle. |
 | Discovery | Relevant files, skills, and workflows are suggested before work starts. |
 | Sync | Rules/MCP via Ruler, skills via skillshare, workflows via ContextOS. |
-| Evidence | Stop hooks report `followed`, `ignored`, `unknown`, and runtime telemetry. |
+| Evidence | Stop hooks persist `followed`, `ignored`, `unknown`, and runtime telemetry for explicit reports. |
 
 ## Quick Commands
 
@@ -194,6 +194,8 @@ ctx install --agent agy
 4. Warms `~/.ctx/contextos/embeddings.db` for AGENTS rules and project file paths.
 5. Registers the `ctx-mcp` MCP server and merges ContextOS global hooks into `$CODEX_HOME/hooks.json`.
 6. Wraps configured local MCP servers, except ContextOS' own `ctx-mcp`, with a transparent telemetry proxy so `tools/call` events can be measured. The original MCP command is preserved after the proxy separator and executed unchanged.
+7. Detects available project graph backends and prints the selected strategy. `code-review-graph` is active today; detected `codegraph` backends are reported as adapter-pending until the integration contract is implemented.
+8. Refreshes local `code-review-graph` node embeddings when the project already has `.code-review-graph/graph.db`. This is best-effort: install still succeeds when the graph runtime is unavailable.
 
 Restart Codex after installing.
 
@@ -407,14 +409,14 @@ This warning comes from a transitive dependency in the local embedding/WASM stac
 
 | Command | Meaning | Use when | Output / side effect |
 | --- | --- | --- | --- |
-| `ctx install` | Installs ContextOS into Codex with prompt context injection enabled. | Normal Codex setup after installing the npm package. | Same as `ctx install codex`. |
+| `ctx install` | Installs ContextOS into Codex with prompt context injection enabled. | Normal Codex setup after installing the npm package. | Same as `ctx install codex`. Standard installs sync the active Codex marketplace, rebuild file/import indexes, and refresh code-review-graph embeddings when available. |
 | `ctx install codex` | Installs ContextOS into Codex. | You use the `codex` CLI. | Copies the plugin into `$CODEX_HOME/marketplaces/contextos`, registers `ctx@contextos`, registers `ctx-mcp`, installs global hooks, downloads the embedding model, and warms caches. |
 | `ctx install claude` | Installs ContextOS into Claude Code. | You use the `claude` CLI. | Copies a stable package root to `~/.ctx/contextos/agents/claude/contextos`, merges hooks into `~/.claude/settings.json`, and registers `ctx-mcp` in `~/.claude.json`. |
 | `ctx install agy` | Installs ContextOS into Antigravity. | You use the `agy` CLI or Antigravity app/editor. | Copies a stable package root to `~/.ctx/contextos/agents/agy/contextos`, writes hooks to `~/.gemini/config/hooks.json`, and registers `ctx-mcp` in Antigravity app, CLI, and legacy editor MCP config paths. |
 | `ctx install --agent <name>` | Installs for a named agent. | You prefer explicit scripts. | Accepts `codex`, `claude`, or `agy`. |
 | `ctx install --quiet` | Installs ContextOS in measurement-only mode. | You want reports and stats but do not want visible injected context. | Installs the same hooks, but prompt hooks return empty context. |
 | `ctx install --inject` | Installs ContextOS with explicit injection mode. | You want to be explicit in scripts or docs. | Same runtime behavior as the default install mode; if combined with `--quiet`, `--inject` wins. |
-| `ctx install --copy` | Copies only the plugin payload to `$CODEX_HOME/plugins/ctx`. | Local development or manual plugin experiments. | Does not register marketplace, MCP, or global hooks. |
+| `ctx install --copy` | Copies only the plugin payload to `$CODEX_HOME/plugins/ctx`. | Legacy local development or manual plugin experiments. | Does not sync the active marketplace, rebuild indexes, register MCP, or install global hooks. Prefer `ctx refresh` for active local updates. |
 | `ctx setup` | Runs the first-run setup wizard. | You want the recommended onboarding flow after `npm install -g @minhpnq1807/contextos`. | Installs selected agents, optionally syncs Ruler rules/MCP and skillshare skills, then prints next steps. |
 | `ctx setup --yes` | Runs setup with defaults non-interactively. | You want scriptable all-agent setup. | Uses `codex,claude,agy`, enables injection, syncs rules, syncs skills, and passes `--yes` to dependency setup prompts. |
 | `ctx setup --agents <list>` | Runs setup for selected agents. | You want only part of the default set. | Accepts comma-separated `codex`, `claude`, `agy`, or `antigravity`. |
@@ -440,7 +442,10 @@ This warning comes from a transitive dependency in the local embedding/WASM stac
 | `ctx sync --workflows` | Syncs and indexes agent workflow markdown files for prompt-time workflow suggestions. | You use `.claude/workflows/`, `.codex/workflows/`, or Antigravity workflow folders and want every agent to see the same deduped workflow set. | Scans project/global workflow folders, dedupes by workflow name, copies unique workflows to selected global agent roots, warms workflow embeddings, and makes `ctx debug`/prompt hooks show relevant workflow hints. |
 | `ctx sync --workflows --agents <list>` | Syncs workflows only for selected agents. | You want a subset such as `codex,claude` or `codex,claude,agy`. | Accepts comma-separated `codex`, `claude`, `agy`, or `antigravity`; `agy` writes the Gemini/Antigravity workflow roots. |
 | `ctx sync --workflows --dry-run` | Previews workflow sync without writing files. | You want to inspect source workflows and target roots first. | Prints planned sync/index output and skips copying target files. |
+| `ctx skills` | Installs community skill libraries. | You want curated skills without running the full setup wizard. | Opens the community installer, uses a portable shell on Windows/Linux/macOS, repairs unsafe skill symlinks, and syncs installed skills to selected agents. |
 | `ctx embeddings warm -- "task"` | Prepares local semantic embedding caches. | First install, CI smoke checks, or after changing AGENTS.md/project files/skills/workflows. | Loads/downloads `Xenova/all-MiniLM-L6-v2` and writes rule, file-path, skill, and workflow vectors to `~/.ctx/contextos/embeddings.db`. |
+| `ctx --config` | Opens an interactive multi-select panel for prompt sections. | You want to reduce ContextOS prompt output noise. | Toggles critical rules, suggested files, suggested skills, and suggested workflows globally under `~/.ctx/contextos/output-config.json`. |
+| `ctx refresh` | Refreshes the active Codex marketplace plugin and rebuilds local indexes. | Local development updates or a stale file retrieval index. | Copies the current package to `$CODEX_HOME/marketplaces/contextos`, rebuilds file-path embeddings and import adjacency, and refreshes code-review-graph embeddings when available. |
 | `ctx ruler -- <args>` | Forwards args to the installed `ruler` CLI. | You need native Ruler commands such as `init`, `apply`, or `revert`. | Preserves Ruler stdout/stderr and exit status. |
 | `ctx skillshare -- <args>` | Forwards args to the installed `skillshare` CLI. | You need native skillshare commands such as `status`, `target list`, `doctor`, `push`, or `pull`. | Preserves skillshare stdout/stderr and exit status. |
 | `ctx --version` | Prints the installed ContextOS CLI version. | You want to confirm which npm version is being executed. | Prints the version from package metadata. |
@@ -495,15 +500,30 @@ For file suggestions, ContextOS now runs a local RAG-style retrieval pass:
 prompt
   -> UserPromptSubmit hook calls ctx-mcp bridge
   -> ctx-mcp reads AGENTS.md and scores rules with local MiniLM
-  -> run file-path embedding search against embeddings.db for semantic file candidates
-  -> scan filenames for initial seed candidates
+  -> query the persisted file-vector index in embeddings.db for semantic file candidates
   -> expand candidates through relative import graph links
   -> query code-review-graph semantic_search_nodes with seed entity names
-  -> merge graph matches with heuristic matches
+  -> merge and deduplicate semantic, import-graph, and code-review-graph matches
   -> inject top suggested files with graph evidence reasons
 ```
 
 This keeps the hook fast and local while still using graph semantics when available. The graph search path is visible in runtime data through file reasons such as `graph:content-moderation.service`.
+
+Prompt scoring does not walk the repository for file candidates or import expansion. `ctx install` and `ctx embeddings warm` rebuild the persisted file-vector index and one-hop import adjacency index by walking source paths once; prompt hooks query those indexes directly. Rules, files, skills, and workflows are scored concurrently with `Promise.all()`.
+
+`ctx embeddings warm` automatically refreshes the active Codex marketplace payload before rebuilding indexes. Use `ctx refresh` when you want the same marketplace sync plus install-style file/import index and code-review-graph embedding refresh in one command.
+
+If a prompt has no usable context candidates, the hook fails open without emitting an empty `hook context` block, records `emptyContextReason` in the workspace runtime file, and starts a detached `autowarm` rebuild with a cooldown. That background rebuild refreshes file vectors, skill/workflow vectors, import adjacency, and available code-review-graph node embeddings for the next prompt while keeping repository walking out of the current prompt hot path.
+
+Use `ctx --config` to choose which prompt sections ContextOS injects. The interactive panel supports multiple selection with `Space` and persists the global choice in `~/.ctx/contextos/output-config.json`. Disabling rules hides both critical and additional relevant rule sections; compliance metadata remains available for reports.
+
+Injected prompt sections are intentionally compact: rules show only detected rule text, files show basenames without paths, skills show unique names as a comma-separated inline list without descriptions, and workflows show names with their agent chain. Stop hooks persist reports silently; run `ctx report` or `ctx evidence` when you want the detailed compliance output.
+
+Codex may flatten newlines in its `UserPromptSubmit hook (completed)` preview. The injected `additionalContext` payload remains multiline; this is a Codex preview display limitation.
+
+Skill ranking uses bounded project hints from root/workspace `package.json` files and known mobile config files such as `app.json`, `app.config.*`, and `eas.json`. This lets Expo/EAS tasks activate specialized skills without walking the source tree on every prompt.
+
+After `ctx refresh`, ContextOS invalidates the private hook bridge socket so prompts fall back to direct scoring until Codex restarts the long-running `ctx-mcp` process. Hook clients also discard a same-inode socket if an older bridge revision is detected.
 
 Configuration:
 
@@ -512,10 +532,15 @@ CONTEXTOS_GRAPH_RETRIEVAL=0       disable graph-backed file retrieval
 CONTEXTOS_GRAPH_TIMEOUT_MS=80     graph lookup timeout
 CONTEXTOS_CRG_PYTHON=/path/python Python with code_review_graph installed
 CONTEXTOS_EMBEDDINGS=0            disable embedding rule scoring
-CONTEXTOS_MCP_BRIDGE_TIMEOUT_MS=1000 ctx-mcp hook bridge timeout
+CONTEXTOS_MCP_CONNECT_TIMEOUT_MS=100 stale ctx-mcp socket connect timeout
+CONTEXTOS_MCP_BRIDGE_TIMEOUT_MS=2000 ctx-mcp hook bridge timeout
+CONTEXTOS_HOOK_DEADLINE_MS=8500 hard fail-open deadline for prompt hooks
+CONTEXTOS_DIRECT_FALLBACK_TIMEOUT_MS=6000 direct scoring timeout when the bridge is unavailable
+CONTEXTOS_HOOK_EMBEDDING_TIMEOUT_MS=500 rule embedding timeout during hook direct fallback
 CONTEXTOS_EMBEDDING_TIMEOUT_MS=800 embedding scoring timeout inside ctx-mcp/debug
 CONTEXTOS_FILE_EMBEDDINGS=0       disable file-path embedding retrieval
-CONTEXTOS_FILE_EMBEDDING_TIMEOUT_MS=80 file embedding lookup timeout
+CONTEXTOS_HOOK_FILE_EMBEDDING_TIMEOUT_MS=500 file retrieval timeout during hook direct fallback
+CONTEXTOS_FILE_EMBEDDING_TIMEOUT_MS=1000 file-path embedding retrieval timeout
 ```
 
 ## Hook Flow
@@ -545,9 +570,13 @@ unknown  = the rule was relevant, but the diff does not prove either way
 unmeasurable = ContextOS lacks the required evidence source, such as git diff lines or runtime telemetry
 ```
 
-For runtime-only rules, ContextOS also checks `telemetry.jsonl` for hook-visible tool names, MCP server names, and command metadata. A rule like "use code-review-graph before reading files" can be marked `followed` when telemetry contains a matching `code-review-graph` signal.
+For runtime-only rules, ContextOS also checks `telemetry.jsonl` for hook-visible tool names, MCP server names, command metadata, and ContextOS' own internal graph retrieval events. A rule like "use code-review-graph before reading files" can be marked `followed` when telemetry contains a matching `code-review-graph` signal, whether retrieval traveled through the MCP proxy or the local graph bridge.
 
 `ctx install` wraps configured stdio MCP servers with a transparent proxy. Codex will show `node .../proxy.js` as the launched command because that is how stdio can be intercepted, but the original MCP command is kept after `--` and executed unchanged, including RTK-managed commands. The proxy forwards MCP JSON-RPC unchanged and records `tools/call` requests such as `code-review-graph.detect_changes_tool` to workspace telemetry.
+
+The local graph bridge calls `code-review-graph.semantic_search_nodes` directly for hook latency, so it bypasses the stdio proxy. ContextOS records these calls separately as `InternalGraphRetrieval` telemetry with `source=graph-retriever`. `codegraph` detection is already active, but the hybrid adapter remains pending until its MCP response schema is stable enough to merge symbol lookup context with `code-review-graph` blast-radius results.
+
+Codex MCP config is parsed with `smol-toml`. ContextOS rewrites only the selected MCP server fields so comments, ordering, multiline arrays, and tool approval subsections are preserved.
 
 Host/session setup rules such as "run shell commands as user X", `sudo su - user`, `sudo -i -u user`, and `sudo -u user` are filtered before scoring. They are not injected and do not count toward `unknown` outcomes because they describe the agent runtime environment rather than project behavior.
 
@@ -623,6 +652,8 @@ contextos-plan.jsx                 implementation plan/reference
 ## Limitations
 
 - Codex and Claude Code get prompt context through `additionalContext`; Antigravity gets prompt context through `PreInvocation` `ephemeralMessage`.
+- File suggestions require local file-path embeddings or graph matches. ContextOS no longer falls back to filename heuristics when embedding caches are unavailable.
+- `codegraph` detection is diagnostic only until the `codegraph_context` adapter contract is implemented.
 - Antigravity Stop hooks store reports locally, but they do not display the full report inline unless Antigravity adds a non-continuing Stop message surface.
 - Local marketplace plugin hooks may not fire reliably in current Codex builds, so `ctx install` also installs global hooks.
 - Injection mode may show a visible hook context block in some agents.

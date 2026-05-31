@@ -33,6 +33,7 @@ describe("global hooks installer", () => {
     });
 
     expect(twice.hooks.PostToolUse).toHaveLength(1);
+    expect(twice.hooks.PostToolUse[0].hooks[0].command).toContain("cat >/dev/null");
     expect(twice.hooks.SessionStart).toHaveLength(2);
     expect(twice.hooks.UserPromptSubmit).toHaveLength(1);
     expect(twice.hooks.Stop).toHaveLength(1);
