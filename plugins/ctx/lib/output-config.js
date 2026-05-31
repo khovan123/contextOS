@@ -37,6 +37,18 @@ export function saveOutputConfig(config, { dataRoot = defaultDataRoot() } = {}) 
   return normalized;
 }
 
+export function enabledOutputSections(config = loadOutputConfig()) {
+  const normalized = normalizeOutputConfig(config);
+  return OUTPUT_SECTION_OPTIONS
+    .filter((option) => normalized.sections[option.value])
+    .map((option) => option.value);
+}
+
+export function enabledOutputSectionsLabel(config = loadOutputConfig()) {
+  const enabled = enabledOutputSections(config);
+  return enabled.length ? enabled.join(", ") : "(none)";
+}
+
 export async function configureOutputSections({
   dataRoot = defaultDataRoot(),
   select,
@@ -56,7 +68,7 @@ export async function configureOutputSections({
     sections: Object.fromEntries(OUTPUT_SECTION_OPTIONS.map((option) => [option.value, selectedSet.has(option.value)]))
   }, { dataRoot });
   logger(`│  Saved ContextOS prompt section config: ${outputConfigPath(dataRoot)}`);
-  logger(`│  Enabled sections: ${selected.length ? selected.join(", ") : "(none)"}`);
+  logger(`│  Enabled sections: ${enabledOutputSectionsLabel(saved)}`);
   return saved;
 }
 

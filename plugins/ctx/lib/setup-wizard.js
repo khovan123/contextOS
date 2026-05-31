@@ -36,13 +36,16 @@ export function setupSummaryLines({
   cwd = process.cwd(),
   agents = DEFAULT_AGENTS,
   syncRules = true,
-  syncSkills = true
+  syncSkills = true,
+  promptSections = null
 } = {}) {
-  return [
+  const lines = [
     `Installation directory: ${cwd}`,
     `Agents: ${agents.join(", ") || "(none)"}`,
     `Prompt context injection: always enabled`,
     `Ruler rule/MCP sync: ${syncRules ? "enabled" : "skipped"}`,
     `skillshare skill sync: ${syncSkills ? "enabled" : "skipped"}`
   ];
+  if (promptSections !== null) lines.push(`Prompt sections shown: ${promptSections}`);
+  return lines;
 }

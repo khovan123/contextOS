@@ -6,6 +6,8 @@ import { describe, expect, it } from "vitest";
 import {
   configureOutputSections,
   defaultOutputConfig,
+  enabledOutputSections,
+  enabledOutputSectionsLabel,
   loadOutputConfig,
   outputConfigPath,
   saveOutputConfig
@@ -62,5 +64,20 @@ describe("output config", () => {
       skills: true,
       workflows: true
     });
+  });
+
+  it("summarizes enabled output sections", () => {
+    const config = {
+      sections: {
+        rules: false,
+        files: true,
+        skills: true,
+        workflows: false
+      }
+    };
+
+    expect(enabledOutputSections(config)).toEqual(["files", "skills"]);
+    expect(enabledOutputSectionsLabel(config)).toBe("files, skills");
+    expect(enabledOutputSectionsLabel({ sections: { rules: false, files: false, skills: false, workflows: false } })).toBe("(none)");
   });
 });

@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.5.43
+## 0.5.44
 
 - **Robust MCP TOML handling:** Added `smol-toml` parsing for Codex MCP config while preserving comments, ordering, multiline arrays, and nested tool approval sections during telemetry proxy rewrites.
 - **Embedding-only file retrieval:** Removed filename heuristic fallback. File suggestions now flow through local file-path embeddings, relative import expansion, and optional `code-review-graph` retrieval.
@@ -19,7 +19,7 @@
 - **Indexed file retrieval hot path:** Prompt scoring now queries persisted file vectors from `embeddings.db` and persisted one-hop import adjacency directly. Repository walking is limited to install and explicit embedding warmup rebuilds.
 - **File retrieval timeout:** Raised the indexed file-vector lookup timeout from 80ms to 1000ms so warm local SQLite searches can return Suggested files instead of silently falling back to an empty list on larger project indexes.
 - **Parallel context retrieval:** Rules, file suggestions, skills, and workflows now score concurrently through `Promise.all()`.
-- **Interactive prompt section config:** Added `ctx --config`, a multi-select panel for toggling injected critical rules, suggested files, suggested skills, and suggested workflows. Choices persist globally in `~/.ctx/contextos/output-config.json`, and saved summaries remain inside the `│` panel.
+- **Interactive prompt section config:** Added `ctx --config`, a multi-select panel for toggling injected critical rules, suggested files, suggested skills, and suggested workflows. Interactive `ctx setup` now includes the same section picker; `ctx setup --yes` preserves the current saved config for automation. Choices persist globally in `~/.ctx/contextos/output-config.json`, and saved summaries remain inside the `│` panel.
 - **Compact prompt summaries:** Prompt injection now shows file basenames without full paths, emits skills as a deduplicated comma-separated inline list without descriptions, and keeps workflows to names plus chains.
 - **Skill suggestion precision:** Skill keyword ranking now ignores generic setup/runtime tokens such as `node`, `package`, `setup`, `sync`, and `graph`, and deduplicates repeated skill names found across agent roots.
 - **Project-aware skill hints:** Skill ranking now reads bounded root/workspace manifest hints and known mobile config files such as `app.json`, `app.config.*`, and `eas.json`. URL tokens are stripped before scoring, and EAS domain eligibility prevents semantic fallback from reviving unrelated mobile skills, so specialized Expo/EAS skills outrank unrelated GitHub-linked descriptions.

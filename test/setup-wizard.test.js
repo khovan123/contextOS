@@ -47,13 +47,15 @@ describe("setup wizard", () => {
       cwd: "/repo",
       agents: ["codex"],
       syncRules: false,
-      syncSkills: true
+      syncSkills: true,
+      promptSections: "files, skills"
     })).toEqual([
       "Installation directory: /repo",
       "Agents: codex",
       "Prompt context injection: always enabled",
       "Ruler rule/MCP sync: skipped",
-      "skillshare skill sync: enabled"
+      "skillshare skill sync: enabled",
+      "Prompt sections shown: files, skills"
     ]);
   });
 });

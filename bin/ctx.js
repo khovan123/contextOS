@@ -34,7 +34,7 @@ import { scanSkills, warmSkillEmbeddings } from "../plugins/ctx/lib/skill-discov
 import { parsePassthroughArgs, runPassthrough } from "../plugins/ctx/lib/passthrough.js";
 import { parseAgentList, parseSetupArgs, setupSummaryLines } from "../plugins/ctx/lib/setup-wizard.js";
 import { multiSelect } from "../plugins/ctx/lib/multi-select.js";
-import { configureOutputSections } from "../plugins/ctx/lib/output-config.js";
+import { configureOutputSections, enabledOutputSectionsLabel, loadOutputConfig } from "../plugins/ctx/lib/output-config.js";
 import { syncWorkflows, warmWorkflowEmbeddings } from "../plugins/ctx/lib/workflow-discoverer.js";
 import { checkForUpdate } from "../plugins/ctx/lib/update-notifier.js";
 import { fetchSkillsForAgents, printSkillRecommendations, getAllLibraries, getInstallCommands } from "../plugins/ctx/lib/skill-library.js";
@@ -730,6 +730,7 @@ async function askSetupYesNo(rl, question, defaultValue = true) {
 async function setup({ args = [], cwd = process.cwd() } = {}) {
   const options = parseSetupArgs(args);
   const interactive = !options.yes && process.stdin.isTTY;
+  let outputConfig = loadOutputConfig({ dataRoot: contextOSDataDir() });
 
   printSetupBanner();
   console.log(`◇ Installation directory:\n│  ${cwd}`);
@@ -770,11 +771,22 @@ async function setup({ args = [], cwd = process.cwd() } = {}) {
         rl.close();
       }
     }
+
+    console.log("");
+    console.log("◇ Configure prompt output:");
+    outputConfig = await configureOutputSections({
+      dataRoot: contextOSDataDir(),
+      select: multiSelect
+    });
   }
 
   console.log("");
   console.log("◇ Ready to setup:");
-  for (const line of setupSummaryLines({ cwd, ...options })) console.log(`│  ${line}`);
+  for (const line of setupSummaryLines({
+    cwd,
+    ...options,
+    promptSections: enabledOutputSectionsLabel(outputConfig)
+  })) console.log(`│  ${line}`);
   console.log("");
 
   if (!options.agents.length) throw new Error("No agents selected. Use --agents codex,claude,antigravity,copilot.");
