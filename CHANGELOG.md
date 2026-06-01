@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.45
+
+- **Project-aware MCP skill suggestions:** Skill ranking now reads `package.json` keywords and dependencies such as `@modelcontextprotocol/sdk`. MCP projects can recommend `mcp-builder`, `mcp-management`, `mcp-tool-developer`, and `agent-memory-mcp` for context retrieval, scorer, hook, and prompt-injection debugging tasks even when the prompt does not explicitly say `mcp`.
+- **Domain-safe skill ranking:** Added common-language stopwords and bounded domain gates so generic prompt overlap no longer revives unrelated MCP, offensive-security, or platform-commerce skills. Purchase prompts prioritize payment, billing, frontend API integration, and backend skills without assuming Stripe, PayPal, WooCommerce, or another provider unless named.
+- **Purchase-flow file retrieval:** File embedding and graph retrieval queries now expand purchase, wallet, checkout, content-access, library, and notification prompts with focused retrieval hints while keeping repository walking out of the prompt hot path.
+- **Seven-item prompt summaries:** Increased suggested file and skill limits from three to seven in prompt hooks and `ctx debug`. Suggested files now render as a compact comma-separated inline summary while duplicate basenames remain disambiguated with relative paths.
+- **Target-workspace prompt scoring:** Prompt hooks can score an explicitly named sibling workspace such as `../philo-mind`, allowing repo-specific manifest and skill recommendations when debugging another project from the current shell.
+- **Monorepo manifest awareness:** Project skill hints and run/connect file suggestions now read bounded root and workspace `package.json` metadata, including workspace arrays, `{ packages: [...] }`, and one-level globs.
+- **Fallback file retrieval budget:** Raised direct hook fallback file-vector timeout to 1000ms so indexed file suggestions remain available when the private MCP bridge is unavailable.
+
 ## 0.5.44
 
 - **Robust MCP TOML handling:** Added `smol-toml` parsing for Codex MCP config while preserving comments, ordering, multiline arrays, and nested tool approval sections during telemetry proxy rewrites.
