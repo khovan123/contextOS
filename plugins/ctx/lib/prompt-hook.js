@@ -5,7 +5,12 @@ import { callCtxScoreContext } from "./ctx-mcp-client.js";
 import { resolveHookCwd } from "./hook-io.js";
 import { loadOutputConfig } from "./output-config.js";
 import { scoreContext as scoreContextDirect } from "./score-context.js";
+import fs from "node:fs";
 import path from "node:path";
+
+const PROMPT_FILE_LIMIT = 7;
+const PROMPT_SKILL_LIMIT = 7;
+const PROMPT_WORKFLOW_LIMIT = 2;
 
 export async function handlePromptPayload(
   payload,
@@ -24,7 +29,8 @@ export async function handlePromptPayload(
   } = {}
 ) {
   const prompt = payload.prompt || payload.message || payload.user_prompt || "";
-  const cwd = resolveHookCwd(payload);
+  const hookCwd = resolveHookCwd(payload);
+  const cwd = resolvePromptTargetCwd({ cwd: hookCwd, prompt });
   const openFiles = payload.openFiles || payload.open_files || payload.files || [];
   const dataDir = dataPath ? path.dirname(dataPath) : undefined;
 
@@ -34,7 +40,9 @@ export async function handlePromptPayload(
       cwd,
       prompt,
       openFiles,
-      maxFiles: 3
+      maxFiles: PROMPT_FILE_LIMIT,
+      maxSkills: PROMPT_SKILL_LIMIT,
+      maxWorkflows: PROMPT_WORKFLOW_LIMIT
     }, {
       dataDir: mcpDataDir || dataDir,
       timeoutMs: Number(process.env.CONTEXTOS_MCP_BRIDGE_TIMEOUT_MS || 2000)
@@ -45,10 +53,12 @@ export async function handlePromptPayload(
         cwd,
         prompt,
         openFiles,
-        maxFiles: 3,
+        maxFiles: PROMPT_FILE_LIMIT,
+        maxSkills: PROMPT_SKILL_LIMIT,
+        maxWorkflows: PROMPT_WORKFLOW_LIMIT,
         dataDir: mcpDataDir || dataDir,
         embeddingTimeoutMs: Number(process.env.CONTEXTOS_HOOK_EMBEDDING_TIMEOUT_MS || 500),
-        fileEmbeddingTimeoutMs: Number(process.env.CONTEXTOS_HOOK_FILE_EMBEDDING_TIMEOUT_MS || 500)
+        fileEmbeddingTimeoutMs: Number(process.env.CONTEXTOS_HOOK_FILE_EMBEDDING_TIMEOUT_MS || 1000)
       }), directFallbackTimeoutMs, "direct fallback scoring");
       scored.telemetry = {
         ...(scored.telemetry || {}),
@@ -66,9 +76,9 @@ export async function handlePromptPayload(
 
   if (scored.error) throw new Error(scored.error);
   const scoredRules = scored.scoredRules || [];
-  const relevantFiles = (scored.suggestedFiles || []).slice(0, 3);
-  const suggestedSkills = (scored.suggestedSkills || []).slice(0, 3);
-  const suggestedWorkflows = (scored.suggestedWorkflows || []).slice(0, 2);
+  const relevantFiles = (scored.suggestedFiles || []).slice(0, PROMPT_FILE_LIMIT);
+  const suggestedSkills = (scored.suggestedSkills || []).slice(0, PROMPT_SKILL_LIMIT);
+  const suggestedWorkflows = (scored.suggestedWorkflows || []).slice(0, PROMPT_WORKFLOW_LIMIT);
   const effectiveOutputConfig = outputConfig || loadOutputConfig();
   const scheduled = scheduleContext({ rules: scoredRules, relevantFiles, suggestedSkills, suggestedWorkflows, outputConfig: effectiveOutputConfig });
   const contextEmptyReason = emptyContextReason({ scheduled, outputConfig: effectiveOutputConfig, injectContext });
@@ -125,6 +135,58 @@ export async function handlePromptPayload(
     };
   }
   return output;
+}
+
+export function resolvePromptTargetCwd({ cwd = process.cwd(), prompt = "" } = {}) {
+  const current = path.resolve(cwd);
+  const candidates = targetPathCandidates(prompt);
+  for (const candidate of candidates) {
+    const resolved = path.resolve(current, candidate);
+    if (!isAllowedTargetCwd({ current, resolved })) continue;
+    if (isWorkspaceRoot(resolved)) return resolved;
+  }
+  return current;
+}
+
+function targetPathCandidates(prompt) {
+  const text = String(prompt || "");
+  const patterns = [
+    /\b(?:tr[eê]n|in|inside|under|repo|workspace|cwd)\s+([.~A-Za-z0-9_/@.-]+(?:\/[A-Za-z0-9_@().-]+)*)/gi,
+    /\b(?:debug|test|check|run)\s+(?:on|tr[eê]n)\s+([.~A-Za-z0-9_/@.-]+(?:\/[A-Za-z0-9_@().-]+)*)/gi
+  ];
+  const results = [];
+  for (const pattern of patterns) {
+    let match;
+    while ((match = pattern.exec(text))) {
+      const value = cleanPromptPath(match[1]);
+      if (value) results.push(value);
+    }
+  }
+  return results;
+}
+
+function cleanPromptPath(value) {
+  const cleaned = String(value || "").trim().replace(/[),.;:]+$/g, "");
+  if (!cleaned || cleaned.includes("://")) return null;
+  return cleaned;
+}
+
+function isAllowedTargetCwd({ current, resolved }) {
+  const parent = path.dirname(current);
+  const relative = path.relative(parent, resolved);
+  return relative && !relative.startsWith("..") && !path.isAbsolute(relative);
+}
+
+function isWorkspaceRoot(directory) {
+  try {
+    const stat = fs.statSync(directory);
+    if (!stat.isDirectory()) return false;
+  } catch {
+    return false;
+  }
+  return fs.existsSync(path.join(directory, "package.json"))
+    || fs.existsSync(path.join(directory, "AGENTS.md"))
+    || fs.existsSync(path.join(directory, ".git"));
 }
 
 function emptyContextReason({ scheduled, outputConfig, injectContext }) {

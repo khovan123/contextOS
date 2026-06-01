@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { filterActionableRules, findRelevantFiles, isDocumentationOnlyRule, isSystemUserRule, parseRules, scoreRules } from "../plugins/ctx/lib/analyzer.js";
+import { filterActionableRules, findExplicitPromptFiles, findProjectManifestFiles, findRelevantFiles, isDocumentationOnlyRule, isSystemUserRule, parseRules, scoreRules } from "../plugins/ctx/lib/analyzer.js";
 import { findEmbeddingRelevantFiles } from "../plugins/ctx/lib/file-embedding-retriever.js";
 import { expandImportGraph, rebuildImportGraphIndex } from "../plugins/ctx/lib/import-graph.js";
 import { buildGraphQueries, findGraphRelevantFiles, mergeRelevantFiles } from "../plugins/ctx/lib/graph-retriever.js";
@@ -154,6 +154,120 @@ Plain paragraph with enough content to become a standalone rule.
 
     expect(files[0].path).toBe(path.join("services", "content-service", "src", "content-moderation.service.ts"));
     expect(files.map((file) => file.path)).toContain(path.join("services", "upload-service", "src", "confirm-resource-upload.handler.ts"));
+  });
+
+  it("suggests explicit prompt paths without walking source files", async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-explicit-files-"));
+    fs.mkdirSync(path.join(tmp, "webapp", "src", "app", "(private)", "dashboard"), { recursive: true });
+    fs.mkdirSync(path.join(tmp, "webapp", "src", "app", "(private)", "home", "tutorials", "create"), { recursive: true });
+    fs.mkdirSync(path.join(tmp, "webapp", "src", "app", "(private)", "home", "resources", "create"), { recursive: true });
+    fs.writeFileSync(path.join(tmp, "webapp", "src", "app", "(private)", "dashboard", "page.tsx"), "");
+    fs.writeFileSync(path.join(tmp, "webapp", "src", "app", "(private)", "home", "tutorials", "create", "page.tsx"), "");
+    fs.writeFileSync(path.join(tmp, "webapp", "src", "app", "(private)", "home", "resources", "create", "page.tsx"), "");
+
+    const task = "triển khai giao diện webapp/src/app/(private)/dashboard và webapp/src/app/(private)/home/tutorials/create, webapp/src/app/(private)/home/resources/ create";
+    expect(findExplicitPromptFiles({ cwd: tmp, task }).map((file) => file.path)).toEqual([
+      path.join("webapp", "src", "app", "(private)", "dashboard", "page.tsx"),
+      path.join("webapp", "src", "app", "(private)", "home", "tutorials", "create", "page.tsx"),
+      path.join("webapp", "src", "app", "(private)", "home", "resources", "create", "page.tsx")
+    ]);
+
+    const files = await findRelevantFiles({
+      cwd: tmp,
+      task,
+      limit: 3,
+      embeddingFileFinder: async () => []
+    });
+
+    expect(files.map((file) => file.path)).toEqual([
+      path.join("webapp", "src", "app", "(private)", "dashboard", "page.tsx"),
+      path.join("webapp", "src", "app", "(private)", "home", "tutorials", "create", "page.tsx"),
+      path.join("webapp", "src", "app", "(private)", "home", "resources", "create", "page.tsx")
+    ]);
+    expect(files.every((file) => file.source === "prompt-path")).toBe(true);
+  });
+
+  it("suggests package manifests for monorepo run and connect prompts", async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-manifest-files-"));
+    fs.mkdirSync(path.join(tmp, "webapp"), { recursive: true });
+    fs.mkdirSync(path.join(tmp, "libs", "shared"), { recursive: true });
+    fs.writeFileSync(path.join(tmp, "package.json"), JSON.stringify({
+      workspaces: ["webapp", "libs/*"],
+      scripts: { "frontend:dev": "npm run start -w webapp" }
+    }));
+    fs.writeFileSync(path.join(tmp, "webapp", "package.json"), JSON.stringify({
+      scripts: { start: "expo start" },
+      dependencies: { expo: "^56.0.0" }
+    }));
+    fs.writeFileSync(path.join(tmp, "libs", "shared", "package.json"), JSON.stringify({
+      dependencies: { zod: "^4.0.0" }
+    }));
+
+    const task = "why run can not show QR or something to connect webapp";
+    expect(findProjectManifestFiles({ cwd: tmp, task }).map((file) => file.path)).toEqual([
+      "package.json",
+      path.join("webapp", "package.json"),
+      path.join("libs", "shared", "package.json")
+    ]);
+
+    const files = await findRelevantFiles({
+      cwd: tmp,
+      task,
+      limit: 3,
+      embeddingFileFinder: async () => [
+        { path: "webapp/app.config.js", score: 7, source: "embedding", reasons: ["file-embedding:0.70"] }
+      ]
+    });
+
+    expect(files.map((file) => file.path)).toEqual([
+      "package.json",
+      path.join("webapp", "package.json"),
+      path.join("libs", "shared", "package.json")
+    ]);
+  });
+
+  it("expands purchase flow prompts before querying the file embedding index", async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-purchase-files-"));
+    const observedTasks = [];
+
+    const files = await findRelevantFiles({
+      cwd: tmp,
+      task: "Implement purchase flow. Check wallet balance, continue checkout, grant access permissions through content-access-service, update /library, send notifications.",
+      limit: 3,
+      embeddingFileFinder: async ({ task }) => {
+        observedTasks.push(task);
+        return [
+          {
+            path: path.join("services", "billing-service", "src", "presentation", "http", "controllers", "billing.controller.ts"),
+            score: 7,
+            source: "embedding",
+            reasons: ["file-embedding:0.70"]
+          },
+          {
+            path: path.join("services", "content-access-service", "src", "presentation", "http", "controllers", "content-access.controller.ts"),
+            score: 6,
+            source: "embedding",
+            reasons: ["file-embedding:0.62"]
+          },
+          {
+            path: path.join("services", "notification-service", "src", "notification.service.ts"),
+            score: 6,
+            source: "embedding",
+            reasons: ["file-embedding:0.61"]
+          }
+        ];
+      }
+    });
+
+    expect(observedTasks[0]).toContain("ContextOS retrieval hints");
+    expect(observedTasks[0]).toContain("wallet");
+    expect(observedTasks[0]).toContain("content-access-service");
+    expect(observedTasks[0]).toContain("notification");
+    expect(files.map((file) => file.path)).toEqual([
+      path.join("services", "billing-service", "src", "presentation", "http", "controllers", "billing.controller.ts"),
+      path.join("services", "content-access-service", "src", "presentation", "http", "controllers", "content-access.controller.ts"),
+      path.join("services", "notification-service", "src", "notification.service.ts")
+    ]);
   });
 
   it("boosts files connected by relative imports", async () => {

@@ -590,12 +590,13 @@ async function debug(task) {
     cwd,
     prompt: task,
     dataDir: contextOSDataDir(),
-    maxFiles: 3,
+    maxFiles: 7,
+    maxSkills: 7,
     embeddingTimeoutMs: Number(process.env.CONTEXTOS_EMBEDDING_DEBUG_TIMEOUT_MS || 5000)
   });
   const rules = scored.scoredRules;
-  const relevantFiles = scored.suggestedFiles.slice(0, 3);
-  const suggestedSkills = (scored.suggestedSkills || []).slice(0, 3);
+  const relevantFiles = scored.suggestedFiles.slice(0, 7);
+  const suggestedSkills = (scored.suggestedSkills || []).slice(0, 7);
   const suggestedWorkflows = (scored.suggestedWorkflows || []).slice(0, 2);
   const scheduled = scheduleContext({ rules, relevantFiles, suggestedSkills, suggestedWorkflows });
 

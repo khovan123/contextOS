@@ -22,7 +22,7 @@ export function scheduleContext({
     sections.push(section("Critical ContextOS rules", high.slice(0, 5).map(formatRule)));
   }
   if (outputConfig.sections.files && relevantFiles.length) {
-    sections.push(section("Suggested files to check", relevantFiles.map(formatFile)));
+    sections.push(commaSection("Suggested files to check", formatFiles(relevantFiles)));
   }
   if (outputConfig.sections.skills && suggestedSkills.length) {
     sections.push(inlineSection("Skills to activate for this task", suggestedSkills.map(formatSkill)));
@@ -72,13 +72,28 @@ function inlineSection(title, values) {
   return `## ${title}: ${uniqueValues.join(", ")}`;
 }
 
+function commaSection(title, values) {
+  const uniqueValues = [...new Set(values)];
+  if (!uniqueValues.length) return "";
+  return `## ${title}, ${uniqueValues.join(", ")}`;
+}
 
 function formatRule(rule) {
   return `- ${rule.content}`;
 }
 
-function formatFile(file) {
-  return `- ${path.basename(file.path)}`;
+function formatFiles(files) {
+  const counts = new Map();
+  for (const file of files) {
+    const name = path.basename(file.path);
+    counts.set(name, (counts.get(name) || 0) + 1);
+  }
+  return files.map((file) => formatFile(file, counts));
+}
+
+function formatFile(file, basenameCounts) {
+  const name = path.basename(file.path);
+  return basenameCounts.get(name) > 1 ? file.path : name;
 }
 
 function formatSkill(skill) {

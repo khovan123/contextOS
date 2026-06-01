@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { handlePromptPayload } from "../plugins/ctx/lib/prompt-hook.js";
+import { handlePromptPayload, resolvePromptTargetCwd } from "../plugins/ctx/lib/prompt-hook.js";
 import { handleStopPayload } from "../plugins/ctx/lib/stop-hook.js";
 import { logError, persistRuntime } from "../plugins/ctx/lib/hook-io.js";
 import { defaultOutputConfig } from "../plugins/ctx/lib/output-config.js";
@@ -27,6 +27,54 @@ function mockScoreContext({ rules = [{ content: "Always use zod for validation."
 }
 
 describe("hook contracts", () => {
+  it("resolves explicit target workspace paths from debug prompts", () => {
+    const parent = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-hook-target-parent-"));
+    const current = path.join(parent, "contextOS");
+    const target = path.join(parent, "philo-mind");
+    fs.mkdirSync(current, { recursive: true });
+    fs.mkdirSync(target, { recursive: true });
+    fs.writeFileSync(path.join(target, "package.json"), "{}");
+
+    expect(resolvePromptTargetCwd({
+      cwd: current,
+      prompt: 'debug trên ../philo-mind với prompt: "why run can not show QR"'
+    })).toBe(target);
+  });
+
+  it("scores explicit target workspace while persisting current hook workspace", async () => {
+    const parent = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-hook-target-score-"));
+    const current = path.join(parent, "contextOS");
+    const target = path.join(parent, "philo-mind");
+    fs.mkdirSync(current, { recursive: true });
+    fs.mkdirSync(target, { recursive: true });
+    fs.writeFileSync(path.join(target, "package.json"), "{}");
+    const dataPath = path.join(current, ".data", "last-prompt-context.json");
+    const seen = [];
+
+    await handlePromptPayload(
+      { prompt: 'debug trên ../philo-mind với prompt: "why run can not show QR"', cwd: current },
+      {
+        dataPath,
+        scoreContextClient: async ({ cwd }) => {
+          seen.push(cwd);
+          return {
+            scoredRules: [],
+            suggestedFiles: [{ path: "package.json", score: 50 }],
+            suggestedSkills: [],
+            suggestedWorkflows: [],
+            telemetry: { elapsedMs: 1, modelStatus: "mock" }
+          };
+        },
+        outputConfig: defaultOutputConfig()
+      }
+    );
+
+    const runtime = JSON.parse(fs.readFileSync(dataPath, "utf8"));
+    expect(seen).toEqual([target]);
+    expect(runtime.cwd).toBe(target);
+    expect(runtime.scheduled.additionalContext).toContain("package.json");
+  });
+
   it("on-prompt handler injects context by default", async () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-hook-"));
     const dataPath = path.join(tmp, ".data", "last-prompt-context.json");
@@ -49,6 +97,37 @@ describe("hook contracts", () => {
     expect(JSON.parse(fs.readFileSync(dataPath, "utf8")).scheduled.additionalContext).toContain("zod");
     expect(JSON.parse(fs.readFileSync(dataPath, "utf8")).suggestedSkills).toHaveLength(1);
     expect(JSON.parse(fs.readFileSync(dataPath, "utf8")).suggestedWorkflows).toHaveLength(1);
+  });
+
+  it("requests and keeps up to seven files and skills for prompt context", async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-hook-limits-"));
+    const dataPath = path.join(tmp, ".data", "last-prompt-context.json");
+    const seen = [];
+
+    await handlePromptPayload(
+      { prompt: "implement purchase flow", cwd: tmp, hook_event_name: "UserPromptSubmit" },
+      {
+        dataPath,
+        scoreContextClient: async (payload) => {
+          seen.push(payload);
+          return {
+            scoredRules: [],
+            suggestedFiles: Array.from({ length: 9 }, (_, index) => ({ path: `src/file-${index}.ts`, score: 10 - index })),
+            suggestedSkills: Array.from({ length: 9 }, (_, index) => ({ name: `skill-${index}`, score: 10 - index })),
+            suggestedWorkflows: [],
+            telemetry: { elapsedMs: 1, modelStatus: "mock" }
+          };
+        },
+        outputConfig: defaultOutputConfig()
+      }
+    );
+    const runtime = JSON.parse(fs.readFileSync(dataPath, "utf8"));
+
+    expect(seen[0]).toMatchObject({ maxFiles: 7, maxSkills: 7 });
+    expect(runtime.relevantFiles).toHaveLength(7);
+    expect(runtime.suggestedSkills).toHaveLength(7);
+    expect(runtime.scheduled.additionalContext).toContain("## Suggested files to check, file-0.ts, file-1.ts");
+    expect(runtime.scheduled.additionalContext).toContain("## Skills to activate for this task: skill-0, skill-1");
   });
 
   it("on-prompt handler can run quiet when disabled", async () => {

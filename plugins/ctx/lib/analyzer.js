@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 import { findGraphRelevantFiles, mergeRelevantFiles } from "./graph-retriever.js";
 import { expandImportGraph } from "./import-graph.js";
@@ -282,9 +283,12 @@ export async function findRelevantFiles({
 } = {}) {
   if (!String(task || "").trim()) return [];
 
+  const retrievalTask = expandFileRetrievalTask(task);
+  const explicitFiles = findExplicitPromptFiles({ cwd, task, limit: Math.max(limit * 2, 6) });
+  const manifestFiles = findProjectManifestFiles({ cwd, task, limit: Math.max(limit * 2, 6) });
   const embeddingFiles = await embeddingFileFinder({
     cwd,
-    task,
+    task: retrievalTask,
     dataDir,
     timeoutMs: fileEmbeddingTimeoutMs,
     embeddingOptions: fileEmbeddingOptions,
@@ -292,22 +296,202 @@ export async function findRelevantFiles({
   });
   const importGraphFiles = expandImportGraph({
     cwd,
-    seedFiles: embeddingFiles.slice(0, limit),
+    seedFiles: [...explicitFiles, ...manifestFiles, ...embeddingFiles].slice(0, limit),
     dataDir,
     limit: Math.max(limit * 2, 6)
   });
-  const seedFiles = mergeLocalFileCandidates([...embeddingFiles, ...importGraphFiles])
+  const seedFiles = mergeLocalFileCandidates([...explicitFiles, ...manifestFiles, ...embeddingFiles, ...importGraphFiles])
     .slice(0, Math.max(limit * 3, 9));
 
   const graphFiles = findGraphRelevantFiles({
     cwd,
-    task,
+    task: retrievalTask,
     rules,
     seedFiles,
     limit: Math.max(limit * 2, 6)
   });
 
   return mergeRelevantFiles({ graphFiles, heuristicFiles: seedFiles, limit });
+}
+
+export function findProjectManifestFiles({ cwd = process.cwd(), task = "", limit = 6 } = {}) {
+  const tokens = new Set(tokenize(task));
+  if (!isManifestRelevantTask(tokens)) return [];
+  const manifests = workspacePackageManifests(cwd, tokens);
+  return manifests.slice(0, limit).map((filePath, index) => ({
+    path: filePath,
+    score: manifestScore(filePath, tokens, index),
+    source: "manifest",
+    reasons: ["project-manifest"]
+  }));
+}
+
+function manifestScore(manifest, taskTokens, index) {
+  if (manifest === "package.json") return 50;
+  const parts = manifest.split(/[\\/]+/).filter(Boolean);
+  const workspaceName = parts.at(-2);
+  return (taskTokens.has(workspaceName) ? 35 : 20) - index * 0.01;
+}
+
+function isManifestRelevantTask(tokens) {
+  const runIntent = ["run", "start", "connect", "qr", "install", "build", "script", "scripts"].some((token) => tokens.has(token));
+  const projectIntent = ["webapp", "frontend", "expo", "native", "app", "package", "workspace"].some((token) => tokens.has(token));
+  return runIntent && projectIntent;
+}
+
+function workspacePackageManifests(cwd, taskTokens = new Set()) {
+  const rootManifest = path.join(cwd, "package.json");
+  const manifests = [];
+  if (fs.existsSync(rootManifest)) manifests.push("package.json");
+  const rootPackage = readJson(rootManifest);
+  for (const pattern of workspacePatterns(rootPackage?.workspaces)) {
+    for (const manifest of expandWorkspacePattern({ cwd, pattern })) {
+      manifests.push(path.relative(cwd, manifest));
+    }
+  }
+  return [...new Set(manifests)].sort((a, b) => manifestPriority(b, taskTokens) - manifestPriority(a, taskTokens) || a.localeCompare(b));
+}
+
+function manifestPriority(manifest, taskTokens) {
+  if (manifest === "package.json") return 100;
+  const parts = manifest.split(/[\\/]+/).filter(Boolean);
+  const workspaceName = parts.at(-2);
+  return taskTokens.has(workspaceName) ? 80 : 0;
+}
+
+function workspacePatterns(workspaces) {
+  if (Array.isArray(workspaces)) return workspaces.filter((item) => typeof item === "string");
+  if (Array.isArray(workspaces?.packages)) return workspaces.packages.filter((item) => typeof item === "string");
+  return [];
+}
+
+function expandWorkspacePattern({ cwd, pattern }) {
+  const normalized = String(pattern || "").replace(/\\/g, "/").replace(/\/+$/g, "");
+  if (!normalized || normalized.startsWith("..") || path.isAbsolute(normalized)) return [];
+  if (!normalized.includes("*")) {
+    const manifest = path.join(cwd, normalized, "package.json");
+    return fs.existsSync(manifest) ? [manifest] : [];
+  }
+  const parts = normalized.split("/");
+  const starIndex = parts.indexOf("*");
+  if (starIndex < 0 || parts.includes("**")) return [];
+  const baseDir = path.join(cwd, ...parts.slice(0, starIndex));
+  const suffix = parts.slice(starIndex + 1);
+  let entries = [];
+  try {
+    entries = fs.readdirSync(baseDir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  return entries
+    .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
+    .map((entry) => path.join(baseDir, entry.name, ...suffix, "package.json"))
+    .filter((manifest) => fs.existsSync(manifest));
+}
+
+function readJson(filePath) {
+  try {
+    return JSON.parse(fs.readFileSync(filePath, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function expandFileRetrievalTask(task) {
+  const tokens = new Set(tokenize(task));
+  const additions = new Set();
+  if (hasAny(tokens, ["purchase", "purchased", "buy", "buyer", "seller", "payment", "pay", "checkout"])) {
+    addAll(additions, [
+      "purchase", "payment", "checkout", "billing", "wallet", "balance", "top up",
+      "transaction", "order", "invoice"
+    ]);
+  }
+  if (hasAny(tokens, ["wallet", "balance", "topup", "top", "funded"])) {
+    addAll(additions, ["wallet", "balance", "top up", "billing"]);
+  }
+  if (hasAny(tokens, ["library", "access", "permissions", "permission", "resources", "tutorials", "collections"])) {
+    addAll(additions, [
+      "content access", "content-access-service", "access permissions", "library",
+      "resource", "resources", "tutorial", "tutorials", "collections"
+    ]);
+  }
+  if (hasAny(tokens, ["notification", "notifications", "notify", "buyer", "seller"])) {
+    addAll(additions, ["notification", "notifications", "notify", "buyer", "seller"]);
+  }
+  if (!additions.size) return task;
+  return `${task}\n\nContextOS retrieval hints: ${[...additions].join(", ")}`;
+}
+
+function hasAny(tokens, values) {
+  return values.some((value) => tokens.has(value));
+}
+
+function addAll(target, values) {
+  for (const value of values) target.add(value);
+}
+
+export function findExplicitPromptFiles({ cwd = process.cwd(), task = "", limit = 6 } = {}) {
+  const candidates = new Set();
+  const normalizedTask = String(task || "").replace(/\/\s+/g, "/");
+  const matches = normalizedTask.match(/[A-Za-z0-9_.()[\]@~:-]+(?:\/[A-Za-z0-9_.()[\]@~:-]+)+/g) || [];
+  for (const match of matches) {
+    const cleaned = match.replace(/[),.;:]+$/g, "");
+    for (const filePath of resolvePromptPathCandidates({ cwd, promptPath: cleaned })) {
+      candidates.add(filePath);
+      if (candidates.size >= limit) break;
+    }
+    if (candidates.size >= limit) break;
+  }
+  return [...candidates].map((filePath, index) => ({
+    path: filePath,
+    score: 12 - index * 0.01,
+    source: "prompt-path",
+    reasons: ["prompt-path"]
+  }));
+}
+
+function resolvePromptPathCandidates({ cwd, promptPath }) {
+  if (!promptPath || promptPath.includes("://")) return [];
+  const relative = promptPath.replace(/^\.?\//, "");
+  if (relative.startsWith("..")) return [];
+  const absolute = path.resolve(cwd, relative);
+  if (!isInsidePath(absolute, cwd)) return [];
+  const resolved = [];
+  if (isSourceFile(absolute)) resolved.push(path.relative(cwd, absolute));
+  if (isDirectory(absolute)) {
+    for (const fileName of ["page.tsx", "page.ts", "page.jsx", "page.js", "layout.tsx", "index.tsx", "index.ts"]) {
+      const candidate = path.join(absolute, fileName);
+      if (isSourceFile(candidate)) resolved.push(path.relative(cwd, candidate));
+    }
+  }
+  if (!path.extname(relative)) {
+    for (const extension of [".tsx", ".ts", ".jsx", ".js", ".md", ".json"]) {
+      const candidate = `${absolute}${extension}`;
+      if (isSourceFile(candidate)) resolved.push(path.relative(cwd, candidate));
+    }
+  }
+  return resolved;
+}
+
+function isInsidePath(filePath, parentPath) {
+  const relative = path.relative(path.resolve(parentPath), path.resolve(filePath));
+  return relative && !relative.startsWith("..") && !path.isAbsolute(relative);
+}
+
+function isDirectory(filePath) {
+  try {
+    return fs.statSync(filePath).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+function isSourceFile(filePath) {
+  try {
+    return fs.statSync(filePath).isFile();
+  } catch {
+    return false;
+  }
 }
 
 function mergeLocalFileCandidates(files) {

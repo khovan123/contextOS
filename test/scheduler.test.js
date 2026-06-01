@@ -34,7 +34,7 @@ describe("scheduler", () => {
     expect(scheduled.additionalContext.match(/Always use zod/g)).toHaveLength(1);
     // No absolute paths in rule output
     expect(scheduled.additionalContext).not.toContain("/repo/AGENTS.md");
-    expect(scheduled.additionalContext).toContain("- login.ts");
+    expect(scheduled.additionalContext).toContain("## Suggested files to check, login.ts");
     expect(scheduled.additionalContext).not.toContain("src/auth/login.ts");
     expect(scheduled.additionalContext).toContain("## Skills to activate for this task: zod-validator");
     expect(scheduled.additionalContext.match(/zod-validator/g)).toHaveLength(1);
@@ -79,10 +79,25 @@ describe("scheduler", () => {
       }
     });
 
-    expect(scheduled.additionalContext).toBe("## Suggested files to check\n- input.ts");
+    expect(scheduled.additionalContext).toBe("## Suggested files to check, input.ts");
     expect(scheduled.highRules).toHaveLength(1);
     expect(scheduled.midRules).toHaveLength(1);
     expect(scheduled.suggestedSkills).toHaveLength(1);
     expect(scheduled.suggestedWorkflows).toHaveLength(1);
+  });
+
+  it("keeps duplicate file basenames distinct with relative paths", () => {
+    const scheduled = scheduleContext({
+      relevantFiles: [
+        { path: "webapp/src/app/(private)/dashboard/page.tsx" },
+        { path: "webapp/src/app/(private)/home/tutorials/create/page.tsx" },
+        { path: "webapp/src/app/(private)/dashboard/layout.tsx" }
+      ],
+      outputConfig: defaultOutputConfig()
+    });
+
+    expect(scheduled.additionalContext).toContain("webapp/src/app/(private)/dashboard/page.tsx");
+    expect(scheduled.additionalContext).toContain("webapp/src/app/(private)/home/tutorials/create/page.tsx");
+    expect(scheduled.additionalContext).toContain("layout.tsx");
   });
 });
