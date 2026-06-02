@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.46
+
+- **Configurable prompt suggestion limits:** `ctx --config` and interactive `ctx setup` now let users choose how many suggested files, skills, and workflows appear in prompt context. Defaults are five each, with caps of 20 files, 10 skills, and 5 workflows.
+- **Limit-aware prompt hooks and debug:** `UserPromptSubmit` hooks, direct fallback scoring, the private `ctx-mcp` bridge request, and `ctx debug` now all honor the saved suggestion limits instead of using hard-coded counts.
+- **Document authoring skill intent:** Prompts that create, edit, update, or maintain documents, workspace docs, README files, wiki pages, manuals, guides, specs, or ADRs now prioritize documentation skills such as `doc-coauthoring`, `documentation`, `docs-architect`, `readme`, and `wiki-page-writer`.
+- **Safer document skill gating:** Document-processing and workspace-automation skills such as Azure Document Intelligence, DocuSign, Asana, Slack, Google Docs, and Notion no longer win generic document-writing prompts unless the provider or processing task is explicitly named.
+- **Setup summary clarity:** The setup wizard summary now reports the saved prompt suggestion limits alongside the enabled prompt sections so users can review output volume immediately.
+
 ## 0.5.45
 
 - **Project-aware MCP skill suggestions:** Skill ranking now reads `package.json` keywords and dependencies such as `@modelcontextprotocol/sdk`. MCP projects can recommend `mcp-builder`, `mcp-management`, `mcp-tool-developer`, and `agent-memory-mcp` for context retrieval, scorer, hook, and prompt-injection debugging tasks even when the prompt does not explicitly say `mcp`.

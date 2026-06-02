@@ -37,7 +37,8 @@ export function setupSummaryLines({
   agents = DEFAULT_AGENTS,
   syncRules = true,
   syncSkills = true,
-  promptSections = null
+  promptSections = null,
+  promptLimits = null
 } = {}) {
   const lines = [
     `Installation directory: ${cwd}`,
@@ -47,5 +48,6 @@ export function setupSummaryLines({
     `skillshare skill sync: ${syncSkills ? "enabled" : "skipped"}`
   ];
   if (promptSections !== null) lines.push(`Prompt sections shown: ${promptSections}`);
+  if (promptLimits !== null) lines.push(`Prompt suggest limits: ${promptLimits}`);
   return lines;
 }

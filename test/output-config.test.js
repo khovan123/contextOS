@@ -10,6 +10,8 @@ import {
   enabledOutputSectionsLabel,
   loadOutputConfig,
   outputConfigPath,
+  outputConfigLimits,
+  outputConfigLimitsLabel,
   saveOutputConfig
 } from "../plugins/ctx/lib/output-config.js";
 
@@ -21,6 +23,11 @@ describe("output config", () => {
         files: true,
         skills: true,
         workflows: true
+      },
+      limits: {
+        files: 5,
+        skills: 5,
+        workflows: 5
       }
     });
   });
@@ -35,6 +42,11 @@ describe("output config", () => {
         options = config.options;
         return ["files", "workflows"];
       },
+      askLimit: async ({ option, currentValue }) => {
+        if (option.value === "files") return 12;
+        if (option.value === "skills") return 6;
+        return currentValue;
+      },
       logger: (line) => logs.push(line)
     });
 
@@ -46,11 +58,17 @@ describe("output config", () => {
       skills: false,
       workflows: true
     });
+    expect(saved.limits).toEqual({
+      files: 12,
+      skills: 6,
+      workflows: 5
+    });
     expect(loadOutputConfig({ dataRoot })).toEqual(saved);
     expect(fs.existsSync(outputConfigPath(dataRoot))).toBe(true);
     expect(logs).toEqual([
       `│  Saved ContextOS prompt section config: ${outputConfigPath(dataRoot)}`,
-      "│  Enabled sections: files, workflows"
+      "│  Enabled sections: files, workflows",
+      "│  Suggest limits: files: 12, skills: 6, workflows: 5"
     ]);
   });
 
@@ -64,6 +82,29 @@ describe("output config", () => {
       skills: true,
       workflows: true
     });
+    expect(loadOutputConfig({ dataRoot }).limits).toEqual({
+      files: 5,
+      skills: 5,
+      workflows: 5
+    });
+  });
+
+  it("clamps configured suggest limits to section maximums", () => {
+    const config = {
+      sections: {},
+      limits: {
+        files: 50,
+        skills: 15,
+        workflows: 9
+      }
+    };
+
+    expect(outputConfigLimits(config)).toEqual({
+      files: 20,
+      skills: 10,
+      workflows: 5
+    });
+    expect(outputConfigLimitsLabel(config)).toBe("files: 20, skills: 10, workflows: 5");
   });
 
   it("summarizes enabled output sections", () => {

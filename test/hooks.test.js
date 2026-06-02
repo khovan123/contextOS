@@ -99,7 +99,7 @@ describe("hook contracts", () => {
     expect(JSON.parse(fs.readFileSync(dataPath, "utf8")).suggestedWorkflows).toHaveLength(1);
   });
 
-  it("requests and keeps up to seven files and skills for prompt context", async () => {
+  it("requests and keeps the default five files and skills for prompt context", async () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-hook-limits-"));
     const dataPath = path.join(tmp, ".data", "last-prompt-context.json");
     const seen = [];
@@ -123,11 +123,44 @@ describe("hook contracts", () => {
     );
     const runtime = JSON.parse(fs.readFileSync(dataPath, "utf8"));
 
-    expect(seen[0]).toMatchObject({ maxFiles: 7, maxSkills: 7 });
-    expect(runtime.relevantFiles).toHaveLength(7);
-    expect(runtime.suggestedSkills).toHaveLength(7);
+    expect(seen[0]).toMatchObject({ maxFiles: 5, maxSkills: 5, maxWorkflows: 5 });
+    expect(runtime.relevantFiles).toHaveLength(5);
+    expect(runtime.suggestedSkills).toHaveLength(5);
     expect(runtime.scheduled.additionalContext).toContain("## Suggested files to check, file-0.ts, file-1.ts");
     expect(runtime.scheduled.additionalContext).toContain("## Skills to activate for this task: skill-0, skill-1");
+  });
+
+  it("uses configured prompt suggestion limits", async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-hook-custom-limits-"));
+    const dataPath = path.join(tmp, ".data", "last-prompt-context.json");
+    const seen = [];
+
+    await handlePromptPayload(
+      { prompt: "implement purchase flow", cwd: tmp, hook_event_name: "UserPromptSubmit" },
+      {
+        dataPath,
+        scoreContextClient: async (payload) => {
+          seen.push(payload);
+          return {
+            scoredRules: [],
+            suggestedFiles: Array.from({ length: 9 }, (_, index) => ({ path: `src/file-${index}.ts`, score: 10 - index })),
+            suggestedSkills: Array.from({ length: 9 }, (_, index) => ({ name: `skill-${index}`, score: 10 - index })),
+            suggestedWorkflows: Array.from({ length: 9 }, (_, index) => ({ name: `workflow-${index}`, score: 10 - index })),
+            telemetry: { elapsedMs: 1, modelStatus: "mock" }
+          };
+        },
+        outputConfig: {
+          sections: { rules: false, files: true, skills: true, workflows: true },
+          limits: { files: 8, skills: 6, workflows: 4 }
+        }
+      }
+    );
+    const runtime = JSON.parse(fs.readFileSync(dataPath, "utf8"));
+
+    expect(seen[0]).toMatchObject({ maxFiles: 8, maxSkills: 6, maxWorkflows: 4 });
+    expect(runtime.relevantFiles).toHaveLength(8);
+    expect(runtime.suggestedSkills).toHaveLength(6);
+    expect(runtime.suggestedWorkflows).toHaveLength(4);
   });
 
   it("on-prompt handler can run quiet when disabled", async () => {

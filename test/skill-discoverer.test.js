@@ -484,6 +484,72 @@ describe("skill discoverer", () => {
     ]);
   });
 
+  it("suggests document authoring skills without document-processing or workspace-automation bleed", async () => {
+    const suggested = await suggestSkills({
+      prompt: "edit the project document and create workspace documentation",
+      skills: [
+        ...Array.from({ length: 301 }, (_, index) => ({
+          name: `unrelated-${index}`,
+          description: "Use for unrelated maintenance tasks.",
+          path: `/skills/unrelated-${index}/SKILL.md`
+        })),
+        {
+          name: "doc-coauthoring",
+          description: "Structured workflow for guiding users through collaborative document creation and editing.",
+          path: "/skills/doc-coauthoring/SKILL.md"
+        },
+        {
+          name: "documentation",
+          description: "Documentation generation workflow covering API docs, architecture docs, README files, code comments, and technical writing.",
+          path: "/skills/documentation/SKILL.md"
+        },
+        {
+          name: "docs-architect",
+          description: "Creates comprehensive technical documentation from existing codebases and implementation patterns.",
+          path: "/skills/docs-architect/SKILL.md"
+        },
+        {
+          name: "wiki-page-writer",
+          description: "Generates comprehensive technical documentation pages with evidence-based depth.",
+          path: "/skills/wiki-page-writer/SKILL.md"
+        },
+        {
+          name: "writer",
+          description: "Document creation, format conversion, and automation with LibreOffice Writer.",
+          path: "/skills/writer/SKILL.md"
+        },
+        {
+          name: "azure-ai-document-intelligence-ts",
+          description: "Extract text, tables, and structured data from documents using Azure prebuilt and custom models.",
+          path: "/skills/azure-ai-document-intelligence-ts/SKILL.md"
+        },
+        {
+          name: "docusign-automation",
+          description: "Automate DocuSign templates, envelopes, signatures, and document management.",
+          path: "/skills/docusign-automation/SKILL.md"
+        },
+        {
+          name: "asana-automation",
+          description: "Automate Asana tasks, projects, sections, teams, and workspaces.",
+          path: "/skills/asana-automation/SKILL.md"
+        }
+      ],
+      limit: 5
+    });
+
+    const names = suggested.map((skill) => skill.name);
+    expect(names).toEqual([
+      "doc-coauthoring",
+      "documentation",
+      "docs-architect",
+      "wiki-page-writer",
+      "writer"
+    ]);
+    expect(names).not.toContain("azure-ai-document-intelligence-ts");
+    expect(names).not.toContain("docusign-automation");
+    expect(names).not.toContain("asana-automation");
+  });
+
   it("reads package metadata across monorepo workspace globs", () => {
     const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-skill-monorepo-hints-"));
     fs.mkdirSync(path.join(cwd, "apps", "mobile"), { recursive: true });

@@ -13,9 +13,16 @@ export const OUTPUT_SECTION_OPTIONS = [
   { value: "workflows", label: "Suggested workflow for this task", hint: "Include matching workflow recommendations." }
 ];
 
+export const OUTPUT_LIMIT_OPTIONS = [
+  { value: "files", label: "Suggested files", defaultValue: 5, max: 20 },
+  { value: "skills", label: "Suggested skills", defaultValue: 5, max: 10 },
+  { value: "workflows", label: "Suggested workflows", defaultValue: 5, max: 5 }
+];
+
 export function defaultOutputConfig() {
   return {
-    sections: Object.fromEntries(OUTPUT_SECTION_OPTIONS.map((option) => [option.value, true]))
+    sections: Object.fromEntries(OUTPUT_SECTION_OPTIONS.map((option) => [option.value, true])),
+    limits: Object.fromEntries(OUTPUT_LIMIT_OPTIONS.map((option) => [option.value, option.defaultValue]))
   };
 }
 
@@ -49,9 +56,19 @@ export function enabledOutputSectionsLabel(config = loadOutputConfig()) {
   return enabled.length ? enabled.join(", ") : "(none)";
 }
 
+export function outputConfigLimits(config = loadOutputConfig()) {
+  return normalizeOutputConfig(config).limits;
+}
+
+export function outputConfigLimitsLabel(config = loadOutputConfig()) {
+  const limits = outputConfigLimits(config);
+  return OUTPUT_LIMIT_OPTIONS.map((option) => `${option.value}: ${limits[option.value]}`).join(", ");
+}
+
 export async function configureOutputSections({
   dataRoot = defaultDataRoot(),
   select,
+  askLimit,
   logger = console.log
 } = {}) {
   if (typeof select !== "function") throw new Error("configureOutputSections requires a multi-select function");
@@ -64,11 +81,19 @@ export async function configureOutputSections({
     }))
   });
   const selectedSet = new Set(selected);
+  const limits = {};
+  for (const option of OUTPUT_LIMIT_OPTIONS) {
+    limits[option.value] = typeof askLimit === "function"
+      ? await askLimit({ option, currentValue: current.limits[option.value] })
+      : current.limits[option.value];
+  }
   const saved = saveOutputConfig({
-    sections: Object.fromEntries(OUTPUT_SECTION_OPTIONS.map((option) => [option.value, selectedSet.has(option.value)]))
+    sections: Object.fromEntries(OUTPUT_SECTION_OPTIONS.map((option) => [option.value, selectedSet.has(option.value)])),
+    limits
   }, { dataRoot });
   logger(`│  Saved ContextOS prompt section config: ${outputConfigPath(dataRoot)}`);
   logger(`│  Enabled sections: ${enabledOutputSectionsLabel(saved)}`);
+  logger(`│  Suggest limits: ${outputConfigLimitsLabel(saved)}`);
   return saved;
 }
 
@@ -80,6 +105,16 @@ function normalizeOutputConfig(config = {}) {
       typeof config.sections?.[option.value] === "boolean"
         ? config.sections[option.value]
         : defaults.sections[option.value]
+    ])),
+    limits: Object.fromEntries(OUTPUT_LIMIT_OPTIONS.map((option) => [
+      option.value,
+      normalizeLimit(config.limits?.[option.value], option)
     ]))
   };
+}
+
+function normalizeLimit(value, option) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return option.defaultValue;
+  return Math.max(0, Math.min(option.max, Math.trunc(number)));
 }

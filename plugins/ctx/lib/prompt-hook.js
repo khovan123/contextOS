@@ -3,14 +3,10 @@ import { appendJsonLine, writeJsonFile } from "./fs-utils.js";
 import { maybeAutoWarmWorkspace } from "./auto-warm.js";
 import { callCtxScoreContext } from "./ctx-mcp-client.js";
 import { resolveHookCwd } from "./hook-io.js";
-import { loadOutputConfig } from "./output-config.js";
+import { loadOutputConfig, outputConfigLimits } from "./output-config.js";
 import { scoreContext as scoreContextDirect } from "./score-context.js";
 import fs from "node:fs";
 import path from "node:path";
-
-const PROMPT_FILE_LIMIT = 7;
-const PROMPT_SKILL_LIMIT = 7;
-const PROMPT_WORKFLOW_LIMIT = 2;
 
 export async function handlePromptPayload(
   payload,
@@ -33,6 +29,8 @@ export async function handlePromptPayload(
   const cwd = resolvePromptTargetCwd({ cwd: hookCwd, prompt });
   const openFiles = payload.openFiles || payload.open_files || payload.files || [];
   const dataDir = dataPath ? path.dirname(dataPath) : undefined;
+  const effectiveOutputConfig = outputConfig || loadOutputConfig();
+  const promptLimits = outputConfigLimits(effectiveOutputConfig);
 
   let scored;
   try {
@@ -40,9 +38,9 @@ export async function handlePromptPayload(
       cwd,
       prompt,
       openFiles,
-      maxFiles: PROMPT_FILE_LIMIT,
-      maxSkills: PROMPT_SKILL_LIMIT,
-      maxWorkflows: PROMPT_WORKFLOW_LIMIT
+      maxFiles: promptLimits.files,
+      maxSkills: promptLimits.skills,
+      maxWorkflows: promptLimits.workflows
     }, {
       dataDir: mcpDataDir || dataDir,
       timeoutMs: Number(process.env.CONTEXTOS_MCP_BRIDGE_TIMEOUT_MS || 2000)
@@ -53,9 +51,9 @@ export async function handlePromptPayload(
         cwd,
         prompt,
         openFiles,
-        maxFiles: PROMPT_FILE_LIMIT,
-        maxSkills: PROMPT_SKILL_LIMIT,
-        maxWorkflows: PROMPT_WORKFLOW_LIMIT,
+        maxFiles: promptLimits.files,
+        maxSkills: promptLimits.skills,
+        maxWorkflows: promptLimits.workflows,
         dataDir: mcpDataDir || dataDir,
         embeddingTimeoutMs: Number(process.env.CONTEXTOS_HOOK_EMBEDDING_TIMEOUT_MS || 500),
         fileEmbeddingTimeoutMs: Number(process.env.CONTEXTOS_HOOK_FILE_EMBEDDING_TIMEOUT_MS || 1000)
@@ -76,10 +74,9 @@ export async function handlePromptPayload(
 
   if (scored.error) throw new Error(scored.error);
   const scoredRules = scored.scoredRules || [];
-  const relevantFiles = (scored.suggestedFiles || []).slice(0, PROMPT_FILE_LIMIT);
-  const suggestedSkills = (scored.suggestedSkills || []).slice(0, PROMPT_SKILL_LIMIT);
-  const suggestedWorkflows = (scored.suggestedWorkflows || []).slice(0, PROMPT_WORKFLOW_LIMIT);
-  const effectiveOutputConfig = outputConfig || loadOutputConfig();
+  const relevantFiles = (scored.suggestedFiles || []).slice(0, promptLimits.files);
+  const suggestedSkills = (scored.suggestedSkills || []).slice(0, promptLimits.skills);
+  const suggestedWorkflows = (scored.suggestedWorkflows || []).slice(0, promptLimits.workflows);
   const scheduled = scheduleContext({ rules: scoredRules, relevantFiles, suggestedSkills, suggestedWorkflows, outputConfig: effectiveOutputConfig });
   const contextEmptyReason = emptyContextReason({ scheduled, outputConfig: effectiveOutputConfig, injectContext });
   const autoWarm = autoWarmWorkspace({

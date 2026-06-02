@@ -20,9 +20,10 @@ const GENERIC_SKILL_TOKENS = new Set([
   "users", "when", "where", "whether", "with"
 ]);
 const SPECIALIZED_SKILL_TOKENS = new Set([
-  "android", "authorization", "cicd", "eas", "expo", "frontend", "ios", "next", "nextjs",
-  "mcp", "modelcontextprotocol", "postgres", "postgresql", "react", "react-native", "tailwind",
-  "typescript", "ui"
+  "android", "architecture", "authorization", "cicd", "documentation", "docs", "document",
+  "eas", "expo", "frontend", "ios", "next", "nextjs", "mcp", "modelcontextprotocol",
+  "postgres", "postgresql", "react", "react-native", "readme", "tailwind", "typescript",
+  "ui", "wiki", "writer"
 ]);
 
 const scanCache = new Map();
@@ -312,6 +313,8 @@ function isSkillDomainEligible(normalizedPrompt, enriched, projectTokens = new S
   if (isMcpSkill(skillText) && !isMcpRelevantTask(normalizedPrompt, projectTokens)) return false;
   if (isOffensiveSecuritySkill(skillText) && !isSecurityTask(normalizedPrompt)) return false;
   if (isPlatformCommerceSkill(skillText) && !isPlatformCommerceTask(normalizedPrompt, skillText)) return false;
+  if (isDocumentProcessingSkill(skillText) && !isDocumentProcessingTask(normalizedPrompt, skillText)) return false;
+  if (isWorkspaceAutomationSkill(skillText) && !isWorkspaceAutomationTask(normalizedPrompt, skillText)) return false;
   if (!/\beas\b/.test(normalizedPrompt)) return true;
   if (!/\b(android|ios)\b/.test(skillText)) return true;
   return /\b(eas|expo|cicd)\b/.test(skillText);
@@ -319,6 +322,10 @@ function isSkillDomainEligible(normalizedPrompt, enriched, projectTokens = new S
 
 function skillIntentBonus(normalizedPrompt, enriched, projectTokens = new Set()) {
   const skillText = normalize(`${enriched.name} ${enriched.description}`);
+  if (isDocumentAuthoringTask(normalizedPrompt)
+    && /\b(documentation|document|docs|doc|readme|wiki|writer|writing|coauthor|technical documentation|architecture documentation|onboarding|office productivity)\b/.test(skillText)) {
+    return 0.48;
+  }
   if (isMcpRelevantTask(normalizedPrompt, projectTokens)
     && /\b(mcp|model context protocol|modelcontextprotocol|agent memory|tool developer|tool builder)\b/.test(skillText)) {
     return 0.48;
@@ -368,6 +375,20 @@ function skillRelevancePriority(normalizedPrompt, enriched, projectTokens = new 
   const skillText = normalize(`${enriched.name} ${enriched.description}`);
   const skillName = normalize(enriched.name);
   let priority = 0;
+  if (isDocumentAuthoringTask(normalizedPrompt)) {
+    if (skillName === "doc coauthoring") priority += 1300;
+    if (skillName === "documentation") priority += 720;
+    if (skillName === "docs architect") priority += 700;
+    if (skillName === "readme") priority += 660;
+    if (skillName === "wiki page writer") priority += 640;
+    if (skillName === "wiki architect") priority += 620;
+    if (skillName === "wiki onboarding") priority += 600;
+    if (skillName === "writer" || skillName === "docx" || skillName === "office productivity") priority += 560;
+    if (skillName === "agents md") priority += 420;
+    if (/\b(code documentation doc generate|documentation generation doc generate|api documentation|api documenter|reference builder|architecture)\b/.test(skillText)) priority += 320;
+    if (/\b(documentation|document|docs|doc|readme|wiki|writer|writing|coauthor|technical documentation)\b/.test(skillText)) priority += 130;
+    if (/\b(mcp|model context protocol|metasploit|penetration|exploit)\b/.test(skillText)) priority -= 220;
+  }
   if (isMcpRelevantTask(normalizedPrompt, projectTokens)) {
     if (skillName === "mcp builder") priority += 760;
     if (skillName === "mcp management") priority += 740;
@@ -448,6 +469,11 @@ function isFrontendCheckoutTask(normalizedPrompt) {
   return /\b(modal|display|show|checkout|library|frontend|webapp|page|button)\b/.test(normalizedPrompt);
 }
 
+function isDocumentAuthoringTask(normalizedPrompt) {
+  return /\b(create|write|edit|update|draft|generate|author|maintain|work on|produce)\b.*\b(document|documents|documentation|docs|doc|readme|wiki|workspace|workspaces|manual|guide|onboarding|spec|adr)\b/.test(normalizedPrompt)
+    || /\b(document|documents|documentation|docs|doc|readme|wiki|workspace|workspaces|manual|guide|onboarding|spec|adr)\b.*\b(create|write|edit|update|draft|generate|author|maintain|work on|produce)\b/.test(normalizedPrompt);
+}
+
 function isMcpTask(normalizedPrompt) {
   return /\b(mcp|model context protocol|tool server|tools server|server tool|bridge|proxy)\b/.test(normalizedPrompt);
 }
@@ -486,6 +512,36 @@ function isPlatformCommerceTask(normalizedPrompt, skillText) {
   if (/\bwoocommerce\b/.test(skillText)) return /\bwoocommerce\b/.test(normalizedPrompt);
   if (/\bshopify\b/.test(skillText)) return /\bshopify\b/.test(normalizedPrompt);
   if (/\bodoo\b/.test(skillText)) return /\bodoo\b/.test(normalizedPrompt);
+  return true;
+}
+
+function isDocumentProcessingSkill(skillText) {
+  return /\b(azure ai document|document intelligence|formrecognizer|document translation|cosmos db|azure cosmos|search documents|docusign)\b/.test(skillText);
+}
+
+function isDocumentProcessingTask(normalizedPrompt, skillText) {
+  if (/\bdocusign\b/.test(skillText)) return /\bdocusign|signature|envelope|sign\b/.test(normalizedPrompt);
+  if (/\bcosmos db|azure cosmos\b/.test(skillText)) return /\bcosmos|database|nosql|query|container\b/.test(normalizedPrompt);
+  if (/\bsearch documents\b/.test(skillText)) return /\bazure search|vector search|semantic search|index\b/.test(normalizedPrompt);
+  return /\bextract|ocr|analyze|translate|translation|form recognizer|document intelligence|azure\b/.test(normalizedPrompt);
+}
+
+function isWorkspaceAutomationSkill(skillText) {
+  return /\b(asana|bitbucket|slack|coda|google docs|google drive|google sheets|google slides|notion|telegram)\b/.test(skillText)
+    && /\b(automation|automate|workspace|workspaces|manage docs|documents)\b/.test(skillText);
+}
+
+function isWorkspaceAutomationTask(normalizedPrompt, skillText) {
+  if (/\basana\b/.test(skillText)) return /\basana\b/.test(normalizedPrompt);
+  if (/\bbitbucket\b/.test(skillText)) return /\bbitbucket\b/.test(normalizedPrompt);
+  if (/\bslack\b/.test(skillText)) return /\bslack\b/.test(normalizedPrompt);
+  if (/\bcoda\b/.test(skillText)) return /\bcoda\b/.test(normalizedPrompt);
+  if (/\bgoogle docs\b/.test(skillText)) return /\bgoogle docs\b/.test(normalizedPrompt);
+  if (/\bgoogle drive\b/.test(skillText)) return /\bgoogle drive\b/.test(normalizedPrompt);
+  if (/\bgoogle sheets\b/.test(skillText)) return /\bgoogle sheets\b/.test(normalizedPrompt);
+  if (/\bgoogle slides\b/.test(skillText)) return /\bgoogle slides\b/.test(normalizedPrompt);
+  if (/\bnotion\b/.test(skillText)) return /\bnotion\b/.test(normalizedPrompt);
+  if (/\btelegram\b/.test(skillText)) return /\btelegram\b/.test(normalizedPrompt);
   return true;
 }
 

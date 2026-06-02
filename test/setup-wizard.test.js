@@ -48,14 +48,16 @@ describe("setup wizard", () => {
       agents: ["codex"],
       syncRules: false,
       syncSkills: true,
-      promptSections: "files, skills"
+      promptSections: "files, skills",
+      promptLimits: "files: 5, skills: 5, workflows: 5"
     })).toEqual([
       "Installation directory: /repo",
       "Agents: codex",
       "Prompt context injection: always enabled",
       "Ruler rule/MCP sync: skipped",
       "skillshare skill sync: enabled",
-      "Prompt sections shown: files, skills"
+      "Prompt sections shown: files, skills",
+      "Prompt suggest limits: files: 5, skills: 5, workflows: 5"
     ]);
   });
 });

@@ -34,7 +34,7 @@ import { scanSkills, warmSkillEmbeddings } from "../plugins/ctx/lib/skill-discov
 import { parsePassthroughArgs, runPassthrough } from "../plugins/ctx/lib/passthrough.js";
 import { parseAgentList, parseSetupArgs, setupSummaryLines } from "../plugins/ctx/lib/setup-wizard.js";
 import { multiSelect } from "../plugins/ctx/lib/multi-select.js";
-import { configureOutputSections, enabledOutputSectionsLabel, loadOutputConfig } from "../plugins/ctx/lib/output-config.js";
+import { configureOutputSections, enabledOutputSectionsLabel, loadOutputConfig, outputConfigLimits, outputConfigLimitsLabel } from "../plugins/ctx/lib/output-config.js";
 import { syncWorkflows, warmWorkflowEmbeddings } from "../plugins/ctx/lib/workflow-discoverer.js";
 import { checkForUpdate } from "../plugins/ctx/lib/update-notifier.js";
 import { fetchSkillsForAgents, printSkillRecommendations, getAllLibraries, getInstallCommands } from "../plugins/ctx/lib/skill-library.js";
@@ -586,18 +586,20 @@ function contextOSWorkspaceDataDir(cwd = process.cwd()) {
 
 async function debug(task) {
   const cwd = process.cwd();
+  const limits = outputConfigLimits(loadOutputConfig({ dataRoot: contextOSDataDir() }));
   const scored = await scoreContext({
     cwd,
     prompt: task,
     dataDir: contextOSDataDir(),
-    maxFiles: 7,
-    maxSkills: 7,
+    maxFiles: limits.files,
+    maxSkills: limits.skills,
+    maxWorkflows: limits.workflows,
     embeddingTimeoutMs: Number(process.env.CONTEXTOS_EMBEDDING_DEBUG_TIMEOUT_MS || 5000)
   });
   const rules = scored.scoredRules;
-  const relevantFiles = scored.suggestedFiles.slice(0, 7);
-  const suggestedSkills = (scored.suggestedSkills || []).slice(0, 7);
-  const suggestedWorkflows = (scored.suggestedWorkflows || []).slice(0, 2);
+  const relevantFiles = scored.suggestedFiles.slice(0, limits.files);
+  const suggestedSkills = (scored.suggestedSkills || []).slice(0, limits.skills);
+  const suggestedWorkflows = (scored.suggestedWorkflows || []).slice(0, limits.workflows);
   const scheduled = scheduleContext({ rules, relevantFiles, suggestedSkills, suggestedWorkflows });
 
   console.log("ContextOS debug");
@@ -728,6 +730,21 @@ async function askSetupYesNo(rl, question, defaultValue = true) {
   return !/^n(o)?$/i.test(answer.trim());
 }
 
+async function askOutputLimit({ option, currentValue }) {
+  if (!process.stdin.isTTY) return currentValue;
+  const rl = readline.createInterface({ input, output });
+  try {
+    const answer = await rl.question(`◇ ${option.label} limit (0-${option.max}, current ${currentValue}): `);
+    const trimmed = answer.trim();
+    if (!trimmed) return currentValue;
+    const value = Number(trimmed);
+    if (!Number.isFinite(value)) return currentValue;
+    return Math.max(0, Math.min(option.max, Math.trunc(value)));
+  } finally {
+    rl.close();
+  }
+}
+
 async function setup({ args = [], cwd = process.cwd() } = {}) {
   const options = parseSetupArgs(args);
   const interactive = !options.yes && process.stdin.isTTY;
@@ -777,7 +794,8 @@ async function setup({ args = [], cwd = process.cwd() } = {}) {
     console.log("◇ Configure prompt output:");
     outputConfig = await configureOutputSections({
       dataRoot: contextOSDataDir(),
-      select: multiSelect
+      select: multiSelect,
+      askLimit: askOutputLimit
     });
   }
 
@@ -786,7 +804,8 @@ async function setup({ args = [], cwd = process.cwd() } = {}) {
   for (const line of setupSummaryLines({
     cwd,
     ...options,
-    promptSections: enabledOutputSectionsLabel(outputConfig)
+    promptSections: enabledOutputSectionsLabel(outputConfig),
+    promptLimits: outputConfigLimitsLabel(outputConfig)
   })) console.log(`│  ${line}`);
   console.log("");
 
@@ -871,7 +890,8 @@ try {
   } else if (command === "--config" || command === "config") {
     await configureOutputSections({
       dataRoot: contextOSDataDir(),
-      select: multiSelect
+      select: multiSelect,
+      askLimit: askOutputLimit
     });
   } else if (command === "install") {
     const copy = args.includes("--copy");
