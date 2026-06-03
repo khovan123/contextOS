@@ -65,13 +65,28 @@ export async function warmRuleEmbeddings({
     ...rules.map((rule) => rule.content || "")
   ].filter((text) => String(text).trim()))];
 
-  const cache = await openEmbeddingCache(dataDir);
-  const embedder = await getExtractor({ allowRemote, dataDir });
-  for (const text of texts) {
-    await getCachedEmbedding({ cache, embedder, text, sources, flush: false });
+  let cache;
+  try {
+    cache = await openEmbeddingCache(dataDir);
+    const embedder = await getExtractor({ allowRemote, dataDir });
+    for (const text of texts) {
+      await getCachedEmbedding({ cache, embedder, text, sources, flush: false });
+    }
+    cache.close();
+    return { count: texts.length, cachePath: cache.path, status: "enabled" };
+  } catch (error) {
+    try {
+      cache?.close();
+    } catch {
+      // Ignore close failures while reporting a best-effort warm result.
+    }
+    return {
+      count: 0,
+      cachePath: path.join(dataDir, "embeddings.db"),
+      status: "warm-failed",
+      error: error?.message || String(error)
+    };
   }
-  cache.close();
-  return { count: texts.length, cachePath: cache.path };
 }
 
 export async function searchIndexedEmbeddings({
@@ -106,20 +121,35 @@ export async function warmIndexedEmbeddings({
     return { count: 0, cachePath: path.join(dataDir, "embeddings.db"), status: "missing-model" };
   }
 
-  const cache = await openEmbeddingCache(dataDir);
-  const embedder = await getExtractor({ allowRemote, dataDir });
-  if (String(task || "").trim()) await getCachedEmbedding({ cache, embedder, text: task, sources });
+  let cache;
+  try {
+    cache = await openEmbeddingCache(dataDir);
+    const embedder = await getExtractor({ allowRemote, dataDir });
+    if (String(task || "").trim()) await getCachedEmbedding({ cache, embedder, text: task, sources });
 
-  const indexed = [];
-  for (const item of items) {
-    const text = String(item.text || "");
-    if (!item.id || !text.trim()) continue;
-    const vector = await getCachedEmbedding({ cache, embedder, text, sources, flush: false });
-    indexed.push({ id: item.id, text, vector });
+    const indexed = [];
+    for (const item of items) {
+      const text = String(item.text || "");
+      if (!item.id || !text.trim()) continue;
+      const vector = await getCachedEmbedding({ cache, embedder, text, sources, flush: false });
+      indexed.push({ id: item.id, text, vector });
+    }
+    cache.replaceIndex(kind, indexed);
+    cache.close();
+    return { count: indexed.length, cachePath: cache.path, status: "enabled" };
+  } catch (error) {
+    try {
+      cache?.close();
+    } catch {
+      // Ignore close failures while reporting a best-effort warm result.
+    }
+    return {
+      count: 0,
+      cachePath: path.join(dataDir, "embeddings.db"),
+      status: "warm-failed",
+      error: error?.message || String(error)
+    };
   }
-  cache.replaceIndex(kind, indexed);
-  cache.close();
-  return { count: indexed.length, cachePath: cache.path };
 }
 
 async function enhanceRuleScores(rules, task, { dataDir, sources, allowRemote }) {
@@ -187,7 +217,10 @@ async function getExtractor({ allowRemote, dataDir }) {
       return transformers.pipeline("feature-extraction", DEFAULT_MODEL, {
         quantized: true
       });
-    })());
+    })().catch((error) => {
+      extractorPromises.delete(key);
+      throw error;
+    }));
   }
   return extractorPromises.get(key);
 }

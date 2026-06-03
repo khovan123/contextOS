@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.48
+
+- **Publish-safe embedding warm:** `ctx embeddings warm` now skips remote model downloads by default in CI and returns best-effort warm results when local embedding model loading fails, preventing npm publish workflows from failing on Hugging Face 429/rate-limit errors.
+- **CI graph embedding skip:** Code-review-graph embedding refresh is skipped when remote embeddings are disabled, avoiding extra Hugging Face calls during publish jobs.
+
 ## 0.5.47
 
 - **Semantic-only skill discovery:** Replaced taxonomy/keyword skill ranking with fused semantic retrieval. ContextOS now embeds `prompt + project profile` and compares it against cached skill vectors, so mixed Vietnamese/English prompts can use package, language, and recent-file signals without hard-coded categories.

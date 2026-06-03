@@ -487,6 +487,7 @@ function graphStrategyForInstall() {
 async function warmInstallEmbeddings() {
   const dataDir = contextOSDataDir();
   const modelReady = isModelCacheReady(dataDir);
+  const allowRemote = shouldAllowRemoteWarm(modelReady);
   const result = await warmRuleEmbeddings({
     rules: [
       { content: "Always use project rules that are semantically relevant to the user prompt." },
@@ -496,27 +497,29 @@ async function warmInstallEmbeddings() {
     task: "kiểm duyệt upload moderation semantic code search",
     dataDir,
     sources: [],
-    allowRemote: !modelReady
+    allowRemote
   });
   const fileResult = await warmFileEmbeddings({
     cwd: process.cwd(),
     dataDir,
-    allowRemote: !modelReady
+    allowRemote
   });
   const skillResult = await warmSkillEmbeddings({
     cwd: process.cwd(),
     dataDir,
-    allowRemote: !modelReady
+    allowRemote
   });
   const warmDiscovery = process.env.CONTEXTOS_INSTALL_WARM_DISCOVERY === "1";
   const workflowResult = warmDiscovery
     ? await warmWorkflowEmbeddings({
       cwd: process.cwd(),
       dataDir,
-      allowRemote: !modelReady
+      allowRemote
     })
     : { count: 0 };
-  const graphEmbedding = embedCodeReviewGraph({ cwd: process.cwd() });
+  const graphEmbedding = allowRemote
+    ? embedCodeReviewGraph({ cwd: process.cwd() })
+    : { status: "skipped", reason: "remote-embedding-disabled" };
   return { ...result, modelAlreadyCached: modelReady, fileCount: fileResult.count, skillCount: skillResult.count, workflowCount: workflowResult.count, graphEmbedding };
 }
 
@@ -661,31 +664,36 @@ async function warmEmbeddings(task, { syncMarketplace = true, quiet = false } = 
 
 async function warmWorkspaceIndexes({ task = "project context" } = {}) {
   const cwd = process.cwd();
+  const dataDir = contextOSDataDir();
+  const modelReady = isModelCacheReady(dataDir);
+  const allowRemote = shouldAllowRemoteWarm(modelReady);
   const merged = readAgentsChain({ cwd });
   const rules = scoreRules(filterActionableRules(parseRules(merged.content)), task, []);
   const result = await warmRuleEmbeddings({
     rules,
     task,
-    dataDir: contextOSDataDir(),
+    dataDir,
     sources: merged.sources,
-    allowRemote: true
+    allowRemote
   });
   const fileResult = await warmFileEmbeddings({
     cwd,
-    dataDir: contextOSDataDir(),
-    allowRemote: true
+    dataDir,
+    allowRemote
   });
   const skillResult = await warmSkillEmbeddings({
     cwd,
-    dataDir: contextOSDataDir(),
-    allowRemote: true
+    dataDir,
+    allowRemote
   });
   const workflowResult = await warmWorkflowEmbeddings({
     cwd,
-    dataDir: contextOSDataDir(),
-    allowRemote: true
+    dataDir,
+    allowRemote
   });
-  const graphEmbedding = embedCodeReviewGraph({ cwd });
+  const graphEmbedding = allowRemote
+    ? embedCodeReviewGraph({ cwd })
+    : { status: "skipped", reason: "remote-embedding-disabled" };
   return {
     ruleCount: result.count,
     fileCount: fileResult.count,
@@ -694,6 +702,22 @@ async function warmWorkspaceIndexes({ task = "project context" } = {}) {
     cachePath: result.cachePath,
     graphEmbedding
   };
+}
+
+function shouldAllowRemoteWarm(modelReady) {
+  if (modelReady) return false;
+  if (process.env.CONTEXTOS_EMBEDDING_ALLOW_REMOTE !== undefined) {
+    return process.env.CONTEXTOS_EMBEDDING_ALLOW_REMOTE === "1";
+  }
+  return !isCiEnvironment();
+}
+
+function isCiEnvironment() {
+  return process.env.CI === "true"
+    || process.env.GITHUB_ACTIONS === "true"
+    || process.env.CONTINUOUS_INTEGRATION === "true"
+    || process.env.BUILD_ID !== undefined
+    || process.env.RUN_ID !== undefined;
 }
 
 async function refresh() {

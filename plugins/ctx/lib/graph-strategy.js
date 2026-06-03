@@ -91,6 +91,7 @@ export function formatCodeReviewGraphEmbedding(result) {
   }
   if (result.reason === "missing-graph-index") return "skipped (no .code-review-graph/graph.db)";
   if (result.reason === "missing-code-review-graph-python") return "skipped (code-review-graph Python unavailable)";
+  if (result.reason === "remote-embedding-disabled") return "skipped (remote embedding disabled)";
   return `skipped (${result.error || result.reason || "unavailable"})`;
 }
 
