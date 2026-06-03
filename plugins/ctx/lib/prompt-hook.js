@@ -56,7 +56,8 @@ export async function handlePromptPayload(
         maxWorkflows: promptLimits.workflows,
         dataDir: mcpDataDir || dataDir,
         embeddingTimeoutMs: Number(process.env.CONTEXTOS_HOOK_EMBEDDING_TIMEOUT_MS || 500),
-        fileEmbeddingTimeoutMs: Number(process.env.CONTEXTOS_HOOK_FILE_EMBEDDING_TIMEOUT_MS || 1000)
+        fileEmbeddingTimeoutMs: Number(process.env.CONTEXTOS_HOOK_FILE_EMBEDDING_TIMEOUT_MS || 1000),
+        skillEmbeddingTimeoutMs: Number(process.env.CONTEXTOS_HOOK_SKILL_EMBEDDING_TIMEOUT_MS || 2000)
       }), directFallbackTimeoutMs, "direct fallback scoring");
       scored.telemetry = {
         ...(scored.telemetry || {}),

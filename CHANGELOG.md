@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.47
+
+- **Semantic-only skill discovery:** Replaced taxonomy/keyword skill ranking with fused semantic retrieval. ContextOS now embeds `prompt + project profile` and compares it against cached skill vectors, so mixed Vietnamese/English prompts can use package, language, and recent-file signals without hard-coded categories.
+- **Project profile cache:** Added a bounded project profiler that builds an embeddable string from root/workspace `package.json` dependencies, scripts, detected languages, and recent git files. The cache invalidates when package metadata or git `HEAD` changes.
+- **Skill dedupe and activation format:** Skill catalogs are deduplicated by normalized skill name before indexing/searching, preferring project and Codex roots. Prompt output now renders skill activations as `$skill-name`.
+- **Refresh rebuilds skill index:** `ctx install` and `ctx refresh` now rebuild the skill embedding index by default because prompt-time skill discovery no longer falls back to taxonomy or keyword ranking for large catalogs.
+- **Skill hook timeout split:** Prompt hooks now use a separate skill embedding timeout, so large indexed skill catalogs can still produce suggestions after direct fallback without slowing rule scoring.
+- **Read-only embedding cache close:** Prompt-time embedding reads no longer rewrite the whole `embeddings.db` when no cache entries changed.
+
 ## 0.5.46
 
 - **Configurable prompt suggestion limits:** `ctx --config` and interactive `ctx setup` now let users choose how many suggested files, skills, and workflows appear in prompt context. Defaults are five each, with caps of 20 files, 10 skills, and 5 workflows.

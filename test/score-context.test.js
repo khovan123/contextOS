@@ -45,19 +45,32 @@ describe("score context", () => {
       "---"
     ].join("\n"));
 
+    const skills = scanSkills({
+      cwd: tmp,
+      roots: [path.join(tmp, ".codex", "skills")]
+    });
+    const seenSkillTimeouts = [];
     const result = await scoreContext({
       cwd: tmp,
       prompt: "create payment checkout webhook integration",
       dataDir,
-      skills: scanSkills({
-        cwd: tmp,
-        roots: [path.join(tmp, ".codex", "skills")]
-      }),
+      skills,
       embeddingTimeoutMs: 20,
-      fileEmbeddingTimeoutMs: 1
+      fileEmbeddingTimeoutMs: 1,
+      skillEmbeddingTimeoutMs: 456,
+      skillSearchOptions: {
+        indexedSearcher: async ({ timeoutMs }) => {
+          seenSkillTimeouts.push(timeoutMs);
+          return {
+            status: "enabled",
+            items: [{ id: "payment integration", text: "payment-integration", embeddingScore: 0.92 }]
+          };
+        }
+      }
     });
 
     expect(result.suggestedSkills[0].name).toBe("payment-integration");
+    expect(seenSkillTimeouts).toEqual([456]);
     expect(result.telemetry.skillsScanned).toBeGreaterThanOrEqual(1);
     expect(result.telemetry.skillsSuggested).toBeGreaterThanOrEqual(1);
   });

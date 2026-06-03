@@ -97,7 +97,8 @@ function formatFile(file, basenameCounts) {
 }
 
 function formatSkill(skill) {
-  return skill.name;
+  const name = String(skill.name || "").trim();
+  return name.startsWith("$") ? name : `$${name}`;
 }
 
 function formatWorkflow(workflow) {

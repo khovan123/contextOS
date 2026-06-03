@@ -121,7 +121,10 @@ describe("skill discoverer", () => {
       skills,
       dataDir: fs.mkdtempSync(path.join(os.tmpdir(), "ctx-skill-data-")),
       limit: 3,
-      timeoutMs: 1
+      indexedSearcher: indexedSearcherFor({
+        "payment-integration": 0.91,
+        "zzz-1": 0.2
+      })
     });
 
     expect(suggested[0].name).toBe("payment-integration");
@@ -149,6 +152,11 @@ describe("skill discoverer", () => {
     const suggested = await suggestSkills({
       prompt: "ctx setup sync package rebuild graph embeddings",
       skills,
+      dataDir: fs.mkdtempSync(path.join(os.tmpdir(), "ctx-skill-empty-data-")),
+      indexedSearcher: indexedSearcherFor({
+        "azure-postgres-ts": 0.2,
+        "devcontainer-setup": 0.18
+      }),
       limit: 3
     });
 
@@ -171,13 +179,15 @@ describe("skill discoverer", () => {
         }
       ],
       dataDir: fs.mkdtempSync(path.join(os.tmpdir(), "ctx-skill-dedupe-")),
-      timeoutMs: 1
+      indexedSearcher: indexedSearcherFor({
+        "payment-integration": 0.9
+      })
     });
 
     expect(suggested.map((skill) => skill.name)).toEqual(["payment-integration"]);
   });
 
-  it("prefers Expo EAS workflow skills using bounded project hints", async () => {
+  it("prefers Expo EAS workflow skills from semantic search over fused project context", async () => {
     const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-skill-expo-"));
     fs.mkdirSync(path.join(cwd, "webapp"), { recursive: true });
     fs.writeFileSync(path.join(cwd, "package.json"), JSON.stringify({
@@ -191,7 +201,6 @@ describe("skill discoverer", () => {
     const suggested = await suggestSkills({
       cwd,
       dataDir: fs.mkdtempSync(path.join(os.tmpdir(), "ctx-skill-expo-cache-")),
-      timeoutMs: 1,
       prompt: "handle https://github.com/example/app/issues/116 EAS config iOS Android preview production",
       skills: [
         {
@@ -214,7 +223,13 @@ describe("skill discoverer", () => {
           description: "Write EAS workflow YAML files for Expo projects and build pipelines.",
           path: "/skills/expo/SKILL.md"
         }
-      ]
+      ],
+      indexedSearcher: indexedSearcherFor({
+        "expo-cicd-workflows": 0.92,
+        "expo-api-routes": 0.76,
+        "audit-skills": 0.2,
+        "llm-app-patterns": 0.15
+      })
     });
 
     expect(projectSkillHints({ cwd })).toEqual(expect.arrayContaining(["expo", "react", "native", "eas", "json"]));
@@ -236,7 +251,6 @@ describe("skill discoverer", () => {
     const suggested = await suggestSkills({
       cwd,
       dataDir: fs.mkdtempSync(path.join(os.tmpdir(), "ctx-skill-next-role-cache-")),
-      timeoutMs: 1,
       prompt: "triển khai giao diện theo role, webapp/src/app/(private)/dashboard chỉ dành cho role ADMIN, CREATOR mới có button create page",
       skills: [
         ...Array.from({ length: 301 }, (_, index) => ({
@@ -280,6 +294,13 @@ describe("skill discoverer", () => {
           path: "/skills/azure-postgres-ts/SKILL.md"
         }
       ],
+      indexedSearcher: indexedSearcherFor({
+        "nextjs-app-router-patterns": 0.93,
+        "nextjs-best-practices": 0.89,
+        "react-nextjs-development": 0.84,
+        "frontend-developer": 0.7,
+        "azure-postgres-ts": 0.1
+      }),
       limit: 3
     });
 
@@ -315,7 +336,6 @@ describe("skill discoverer", () => {
     const suggested = await suggestSkills({
       cwd,
       dataDir: fs.mkdtempSync(path.join(os.tmpdir(), "ctx-skill-expo-qr-cache-")),
-      timeoutMs: 1,
       prompt: "why run can not show QR or something to connect webapp",
       skills: [
         ...Array.from({ length: 301 }, (_, index) => ({
@@ -349,6 +369,13 @@ describe("skill discoverer", () => {
           path: "/skills/react-nextjs-development/SKILL.md"
         }
       ],
+      indexedSearcher: indexedSearcherFor({
+        "expo-deployment": 0.94,
+        "building-native-ui": 0.9,
+        "expo-tailwind-setup": 0.86,
+        "frontend-design": 0.3,
+        "react-nextjs-development": 0.2
+      }),
       limit: 3
     });
 
@@ -418,6 +445,17 @@ describe("skill discoverer", () => {
         "Send notifications to both the buyer and the seller after a successful purchase."
       ].join(" "),
       skills,
+      dataDir: fs.mkdtempSync(path.join(os.tmpdir(), "ctx-skill-purchase-data-")),
+      indexedSearcher: indexedSearcherFor({
+        "payment-integration": 0.94,
+        "billing-automation": 0.9,
+        "frontend-api-integration-patterns": 0.82,
+        "api-endpoint-builder": 0.79,
+        "better-auth": 0.46,
+        "mcp-management": 0.1,
+        "metasploit-framework": 0.1,
+        "wordpress-woocommerce-development": 0.1
+      }),
       limit: 5
     });
 
@@ -433,6 +471,85 @@ describe("skill discoverer", () => {
     expect(names).not.toContain("wordpress-woocommerce-development");
   });
 
+  it("uses semantic search results for server stacktraces instead of frontend UI skills", async () => {
+    const skills = [
+      ...Array.from({ length: 301 }, (_, index) => ({
+        name: `unrelated-${index}`,
+        description: "Use for unrelated maintenance tasks.",
+        path: `/skills/unrelated-${index}/SKILL.md`
+      })),
+      {
+        name: "web-frameworks",
+        description: "Debug and implement Node.js web frameworks including NestJS, Fastify, Express, HTTP servers, parser middleware, and backend bootstrap errors.",
+        path: "/skills/web-frameworks/SKILL.md"
+      },
+      {
+        name: "backend-development",
+        description: "Build and debug backend services, server startup, API runtime errors, database connections, queues, and production service failures.",
+        path: "/skills/backend-development/SKILL.md"
+      },
+      {
+        name: "api-endpoint-builder",
+        description: "Build and repair REST API endpoints, backend validation, controller routing, and service integration.",
+        path: "/skills/api-endpoint-builder/SKILL.md"
+      },
+      {
+        name: "debugging",
+        description: "Root cause analysis for runtime errors, stack traces, crashes, failed startups, and production incidents.",
+        path: "/skills/debugging/SKILL.md"
+      },
+      {
+        name: "frontend-api-integration-patterns",
+        description: "Production-ready patterns for integrating frontend applications with backend APIs, forms, UI modals, and checkout state.",
+        path: "/skills/frontend-api-integration-patterns/SKILL.md"
+      },
+      {
+        name: "angular-ui-patterns",
+        description: "Build Angular UI components, frontend layouts, design systems, and component interaction patterns.",
+        path: "/skills/angular-ui-patterns/SKILL.md"
+      }
+    ];
+
+    for (const prompt of [
+      [
+        "Fatal bootstrap error: FastifyError: Content type parser 'application/x-www-form-urlencoded' already present.",
+        "at Object.addContentTypeParser (/app/node_modules/fastify/lib/content-type-parser.js:360:30)",
+        "at FastifyAdapter.registerParserMiddleware (/app/node_modules/@nestjs/platform-fastify/adapters/fastify-adapter.js:345:14)",
+        "at NestApplication.listen (/app/node_modules/@nestjs/core/nest-application.js:175:13)"
+      ].join(" "),
+      [
+        "Production startup failed with Express server Prisma connection error.",
+        "Unhandled exception in src/main.ts while listen starts the backend API.",
+        "Need debug middleware/bootstrap path, not frontend UI."
+      ].join(" ")
+    ]) {
+      const suggested = await suggestSkills({
+        prompt,
+        skills,
+        dataDir: fs.mkdtempSync(path.join(os.tmpdir(), "ctx-skill-backend-runtime-data-")),
+        indexedSearcher: indexedSearcherFor({
+          "web-frameworks": 0.95,
+          "backend-development": 0.91,
+          "api-endpoint-builder": 0.85,
+          "debugging": 0.8,
+          "frontend-api-integration-patterns": 0.2,
+          "angular-ui-patterns": 0.2
+        }),
+        limit: 4
+      });
+      const names = suggested.map((skill) => skill.name);
+
+      expect(names).toEqual(expect.arrayContaining([
+        "web-frameworks",
+        "backend-development",
+        "api-endpoint-builder",
+        "debugging"
+      ]));
+      expect(names).not.toContain("frontend-api-integration-patterns");
+      expect(names).not.toContain("angular-ui-patterns");
+    }
+  });
+
   it("uses MCP project metadata for context retrieval debugging prompts", async () => {
     const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-skill-mcp-project-"));
     fs.writeFileSync(path.join(cwd, "package.json"), JSON.stringify({
@@ -445,6 +562,7 @@ describe("skill discoverer", () => {
     const suggested = await suggestSkills({
       cwd,
       prompt: "can not see suggested skills / files, suggested skills not match prompt",
+      dataDir: fs.mkdtempSync(path.join(os.tmpdir(), "ctx-skill-mcp-project-data-")),
       skills: [
         ...Array.from({ length: 301 }, (_, index) => ({
           name: `unrelated-${index}`,
@@ -472,6 +590,12 @@ describe("skill discoverer", () => {
           path: "/skills/agent-memory-mcp/SKILL.md"
         }
       ],
+      indexedSearcher: indexedSearcherFor({
+        "mcp-builder": 0.96,
+        "mcp-management": 0.93,
+        "mcp-tool-developer": 0.9,
+        "agent-memory-mcp": 0.88
+      }),
       limit: 7
     });
 
@@ -487,6 +611,7 @@ describe("skill discoverer", () => {
   it("suggests document authoring skills without document-processing or workspace-automation bleed", async () => {
     const suggested = await suggestSkills({
       prompt: "edit the project document and create workspace documentation",
+      dataDir: fs.mkdtempSync(path.join(os.tmpdir(), "ctx-skill-doc-data-")),
       skills: [
         ...Array.from({ length: 301 }, (_, index) => ({
           name: `unrelated-${index}`,
@@ -534,6 +659,16 @@ describe("skill discoverer", () => {
           path: "/skills/asana-automation/SKILL.md"
         }
       ],
+      indexedSearcher: indexedSearcherFor({
+        "doc-coauthoring": 0.95,
+        "documentation": 0.9,
+        "docs-architect": 0.87,
+        "wiki-page-writer": 0.84,
+        "writer": 0.8,
+        "azure-ai-document-intelligence-ts": 0.2,
+        "docusign-automation": 0.2,
+        "asana-automation": 0.2
+      }),
       limit: 5
     });
 
@@ -606,4 +741,22 @@ function writeSkill(directory, name) {
     `description: Use for ${name} tasks.`,
     "---"
   ].join("\n"));
+}
+
+function indexedSearcherFor(scoresBySkillName, onTask) {
+  return async ({ task }) => {
+    onTask?.(task);
+    return {
+      status: "enabled",
+      items: Object.entries(scoresBySkillName).map(([name, embeddingScore]) => ({
+        id: normalizeSkillId(name),
+        text: name,
+        embeddingScore
+      }))
+    };
+  };
+}
+
+function normalizeSkillId(name) {
+  return String(name || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }

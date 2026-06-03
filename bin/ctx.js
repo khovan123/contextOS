@@ -503,14 +503,12 @@ async function warmInstallEmbeddings() {
     dataDir,
     allowRemote: !modelReady
   });
+  const skillResult = await warmSkillEmbeddings({
+    cwd: process.cwd(),
+    dataDir,
+    allowRemote: !modelReady
+  });
   const warmDiscovery = process.env.CONTEXTOS_INSTALL_WARM_DISCOVERY === "1";
-  const skillResult = warmDiscovery
-    ? await warmSkillEmbeddings({
-      cwd: process.cwd(),
-      dataDir,
-      allowRemote: !modelReady
-    })
-    : { count: 0 };
   const workflowResult = warmDiscovery
     ? await warmWorkflowEmbeddings({
       cwd: process.cwd(),
@@ -703,7 +701,7 @@ async function refresh() {
   const invalidatedBridge = invalidateCtxMcpSocket(contextOSDataDir());
   const warmResult = await warmInstallEmbeddings();
   console.log(`Marketplace: ${marketplaceSync.synced ? "synced" : "already active"} (${marketplaceSync.targetRoot})`);
-  console.log(`Indexes: ${warmResult.fileCount || 0} file paths rebuilt`);
+  console.log(`Indexes: ${warmResult.fileCount || 0} file paths rebuilt, ${warmResult.skillCount || 0} skills indexed`);
   console.log(`Graph embeddings: ${formatCodeReviewGraphEmbedding(warmResult.graphEmbedding)}`);
   if (invalidatedBridge) console.log("Bridge: stale private socket invalidated");
   console.log("Restart Codex if ctx-mcp was already running.");

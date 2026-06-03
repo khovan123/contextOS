@@ -36,7 +36,7 @@ describe("scheduler", () => {
     expect(scheduled.additionalContext).not.toContain("/repo/AGENTS.md");
     expect(scheduled.additionalContext).toContain("## Suggested files to check, login.ts");
     expect(scheduled.additionalContext).not.toContain("src/auth/login.ts");
-    expect(scheduled.additionalContext).toContain("## Skills to activate for this task: zod-validator");
+    expect(scheduled.additionalContext).toContain("## Skills to activate for this task: $zod-validator");
     expect(scheduled.additionalContext.match(/zod-validator/g)).toHaveLength(1);
     expect(scheduled.additionalContext).not.toContain("Use for validation tasks.");
     // No absolute paths in skill output

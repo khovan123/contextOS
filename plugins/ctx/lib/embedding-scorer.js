@@ -68,7 +68,7 @@ export async function warmRuleEmbeddings({
   const cache = await openEmbeddingCache(dataDir);
   const embedder = await getExtractor({ allowRemote, dataDir });
   for (const text of texts) {
-    await getCachedEmbedding({ cache, embedder, text, sources });
+    await getCachedEmbedding({ cache, embedder, text, sources, flush: false });
   }
   cache.close();
   return { count: texts.length, cachePath: cache.path };
@@ -114,7 +114,7 @@ export async function warmIndexedEmbeddings({
   for (const item of items) {
     const text = String(item.text || "");
     if (!item.id || !text.trim()) continue;
-    const vector = await getCachedEmbedding({ cache, embedder, text, sources });
+    const vector = await getCachedEmbedding({ cache, embedder, text, sources, flush: false });
     indexed.push({ id: item.id, text, vector });
   }
   cache.replaceIndex(kind, indexed);
@@ -206,7 +206,7 @@ export function isModelCacheReady(dataDir = defaultDataRoot()) {
   ].every((relativePath) => fs.existsSync(path.join(modelDir, relativePath)));
 }
 
-async function getCachedEmbedding({ cache, embedder, text, sources }) {
+async function getCachedEmbedding({ cache, embedder, text, sources, flush = true }) {
   const key = cacheKey(text, sources);
   const existing = cache.get(key);
   if (existing) return existing;
@@ -216,7 +216,7 @@ async function getCachedEmbedding({ cache, embedder, text, sources }) {
     normalize: true
   });
   const embedding = Array.from(output.data || []);
-  cache.set(key, embedding);
+  cache.set(key, embedding, { flush });
   return embedding;
 }
 
@@ -225,6 +225,7 @@ export async function openEmbeddingCache(dataDir) {
   const cachePath = path.join(dataDir, "embeddings.db");
   const SQL = await getSql();
   const db = initializeEmbeddingDatabase(SQL, cachePath);
+  let dirty = false;
 
   return {
     path: cachePath,
@@ -238,12 +239,16 @@ export async function openEmbeddingCache(dataDir) {
         stmt.free();
       }
     },
-    set(key, vector) {
+    set(key, vector, { flush = true } = {}) {
       db.run(
         "INSERT OR REPLACE INTO embeddings (key, model, vector, updated_at) VALUES (?, ?, ?, ?)",
         [key, DEFAULT_MODEL, JSON.stringify(vector), new Date().toISOString()]
       );
-      writeDatabaseAtomically(cachePath, db);
+      dirty = true;
+      if (flush) {
+        writeDatabaseAtomically(cachePath, db);
+        dirty = false;
+      }
     },
     listIndexed(kind) {
       const stmt = db.prepare("SELECT id, text, vector FROM embedding_index WHERE kind = ? AND model = ?");
@@ -268,9 +273,10 @@ export async function openEmbeddingCache(dataDir) {
         );
       }
       writeDatabaseAtomically(cachePath, db);
+      dirty = false;
     },
     close() {
-      writeDatabaseAtomically(cachePath, db);
+      if (dirty) writeDatabaseAtomically(cachePath, db);
       db.close();
     }
   };

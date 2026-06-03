@@ -228,6 +228,8 @@ args = [
 
   it("imports project .mcp.json servers during full sync", async () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-ruler-sync-project-mcp-"));
+    const originalHome = process.env.HOME;
+    process.env.HOME = tmp;
     const rtkPath = path.join(tmp, "bin", "mcp-rtk");
     fs.mkdirSync(path.dirname(rtkPath), { recursive: true });
     fs.writeFileSync(rtkPath, "#!/bin/sh\n");
@@ -252,13 +254,17 @@ args = [
       return { stdout: "" };
     };
 
-    await syncRules({
-      cwd: tmp,
-      rootDir: "/tmp/contextos",
-      args: ["--rules", "--agents", "antigravity"],
-      run,
-      logger: () => {}
-    });
+    try {
+      await syncRules({
+        cwd: tmp,
+        rootDir: "/tmp/contextos",
+        args: ["--rules", "--agents", "antigravity"],
+        run,
+        logger: () => {}
+      });
+    } finally {
+      process.env.HOME = originalHome;
+    }
 
     const content = fs.readFileSync(path.join(tmp, ".ruler", "ruler.toml"), "utf8");
     expect(content).not.toContain("[mcp_servers.mcp-rtk]");

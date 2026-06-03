@@ -127,7 +127,7 @@ describe("hook contracts", () => {
     expect(runtime.relevantFiles).toHaveLength(5);
     expect(runtime.suggestedSkills).toHaveLength(5);
     expect(runtime.scheduled.additionalContext).toContain("## Suggested files to check, file-0.ts, file-1.ts");
-    expect(runtime.scheduled.additionalContext).toContain("## Skills to activate for this task: skill-0, skill-1");
+    expect(runtime.scheduled.additionalContext).toContain("## Skills to activate for this task: $skill-0, $skill-1");
   });
 
   it("uses configured prompt suggestion limits", async () => {
@@ -200,6 +200,7 @@ describe("hook contracts", () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-hook-bridge-fallback-"));
     const dataPath = path.join(tmp, ".data", "last-prompt-context.json");
     fs.writeFileSync(path.join(tmp, "AGENTS.md"), "- Always use code-review-graph before reading files.\n");
+    const seenDirectPayloads = [];
 
     const output = await handlePromptPayload(
       { prompt: "review code changes", cwd: tmp, hook_event_name: "UserPromptSubmit" },
@@ -209,6 +210,16 @@ describe("hook contracts", () => {
         scoreContextClient: async () => {
           throw new Error("ctx-mcp bridge socket not found");
         },
+        scoreContextDirectClient: async (payload) => {
+          seenDirectPayloads.push(payload);
+          return {
+            scoredRules: [{ content: "Always use code-review-graph before reading files.", score: 1, reasons: ["mock"] }],
+            suggestedFiles: [],
+            suggestedSkills: [{ name: "code-review-graph", score: 1 }],
+            suggestedWorkflows: [],
+            telemetry: { elapsedMs: 1, modelStatus: "mock" }
+          };
+        },
         outputConfig: defaultOutputConfig()
       }
     );
@@ -216,6 +227,11 @@ describe("hook contracts", () => {
 
     expect(output.continue).toBe(true);
     expect(output.hookSpecificOutput.additionalContext).toContain("code-review-graph");
+    expect(seenDirectPayloads[0]).toMatchObject({
+      embeddingTimeoutMs: 500,
+      fileEmbeddingTimeoutMs: 1000,
+      skillEmbeddingTimeoutMs: 2000
+    });
     expect(runtime.telemetry.bridgeStatus).toBe("fallback");
   });
 

@@ -445,7 +445,7 @@ This warning comes from a transitive dependency in the local embedding/WASM stac
 | `ctx skills` | Installs community skill libraries. | You want curated skills without running the full setup wizard. | Opens the community installer, uses a portable shell on Windows/Linux/macOS, repairs unsafe skill symlinks, and syncs installed skills to selected agents. |
 | `ctx embeddings warm -- "task"` | Prepares local semantic embedding caches. | First install, CI smoke checks, or after changing AGENTS.md/project files/skills/workflows. | Loads/downloads `Xenova/all-MiniLM-L6-v2` and writes rule, file-path, skill, and workflow vectors to `~/.ctx/contextos/embeddings.db`. |
 | `ctx --config` | Opens an interactive panel for prompt sections and suggestion limits. | You want to reduce ContextOS prompt output noise. | Toggles critical rules, suggested files, suggested skills, and suggested workflows globally under `~/.ctx/contextos/output-config.json`, then lets you set suggestion counts for files, skills, and workflows. |
-| `ctx refresh` | Refreshes the active Codex marketplace plugin and rebuilds local indexes. | Local development updates or a stale file retrieval index. | Copies the current package to `$CODEX_HOME/marketplaces/contextos`, rebuilds file-path embeddings and import adjacency, and refreshes code-review-graph embeddings when available. |
+| `ctx refresh` | Refreshes the active Codex marketplace plugin and rebuilds local indexes. | Local development updates or stale file/skill retrieval indexes. | Copies the current package to `$CODEX_HOME/marketplaces/contextos`, rebuilds file-path embeddings, skill embeddings, import adjacency, and refreshes code-review-graph embeddings when available. |
 | `ctx ruler -- <args>` | Forwards args to the installed `ruler` CLI. | You need native Ruler commands such as `init`, `apply`, or `revert`. | Preserves Ruler stdout/stderr and exit status. |
 | `ctx skillshare -- <args>` | Forwards args to the installed `skillshare` CLI. | You need native skillshare commands such as `status`, `target list`, `doctor`, `push`, or `pull`. | Preserves skillshare stdout/stderr and exit status. |
 | `ctx --version` | Prints the installed ContextOS CLI version. | You want to confirm which npm version is being executed. | Prints the version from package metadata. |
@@ -511,17 +511,23 @@ This keeps the hook fast and local while still using graph semantics when availa
 
 Prompt scoring does not walk the repository for file candidates or import expansion. `ctx install` and `ctx embeddings warm` rebuild the persisted file-vector index and one-hop import adjacency index by walking source paths once; prompt hooks query those indexes directly. Rules, files, skills, and workflows are scored concurrently with `Promise.all()`.
 
-`ctx embeddings warm` automatically refreshes the active Codex marketplace payload before rebuilding indexes. Use `ctx refresh` when you want the same marketplace sync plus install-style file/import index and code-review-graph embedding refresh in one command.
+`ctx embeddings warm` automatically refreshes the active Codex marketplace payload before rebuilding indexes. Use `ctx refresh` when you want the same marketplace sync plus install-style file, skill, import, and code-review-graph embedding refresh in one command.
 
 If a prompt has no usable context candidates, the hook fails open without emitting an empty `hook context` block, records `emptyContextReason` in the workspace runtime file, and starts a detached `autowarm` rebuild with a cooldown. That background rebuild refreshes file vectors, skill/workflow vectors, import adjacency, and available code-review-graph node embeddings for the next prompt while keeping repository walking out of the current prompt hot path.
 
 Use `ctx --config` to choose which prompt sections ContextOS injects and how many suggestions each section may show. Interactive `ctx setup` includes the same section picker and limit prompts, while `ctx setup --yes` keeps the current saved config for automation. The panel supports multiple selection with `Space` and persists the global choice in `~/.ctx/contextos/output-config.json`. Defaults are five suggested files, five skills, and five workflows; caps are 20 files, 10 skills, and 5 workflows. Disabling rules hides both critical and additional relevant rule sections; compliance metadata remains available for reports.
 
-Injected prompt sections are intentionally compact: rules show only detected rule text, files show a comma-separated inline list of basenames without paths, skills show unique names as a comma-separated inline list without descriptions, and workflows show names with their agent chain. Stop hooks persist reports silently; run `ctx report` or `ctx evidence` when you want the detailed compliance output.
+Injected prompt sections are intentionally compact: rules show only detected rule text, files show a comma-separated inline list of basenames without paths, skills show unique `$skill-name` activations as a comma-separated inline list without descriptions, and workflows show names with their agent chain. Stop hooks persist reports silently; run `ctx report` or `ctx evidence` when you want the detailed compliance output.
 
 Codex may flatten newlines in its `UserPromptSubmit hook (completed)` preview. The injected `additionalContext` payload remains multiline; this is a Codex preview display limitation.
 
-Skill ranking uses bounded project hints from root/workspace `package.json` files and known mobile config files such as `app.json`, `app.config.*`, and `eas.json`. This lets Expo/EAS and MCP tasks activate specialized skills without walking the source tree on every prompt. Document-authoring prompts also get explicit intent handling for README, wiki, workspace documentation, guides, specs, and ADR work, while document-processing or workspace-automation providers only rank highly when the prompt actually names that provider or processing task.
+Skill ranking is semantic-only. ContextOS builds a fused query from the user prompt plus a cached project profile, then compares that vector with cached skill vectors:
+
+```text
+embed(prompt + project profile) -> cosine -> embed(skill name + description)
+```
+
+The project profile is an embeddable string built from bounded root/workspace `package.json` metadata, dependencies, scripts, detected languages, and recent git files. It is cached under the ContextOS workspace data directory and invalidated when package metadata or git `HEAD` changes. ContextOS does not maintain a skill taxonomy or domain gate list for ranking; if the skill index is cold for a large catalog, prompt hooks fail open instead of falling back to arbitrary keyword matches. Skill catalogs are deduplicated by normalized skill name before indexing and rendering.
 
 After `ctx refresh`, ContextOS invalidates the private hook bridge socket so prompts fall back to direct scoring until Codex restarts the long-running `ctx-mcp` process. Hook clients also discard a same-inode socket if an older bridge revision is detected.
 
@@ -538,6 +544,8 @@ CONTEXTOS_HOOK_DEADLINE_MS=8500 hard fail-open deadline for prompt hooks
 CONTEXTOS_DIRECT_FALLBACK_TIMEOUT_MS=6000 direct scoring timeout when the bridge is unavailable
 CONTEXTOS_HOOK_EMBEDDING_TIMEOUT_MS=500 rule embedding timeout during hook direct fallback
 CONTEXTOS_EMBEDDING_TIMEOUT_MS=800 embedding scoring timeout inside ctx-mcp/debug
+CONTEXTOS_HOOK_SKILL_EMBEDDING_TIMEOUT_MS=2000 skill retrieval timeout during hook direct fallback
+CONTEXTOS_SKILL_EMBEDDING_TIMEOUT_MS=2000 skill retrieval timeout inside ctx-mcp/debug
 CONTEXTOS_FILE_EMBEDDINGS=0       disable file-path embedding retrieval
 CONTEXTOS_HOOK_FILE_EMBEDDING_TIMEOUT_MS=500 file retrieval timeout during hook direct fallback
 CONTEXTOS_FILE_EMBEDDING_TIMEOUT_MS=1000 file-path embedding retrieval timeout

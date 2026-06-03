@@ -17,7 +17,9 @@ export async function scoreContext({
   skills = null,
   workflows = null,
   embeddingTimeoutMs = 5000,
-  fileEmbeddingTimeoutMs = Number(process.env.CONTEXTOS_FILE_EMBEDDING_TIMEOUT_MS || 1000)
+  fileEmbeddingTimeoutMs = Number(process.env.CONTEXTOS_FILE_EMBEDDING_TIMEOUT_MS || 1000),
+  skillEmbeddingTimeoutMs = Number(process.env.CONTEXTOS_SKILL_EMBEDDING_TIMEOUT_MS || embeddingTimeoutMs),
+  skillSearchOptions = {}
 } = {}) {
   const started = Date.now();
   const ruleInputsPromise = Promise.resolve().then(() => {
@@ -59,7 +61,15 @@ export async function scoreContext({
     const catalog = Array.isArray(skills) ? skills : scanSkills({ cwd });
     return {
       catalog,
-      suggestions: await suggestSkills({ cwd, prompt, skills: catalog, dataDir, limit: maxSkills })
+      suggestions: await suggestSkills({
+        cwd,
+        prompt,
+        skills: catalog,
+        dataDir,
+        limit: maxSkills,
+        timeoutMs: skillEmbeddingTimeoutMs,
+        ...skillSearchOptions
+      })
     };
   });
 
