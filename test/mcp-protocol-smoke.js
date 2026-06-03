@@ -15,12 +15,7 @@ import { createContextOSMcpServer } from "../plugins/ctx/mcp/contextos-server.js
 const preferredModelDir = modelCacheDir(defaultDataRoot());
 const legacyModelDir = modelCacheDir(path.join(os.homedir(), ".codex", "contextos"));
 const installedModelDir = fs.existsSync(preferredModelDir) ? preferredModelDir : legacyModelDir;
-
-if (!fs.existsSync(installedModelDir)) {
-  console.error(`Missing ContextOS model cache: ${installedModelDir}`);
-  console.error("Run `ctx install` or `ctx embeddings warm -- \"test\"` first.");
-  process.exit(1);
-}
+const hasInstalledModel = process.env.CONTEXTOS_MCP_SMOKE_FORCE_COLD === "1" ? false : fs.existsSync(installedModelDir);
 
 const cleanupPaths = [];
 let client;
@@ -30,6 +25,22 @@ try {
   const cwd = makeFixtureProject();
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-mcp-data-"));
   cleanupPaths.push(dataDir);
+  if (!hasInstalledModel) {
+    await runColdCacheSmoke({ cwd, dataDir });
+    console.log("ctx-mcp protocol smoke passed");
+    console.log(`model cache: missing (${installedModelDir}); cold-cache fallback verified`);
+  } else {
+    await runSemanticSmoke({ cwd, dataDir });
+  }
+} finally {
+  await client?.close().catch(() => {});
+  await server?.close().catch(() => {});
+  while (cleanupPaths.length) {
+    fs.rmSync(cleanupPaths.pop(), { recursive: true, force: true });
+  }
+}
+
+async function runSemanticSmoke({ cwd, dataDir }) {
   fs.symlinkSync(installedModelDir, path.join(dataDir, "models"), "dir");
   const fixtureRules = [
     { content: "Always inspect upload moderation flows before editing." },
@@ -107,12 +118,18 @@ try {
 
   console.log("ctx-mcp protocol smoke passed");
   console.log(`warm p95: ${Math.round(p95)}ms`);
-} finally {
-  await client?.close().catch(() => {});
-  await server?.close().catch(() => {});
-  while (cleanupPaths.length) {
-    fs.rmSync(cleanupPaths.pop(), { recursive: true, force: true });
-  }
+}
+
+async function runColdCacheSmoke({ cwd, dataDir }) {
+  ({ client, server } = await startInMemoryMcp({ dataDir }));
+  const result = await callScore(client, cwd, "kiểm tra flow kiểm duyệt upload");
+  assert.equal(result.structuredContent.telemetry.modelStatus, "cold-cache");
+  assert.ok(result.structuredContent.telemetry.rulesParsed > 0);
+  assert.ok(Array.isArray(result.structuredContent.scoredRules));
+  assert.ok(Array.isArray(result.structuredContent.suggestedFiles));
+  assert.ok(result.content.length >= 1, "expected telemetry content block");
+  const telemetryBlock = result.content[result.content.length - 1];
+  assert.ok(JSON.parse(telemetryBlock.text).rulesParsed > 0);
 }
 
 async function startInMemoryMcp({ dataDir }) {

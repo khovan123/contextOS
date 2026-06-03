@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.49
+
+- **Cold-cache MCP smoke:** `npm run test:mcp` now verifies the MCP tool contract without requiring a pre-downloaded ContextOS embedding model. When the model exists it still runs the semantic/performance smoke; otherwise it asserts cold-cache fallback behavior so publish CI does not fail before model warmup.
+
 ## 0.5.48
 
 - **Publish-safe embedding warm:** `ctx embeddings warm` now skips remote model downloads by default in CI and returns best-effort warm results when local embedding model loading fails, preventing npm publish workflows from failing on Hugging Face 429/rate-limit errors.
