@@ -22,11 +22,13 @@ const scanCache = new Map();
 export function skillSearchRoots({ cwd = process.cwd(), home = os.homedir() } = {}) {
   return [
     path.join(cwd, ".codex", "skills"),
+    path.join(cwd, ".agents", "skills"),
     path.join(cwd, ".claude", "skills"),
     path.join(cwd, ".gemini", "skills"),
     path.join(cwd, ".gemini", "antigravity", "skills"),
     path.join(cwd, ".gemini", "antigravity-cli", "skills"),
     path.join(home, ".codex", "skills"),
+    path.join(home, ".agents", "skills"),
     path.join(home, ".claude", "skills"),
     path.join(home, ".config", "skillshare", "skills"),
     path.join(home, ".gemini", "skills"),
@@ -171,6 +173,7 @@ export async function suggestSkills({
   const catalog = dedupeSkills(skills);
   const query = fusedProjectQuery({ prompt, cwd, dataDir });
   const byId = new Map(catalog.map((skill) => [skillIndexId(skill), skill]));
+  const explicitSkills = explicitSkillSuggestions({ prompt, byId });
 
   if (dataDir) {
     const indexed = await indexedSearcher({
@@ -181,20 +184,23 @@ export async function suggestSkills({
       allowRemote: false
     });
     if (indexed.status === "enabled" && indexed.items.length) {
-      return finalizeSkillScores(indexed.items
+      return finalizeSkillScores([
+        ...explicitSkills,
+        ...indexed.items
         .map((item) => {
           const skill = byId.get(item.id);
           if (!skill) return null;
           return skillScoreFromEmbedding(skill, item.embeddingScore, [`embedding:${Number(item.embeddingScore || 0).toFixed(2)}`]);
         })
-        .filter(Boolean), limit);
+        .filter(Boolean)
+      ], limit);
     }
   }
 
-  if (catalog.length > DEFAULT_EMBEDDING_CANDIDATES) return [];
+  if (catalog.length > DEFAULT_EMBEDDING_CANDIDATES) return finalizeSkillScores(explicitSkills, limit);
 
   const embeddingCandidates = catalog.map((skill, index) => skillRule({ skill, index }));
-  if (!embeddingCandidates.length) return [];
+  if (!embeddingCandidates.length) return finalizeSkillScores(explicitSkills, limit);
 
   const embedding = await embeddingEnhancer(embeddingCandidates, query, {
     dataDir,
@@ -203,7 +209,30 @@ export async function suggestSkills({
     allowRemote: false
   });
 
-  return finalizeSkillScores(embedding.rules, limit);
+  return finalizeSkillScores([...explicitSkills, ...embedding.rules], limit);
+}
+
+function explicitSkillSuggestions({ prompt = "", byId = new Map() } = {}) {
+  const names = extractExplicitSkillNames(prompt);
+  return names
+    .map((name, index) => ({ skill: byId.get(normalize(name)), index }))
+    .filter(({ skill }) => Boolean(skill))
+    .map(({ skill, index }) => skillScoreFromEmbedding(skill, 1 - index * 0.0001, ["explicit-skill"]));
+}
+
+function extractExplicitSkillNames(prompt = "") {
+  const names = [];
+  const seen = new Set();
+  const pattern = /(?:^|[\s([{,])\$([A-Za-z0-9][A-Za-z0-9_.:-]*)/g;
+  let match;
+  while ((match = pattern.exec(String(prompt || "")))) {
+    const name = match[1];
+    const key = normalize(name);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    names.push(name);
+  }
+  return names;
 }
 
 function finalizeSkillScores(skills, limit) {

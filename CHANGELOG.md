@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.50
+
+- **Explicit skill activation:** Prompt skills named with `$skill-name` are now preserved and ranked before semantic suggestions, so user-requested skills such as `$threejs` or `$design-taste-frontend` appear in prompt context even when semantic ranking would not select them.
+- **Agents skill root discovery:** Skill discovery now scans project and global `.agents/skills` roots in addition to Codex, Claude, Gemini, and skillshare roots.
+
 ## 0.5.49
 
 - **Cold-cache MCP smoke:** `npm run test:mcp` now verifies the MCP tool contract without requiring a pre-downloaded ContextOS embedding model. When the model exists it still runs the semantic/performance smoke; otherwise it asserts cold-cache fallback behavior so publish CI does not fail before model warmup.

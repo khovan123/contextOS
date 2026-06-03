@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { parseSkillFrontmatter, projectSkillHints, scanSkills, suggestSkills } from "../plugins/ctx/lib/skill-discoverer.js";
+import { parseSkillFrontmatter, projectSkillHints, scanSkills, skillSearchRoots, suggestSkills } from "../plugins/ctx/lib/skill-discoverer.js";
 
 describe("skill discoverer", () => {
   it("parses SKILL.md YAML frontmatter", () => {
@@ -69,6 +69,15 @@ describe("skill discoverer", () => {
     expect(skills[0]).toMatchObject({ name: "planning" });
   });
 
+  it("includes .agents skill roots", () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-agents-home-"));
+    const roots = skillSearchRoots({ cwd: fs.mkdtempSync(path.join(os.tmpdir(), "ctx-agents-cwd-")), home });
+
+    expect(roots).toEqual(expect.arrayContaining([
+      path.join(home, ".agents", "skills")
+    ]));
+  });
+
   it("scans Antigravity skill directories", () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-agy-skills-"));
     const skillDir = path.join(tmp, ".gemini", "antigravity", "skills", "payment-integration");
@@ -128,6 +137,58 @@ describe("skill discoverer", () => {
     });
 
     expect(suggested[0].name).toBe("payment-integration");
+  });
+
+  it("preserves explicitly requested $ skills before semantic suggestions", async () => {
+    const suggested = await suggestSkills({
+      prompt: "$threejs $threejs-animation $threejs-interaction $design-taste-frontend design all card again",
+      skills: [
+        {
+          name: "threejs",
+          description: "Build immersive 3D web experiences with Three.js.",
+          path: "/home/user/.agents/skills/threejs/SKILL.md"
+        },
+        {
+          name: "threejs-animation",
+          description: "Three.js animation with keyframes, mixers, and procedural motion.",
+          path: "/home/user/.agents/skills/threejs-animation/SKILL.md"
+        },
+        {
+          name: "threejs-interaction",
+          description: "Three.js interaction with raycasting, controls, and pointer input.",
+          path: "/home/user/.agents/skills/threejs-interaction/SKILL.md"
+        },
+        {
+          name: "design-taste-frontend",
+          description: "Build high-agency frontend interfaces with strict design taste.",
+          path: "/home/user/.agents/skills/design-taste-frontend/SKILL.md"
+        },
+        {
+          name: "unrelated",
+          description: "Use for unrelated maintenance tasks.",
+          path: "/skills/unrelated/SKILL.md"
+        }
+      ],
+      dataDir: fs.mkdtempSync(path.join(os.tmpdir(), "ctx-skill-explicit-data-")),
+      indexedSearcher: indexedSearcherFor({
+        unrelated: 0.95
+      }),
+      limit: 5
+    });
+
+    expect(suggested.map((skill) => skill.name)).toEqual([
+      "threejs",
+      "threejs-animation",
+      "threejs-interaction",
+      "design-taste-frontend",
+      "unrelated"
+    ]);
+    expect(suggested.slice(0, 4).map((skill) => skill.reasons)).toEqual([
+      ["explicit-skill"],
+      ["explicit-skill"],
+      ["explicit-skill"],
+      ["explicit-skill"]
+    ]);
   });
 
   it("does not suggest unrelated skills from generic setup and package tokens", async () => {
