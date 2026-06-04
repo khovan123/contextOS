@@ -22,6 +22,7 @@ describe("ctx mcp client", () => {
 
     expect(Date.now() - started).toBeLessThan(200);
     expect(client.destroyed).toBe(true);
+    expect(fs.existsSync(ctxMcpSocketPath(dataDir))).toBe(false);
   });
 
   it("keeps a separate response timeout after connecting", async () => {
@@ -38,6 +39,7 @@ describe("ctx mcp client", () => {
 
     await expect(pending).rejects.toThrow("ctx-mcp bridge timed out after 40ms");
     expect(client.writes).toEqual(['{"prompt":"test"}\n']);
+    expect(fs.existsSync(ctxMcpSocketPath(dataDir))).toBe(false);
   });
 
   it("rejects responses from stale bridge revisions", async () => {

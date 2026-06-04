@@ -40,6 +40,7 @@ export async function callCtxScoreContext(payload, {
     let raw = "";
     let responseTimer;
     const connectTimer = setTimeout(() => {
+      invalidateSocketIfUnchanged(socketPath, socketIdentity);
       client.destroy();
       reject(new Error(`ctx-mcp bridge connect timed out after ${connectTimeoutMs}ms`));
     }, connectTimeoutMs);
@@ -47,6 +48,7 @@ export async function callCtxScoreContext(payload, {
     client.on("connect", () => {
       clearTimeout(connectTimer);
       responseTimer = setTimeout(() => {
+        invalidateSocketIfUnchanged(socketPath, socketIdentity);
         client.destroy();
         reject(new Error(`ctx-mcp bridge timed out after ${timeoutMs}ms`));
       }, timeoutMs);

@@ -3,6 +3,8 @@ import path from "node:path";
 import { writeJsonFile } from "./fs-utils.js";
 import { defaultDataRoot, workspaceDataDir } from "./workspace-data.js";
 
+let pendingStdoutWrites = 0;
+
 export async function readStdinJson() {
   const chunks = [];
   for await (const chunk of process.stdin) chunks.push(chunk);
@@ -13,13 +15,21 @@ export async function readStdinJson() {
 
 export function writeJson(value) {
   try {
-    process.stdout.write(`${JSON.stringify(value)}\n`);
+    pendingStdoutWrites += 1;
+    process.stdout.write(`${JSON.stringify(value)}\n`, () => {
+      pendingStdoutWrites = Math.max(0, pendingStdoutWrites - 1);
+    });
   } catch (error) {
+    pendingStdoutWrites = Math.max(0, pendingStdoutWrites - 1);
     if (error?.code !== "EPIPE") throw error;
   }
 }
 
 export function exitAfterStdout(code = 0) {
+  if (pendingStdoutWrites > 0) {
+    setImmediate(() => exitAfterStdout(code));
+    return;
+  }
   if (process.stdout.writableNeedDrain) {
     process.stdout.once("drain", () => process.exit(code));
     return;

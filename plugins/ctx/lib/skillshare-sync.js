@@ -244,6 +244,106 @@ export function repairSkillSymlinks({
   return { repaired: [...new Set(repaired)], removedBroken: [...new Set(removedBroken)] };
 }
 
+export function dedupeAgentVisibleSkills({
+  cwd = process.cwd(),
+  home = os.homedir(),
+  agents = DEFAULT_AGENTS,
+  dryRun = false
+} = {}) {
+  const roots = visibleSkillRootsForAgents({ cwd, home, agents });
+  const seen = new Map();
+  const kept = [];
+  const removed = [];
+
+  for (const root of roots) {
+    for (const skill of listSkillsInRoot(root)) {
+      const previous = seen.get(skill.key);
+      if (!previous) {
+        seen.set(skill.key, skill);
+        kept.push(skill.path);
+        continue;
+      }
+
+      const previousReal = safeRealpath(previous.path);
+      const currentReal = safeRealpath(skill.path);
+      if (previousReal && currentReal && previousReal === currentReal) {
+        if (!dryRun) fs.rmSync(skill.path, { force: true, recursive: true });
+        removed.push(skill.path);
+        continue;
+      }
+
+      if (!dryRun) fs.rmSync(skill.path, { force: true, recursive: true });
+      removed.push(skill.path);
+    }
+  }
+
+  return { kept: [...new Set(kept)], removed: [...new Set(removed)], roots };
+}
+
+function visibleSkillRootsForAgents({ cwd, home, agents }) {
+  const normalizedAgents = normalizeAgentList(agents);
+  const roots = [];
+  const addShared = () => {
+    roots.push(path.join(home, ".agents", "skills"));
+    roots.push(path.join(cwd, ".agents", "skills"));
+  };
+
+  addShared();
+  if (normalizedAgents.includes("codex")) {
+    roots.push(path.join(home, ".codex", "skills"));
+    roots.push(path.join(cwd, ".codex", "skills"));
+  }
+  if (normalizedAgents.includes("claude")) {
+    roots.push(path.join(home, ".claude", "skills"));
+    roots.push(path.join(cwd, ".claude", "skills"));
+  }
+  if (normalizedAgents.includes("antigravity")) {
+    roots.push(path.join(home, ".gemini", "skills"));
+    roots.push(path.join(home, ".gemini", "antigravity", "skills"));
+    roots.push(path.join(home, ".gemini", "antigravity-cli", "skills"));
+    roots.push(path.join(cwd, ".gemini", "skills"));
+    roots.push(path.join(cwd, ".gemini", "antigravity", "skills"));
+    roots.push(path.join(cwd, ".gemini", "antigravity-cli", "skills"));
+  }
+
+  return uniquePaths(roots);
+}
+
+function listSkillsInRoot(root) {
+  return findSkillFiles(root)
+    .map((skillFile) => {
+      const skillDir = path.dirname(skillFile);
+      const name = readSkillName(skillFile) || path.basename(skillDir);
+      return {
+        name,
+        key: normalizeSkillName(name),
+        path: skillDir,
+        root
+      };
+    })
+    .filter((skill) => skill.key)
+    .sort((a, b) => a.path.localeCompare(b.path));
+}
+
+function readSkillName(skillFile) {
+  try {
+    const content = fs.readFileSync(skillFile, "utf8");
+    return content.match(/^\s*name:\s*(.+?)\s*$/m)?.[1]
+      ?.replace(/^["']|["']$/g, "")
+      .trim() || "";
+  } catch {
+    return "";
+  }
+}
+
+function normalizeSkillName(name) {
+  return String(name || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 function skillRoots({ cwd, home }) {
   return uniquePaths([
     path.join(home, ".claude", "skills"),
@@ -502,6 +602,18 @@ export async function syncSkills({
   run("skillshare", syncArgs, { cwd, stdio: options.verbose ? "inherit" : "pipe", dryRun: false });
   const syncedCount = countSkillFiles(skillshareSourceDir({ home }));
   logger(statusLine("Running skillshare sync...", options.dryRun ? "dry-run" : `✓ ${syncedCount} skills → ${options.agents.join(", ")}`));
+
+  const deduped = dedupeAgentVisibleSkills({
+    cwd,
+    home,
+    agents: options.agents,
+    dryRun: options.dryRun
+  });
+  if (deduped.removed.length) {
+    logger(statusLine("Deduping agent-visible skills...", options.dryRun
+      ? `dry-run (${deduped.removed.length} duplicates)`
+      : `✓ ${deduped.removed.length} duplicates removed`));
+  }
 
   let embeddings = { count: 0, cachePath: null, skipped: options.dryRun || options.noEmbeddings };
   if (options.noEmbeddings) {

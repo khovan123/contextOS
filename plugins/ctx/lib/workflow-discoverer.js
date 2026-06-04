@@ -128,12 +128,14 @@ export async function suggestWorkflows({
   workflows = [],
   dataDir,
   limit = DEFAULT_LIMIT,
-  timeoutMs = Number(process.env.CONTEXTOS_WORKFLOW_EMBEDDING_TIMEOUT_MS || process.env.CONTEXTOS_EMBEDDING_TIMEOUT_MS || 800)
+  timeoutMs = Number(process.env.CONTEXTOS_WORKFLOW_EMBEDDING_TIMEOUT_MS || process.env.CONTEXTOS_EMBEDDING_TIMEOUT_MS || 800),
+  embeddingsEnabled = true
 } = {}) {
   if (!String(prompt || "").trim() || !workflows.length) return [];
   const base = scoreWorkflowsByKeyword({ prompt, workflows });
   const embeddingCandidates = selectWorkflowEmbeddingCandidates(base);
   if (!embeddingCandidates.length) return [];
+  if (!embeddingsEnabled) return finalizeWorkflowScores(embeddingCandidates, limit);
 
   const embedding = await enhanceRuleScoresWithEmbeddings(embeddingCandidates, prompt, {
     dataDir,

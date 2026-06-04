@@ -57,6 +57,7 @@ export function maybeAutoWarmWorkspace({
 function shouldAutoWarm(reason) {
   if (reason === "no-context-candidates") return true;
   if (reason === "enabled-sections-empty-after-formatting") return true;
+  if (String(reason || "").startsWith("enabled-sections-missing-candidates:")) return true;
   return false;
 }
 

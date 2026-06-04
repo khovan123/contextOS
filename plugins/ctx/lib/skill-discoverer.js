@@ -167,22 +167,18 @@ export async function suggestSkills({
   limit = DEFAULT_LIMIT,
   timeoutMs = Number(process.env.CONTEXTOS_SKILL_EMBEDDING_TIMEOUT_MS || process.env.CONTEXTOS_EMBEDDING_TIMEOUT_MS || DEFAULT_SKILL_TIMEOUT_MS),
   indexedSearcher = searchIndexedEmbeddings,
-  embeddingEnhancer = enhanceRuleScoresWithEmbeddings
+  embeddingEnhancer = enhanceRuleScoresWithEmbeddings,
+  embeddingsEnabled = true
 } = {}) {
   if (!String(prompt || "").trim() || !skills.length) return [];
   const catalog = dedupeSkills(skills);
-  const query = fusedProjectQuery({ prompt, cwd, dataDir });
+  const query = skillQuery({ prompt, cwd, dataDir });
   const byId = new Map(catalog.map((skill) => [skillIndexId(skill), skill]));
   const explicitSkills = explicitSkillSuggestions({ prompt, byId });
+  if (!embeddingsEnabled) return finalizeSkillScores(explicitSkills, limit);
 
   if (dataDir) {
-    const indexed = await indexedSearcher({
-      kind: skillIndexKind(cwd),
-      task: query,
-      dataDir,
-      timeoutMs,
-      allowRemote: false
-    });
+    const indexed = await searchSkillIndexes({ cwd, query, dataDir, timeoutMs, indexedSearcher });
     if (indexed.status === "enabled" && indexed.items.length) {
       return finalizeSkillScores([
         ...explicitSkills,
@@ -210,6 +206,12 @@ export async function suggestSkills({
   });
 
   return finalizeSkillScores([...explicitSkills, ...embedding.rules], limit);
+}
+
+function skillQuery({ prompt = "", cwd = process.cwd(), dataDir } = {}) {
+  const focusedPrompt = String(prompt || "").trim();
+  const fused = fusedProjectQuery({ prompt, cwd, dataDir });
+  return [focusedPrompt, focusedPrompt, fused].filter(Boolean).join("\n");
 }
 
 function explicitSkillSuggestions({ prompt = "", byId = new Map() } = {}) {
@@ -275,7 +277,7 @@ export async function warmSkillEmbeddings({
 } = {}) {
   if (!dataDir || !skills.length) return { count: 0, cachePath: null };
   const catalog = dedupeSkills(skills);
-  return warmIndexedEmbeddings({
+  const workspaceResult = await warmIndexedEmbeddings({
     kind: skillIndexKind(cwd),
     items: catalog.map((skill) => ({
       id: skillIndexId(skill),
@@ -286,6 +288,19 @@ export async function warmSkillEmbeddings({
     sources: catalog.map((skill) => skill.path).filter(Boolean),
     allowRemote
   });
+  if (workspaceResult.status === "missing-model" || workspaceResult.status === "warm-failed") return workspaceResult;
+  await warmIndexedEmbeddings({
+    kind: sharedSkillIndexKind(),
+    items: catalog.map((skill) => ({
+      id: skillIndexId(skill),
+      text: skillEmbeddingText(skill)
+    })),
+    task: fusedProjectQuery({ prompt: "skill discovery semantic retrieval", cwd, dataDir }),
+    dataDir,
+    sources: catalog.map((skill) => skill.path).filter(Boolean),
+    allowRemote
+  });
+  return workspaceResult;
 }
 
 function skillRule({ skill, index }) {
@@ -341,6 +356,30 @@ function skillSourcePriority(skill) {
 
 function skillIndexKind(cwd) {
   return `skill:${path.resolve(cwd)}`;
+}
+
+function sharedSkillIndexKind() {
+  return "skill:global";
+}
+
+async function searchSkillIndexes({ cwd, query, dataDir, timeoutMs, indexedSearcher }) {
+  const workspace = await indexedSearcher({
+    kind: skillIndexKind(cwd),
+    task: query,
+    dataDir,
+    timeoutMs,
+    allowRemote: false
+  });
+  if (workspace.status === "enabled" && workspace.items.length) return workspace;
+  const shared = await indexedSearcher({
+    kind: sharedSkillIndexKind(),
+    task: query,
+    dataDir,
+    timeoutMs,
+    allowRemote: false
+  });
+  if (shared.status === "enabled" && shared.items.length) return shared;
+  return workspace.status === "enabled" ? workspace : shared;
 }
 
 function skillIndexId(skill) {

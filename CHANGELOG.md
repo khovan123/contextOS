@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.51
+
+- **Faster prompt fallback:** Direct prompt-hook fallback now skips embedding work and uses a shorter timeout, so context injection can still return deterministic rule, file, skill, and workflow candidates when MCP or semantic scoring is unavailable.
+- **Shared skill index fallback:** Skill discovery now warms a shared global skill index and searches it when the workspace-specific skill index has no matches, improving reuse across projects.
+- **Agent-visible skill dedupe:** Community skill installs and skill sync now remove duplicate skills visible through shared, Codex, and Antigravity roots while preserving unique agent-specific skills.
+- **Workspace prompt path detection:** Explicit file paths in prompts now tolerate line and column suffixes and can resolve files from workspace packages, improving suggested-file accuracy in monorepos.
+
 ## 0.5.50
 
 - **Explicit skill activation:** Prompt skills named with `$skill-name` are now preserved and ranked before semantic suggestions, so user-requested skills such as `$threejs` or `$design-taste-frontend` appear in prompt context even when semantic ranking would not select them.

@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   collectAntigravityLegacySkills,
+  dedupeAgentVisibleSkills,
   detectExistingSkills,
   detectOS,
   discoverSkillRoots,
@@ -196,6 +197,53 @@ describe("skillshare sync", () => {
     expect(result.repaired).toEqual([linkPath]);
     expect(fs.lstatSync(linkPath).isSymbolicLink()).toBe(false);
     expect(fs.existsSync(path.join(linkPath, "SKILL.md"))).toBe(true);
+  });
+
+  it("dedupes skills visible to Codex and Antigravity while preserving unique agent skills", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-skillshare-dedupe-"));
+    const home = path.join(tmp, "home");
+    const cwd = path.join(tmp, "repo");
+    const shared = path.join(home, ".agents", "skills", "mcp-builder");
+    const codexDuplicate = path.join(home, ".codex", "skills", "mcp-builder");
+    const agyDuplicate = path.join(home, ".gemini", "antigravity", "skills", "mcp-builder");
+    const codexOnly = path.join(home, ".codex", "skills", "codex-only");
+
+    writeSkill(shared, "mcp-builder");
+    writeSkill(codexDuplicate, "mcp-builder");
+    writeSkill(agyDuplicate, "mcp-builder");
+    writeSkill(codexOnly, "codex-only");
+
+    const result = dedupeAgentVisibleSkills({
+      cwd,
+      home,
+      agents: ["codex", "agy"]
+    });
+
+    expect(result.removed).toEqual(expect.arrayContaining([codexDuplicate, agyDuplicate]));
+    expect(fs.existsSync(path.join(shared, "SKILL.md"))).toBe(true);
+    expect(fs.existsSync(path.join(codexDuplicate, "SKILL.md"))).toBe(false);
+    expect(fs.existsSync(path.join(agyDuplicate, "SKILL.md"))).toBe(false);
+    expect(fs.existsSync(path.join(codexOnly, "SKILL.md"))).toBe(true);
+  });
+
+  it("previews agent-visible skill dedupe in dry-run mode", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-skillshare-dedupe-dry-"));
+    const home = path.join(tmp, "home");
+    const cwd = path.join(tmp, "repo");
+    const shared = path.join(home, ".agents", "skills", "mcp-builder");
+    const codexDuplicate = path.join(home, ".codex", "skills", "mcp-builder");
+    writeSkill(shared, "mcp-builder");
+    writeSkill(codexDuplicate, "mcp-builder");
+
+    const result = dedupeAgentVisibleSkills({
+      cwd,
+      home,
+      agents: ["codex"],
+      dryRun: true
+    });
+
+    expect(result.removed).toEqual([codexDuplicate]);
+    expect(fs.existsSync(path.join(codexDuplicate, "SKILL.md"))).toBe(true);
   });
 
   it("does not collect or rebuild embeddings in dry-run mode", async () => {

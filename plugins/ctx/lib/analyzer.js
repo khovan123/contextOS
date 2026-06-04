@@ -3,6 +3,7 @@ import path from "node:path";
 import { findGraphRelevantFiles, mergeRelevantFiles } from "./graph-retriever.js";
 import { expandImportGraph } from "./import-graph.js";
 import { findEmbeddingRelevantFiles } from "./file-embedding-retriever.js";
+import { workspacePackagePaths } from "./project-profiler.js";
 
 const STOP_WORDS = new Set([
   "a", "an", "and", "are", "as", "at", "be", "by", "cho", "co", "cua", "do", "fix", "for",
@@ -433,9 +434,9 @@ function addAll(target, values) {
 export function findExplicitPromptFiles({ cwd = process.cwd(), task = "", limit = 6 } = {}) {
   const candidates = new Set();
   const normalizedTask = String(task || "").replace(/\/\s+/g, "/");
-  const matches = normalizedTask.match(/[A-Za-z0-9_.()[\]@~:-]+(?:\/[A-Za-z0-9_.()[\]@~:-]+)+/g) || [];
+  const matches = normalizedTask.match(/[A-Za-z0-9_.()[\]@~:,-]+(?:\/[A-Za-z0-9_.()[\]@~:,-]+)+/g) || [];
   for (const match of matches) {
-    const cleaned = match.replace(/[),.;:]+$/g, "");
+    const cleaned = cleanPromptFilePath(match);
     for (const filePath of resolvePromptPathCandidates({ cwd, promptPath: cleaned })) {
       candidates.add(filePath);
       if (candidates.size >= limit) break;
@@ -448,6 +449,13 @@ export function findExplicitPromptFiles({ cwd = process.cwd(), task = "", limit 
     source: "prompt-path",
     reasons: ["prompt-path"]
   }));
+}
+
+function cleanPromptFilePath(value) {
+  return String(value || "")
+    .replace(/\.(tsx?|jsx?|mjs|cjs|json|md|sql|py)\(\d+(?:,\d+)?\)[),.;:]*$/i, ".$1")
+    .replace(/\.(tsx?|jsx?|mjs|cjs|json|md|sql|py):\d+(?::\d+)?[),.;:]*$/i, ".$1")
+    .replace(/[),.;:]+$/g, "");
 }
 
 function resolvePromptPathCandidates({ cwd, promptPath }) {
@@ -467,6 +475,13 @@ function resolvePromptPathCandidates({ cwd, promptPath }) {
   if (!path.extname(relative)) {
     for (const extension of [".tsx", ".ts", ".jsx", ".js", ".md", ".json"]) {
       const candidate = `${absolute}${extension}`;
+      if (isSourceFile(candidate)) resolved.push(path.relative(cwd, candidate));
+    }
+  }
+  if (!resolved.length && !relative.startsWith("..")) {
+    for (const packagePath of workspacePackagePaths(cwd).slice(1)) {
+      const packageDir = path.dirname(packagePath);
+      const candidate = path.join(packageDir, relative);
       if (isSourceFile(candidate)) resolved.push(path.relative(cwd, candidate));
     }
   }

@@ -19,7 +19,8 @@ export async function scoreContext({
   embeddingTimeoutMs = 5000,
   fileEmbeddingTimeoutMs = Number(process.env.CONTEXTOS_FILE_EMBEDDING_TIMEOUT_MS || 1000),
   skillEmbeddingTimeoutMs = Number(process.env.CONTEXTOS_SKILL_EMBEDDING_TIMEOUT_MS || embeddingTimeoutMs),
-  skillSearchOptions = {}
+  skillSearchOptions = {},
+  allowEmbeddings = true
 } = {}) {
   const started = Date.now();
   const ruleInputsPromise = Promise.resolve().then(() => {
@@ -35,6 +36,14 @@ export async function scoreContext({
   });
 
   const rulesPromise = ruleInputsPromise.then(({ merged, baseScoredRules }) => {
+    if (!allowEmbeddings) {
+      return {
+        rules: baseScoredRules,
+        status: "disabled",
+        model: null,
+        cachePath: dataDir
+      };
+    }
     return enhanceRuleScoresWithEmbeddings(baseScoredRules, prompt, {
       dataDir,
       sources: merged.sources,
@@ -52,6 +61,7 @@ export async function scoreContext({
       limit: maxFiles,
       fileEmbeddingTimeoutMs,
       fileEmbeddingOptions: {
+        enabled: allowEmbeddings,
         allowRemote: false
       }
     });
@@ -68,6 +78,7 @@ export async function scoreContext({
         dataDir,
         limit: maxSkills,
         timeoutMs: skillEmbeddingTimeoutMs,
+        embeddingsEnabled: allowEmbeddings,
         ...skillSearchOptions
       })
     };
@@ -77,7 +88,7 @@ export async function scoreContext({
     const catalog = Array.isArray(workflows) ? workflows : scanWorkflows({ cwd });
     return {
       catalog,
-      suggestions: await suggestWorkflows({ prompt, workflows: catalog, dataDir, limit: maxWorkflows })
+      suggestions: await suggestWorkflows({ prompt, workflows: catalog, dataDir, limit: maxWorkflows, embeddingsEnabled: allowEmbeddings })
     };
   });
 

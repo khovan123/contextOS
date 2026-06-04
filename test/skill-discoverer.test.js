@@ -191,6 +191,38 @@ describe("skill discoverer", () => {
     ]);
   });
 
+  it("falls back to shared global skill index for workspaces without a local skill index", async () => {
+    const seenKinds = [];
+    const suggested = await suggestSkills({
+      cwd: "/repo/new-workspace",
+      prompt: "fix jest e2e test supertest missing typescript declarations",
+      skills: [
+        {
+          name: "testing-patterns",
+          description: "Use for Jest, E2E tests, TypeScript test fixes, and test dependency setup.",
+          path: "/skills/testing-patterns/SKILL.md"
+        }
+      ],
+      dataDir: fs.mkdtempSync(path.join(os.tmpdir(), "ctx-skill-shared-index-")),
+      indexedSearcher: async ({ kind }) => {
+        seenKinds.push(kind);
+        return {
+          status: "enabled",
+          items: kind === "skill:global"
+            ? [{ id: "testing patterns", text: "testing-patterns", embeddingScore: 0.91 }]
+            : []
+        };
+      },
+      limit: 3
+    });
+
+    expect(seenKinds).toEqual([
+      `skill:${path.resolve("/repo/new-workspace")}`,
+      "skill:global"
+    ]);
+    expect(suggested.map((skill) => skill.name)).toEqual(["testing-patterns"]);
+  });
+
   it("does not suggest unrelated skills from generic setup and package tokens", async () => {
     const skills = Array.from({ length: 301 }, (_, index) => ({
       name: `unrelated-${index}`,

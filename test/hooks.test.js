@@ -228,6 +228,7 @@ describe("hook contracts", () => {
     expect(output.continue).toBe(true);
     expect(output.hookSpecificOutput.additionalContext).toContain("code-review-graph");
     expect(seenDirectPayloads[0]).toMatchObject({
+      allowEmbeddings: false,
       embeddingTimeoutMs: 500,
       fileEmbeddingTimeoutMs: 1000,
       skillEmbeddingTimeoutMs: 2000
@@ -271,6 +272,7 @@ describe("hook contracts", () => {
       {
         dataPath,
         scoreContextClient: mockScoreContext(),
+        autoWarmWorkspace: ({ reason }) => ({ status: "started", reason }),
         outputConfig: {
           sections: { rules: false, files: true, skills: false, workflows: false }
         }
@@ -279,7 +281,8 @@ describe("hook contracts", () => {
     const runtime = JSON.parse(fs.readFileSync(dataPath, "utf8"));
 
     expect(output).not.toHaveProperty("hookSpecificOutput");
-    expect(runtime.telemetry.emptyContextReason).toBe("available-sections-disabled:rules,skills,workflows");
+    expect(runtime.telemetry.emptyContextReason).toBe("enabled-sections-missing-candidates:files");
+    expect(runtime.telemetry.autoWarm).toMatchObject({ status: "started", reason: "enabled-sections-missing-candidates:files" });
   });
 
   it("schedules background warmup when no context candidates exist", async () => {

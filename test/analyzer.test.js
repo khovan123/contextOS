@@ -187,6 +187,22 @@ Plain paragraph with enough content to become a standalone rule.
     expect(files.every((file) => file.source === "prompt-path")).toBe(true);
   });
 
+  it("resolves explicit src paths through monorepo package roots", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-explicit-monorepo-files-"));
+    fs.mkdirSync(path.join(tmp, "services", "src", "__tests__"), { recursive: true });
+    fs.writeFileSync(path.join(tmp, "package.json"), JSON.stringify({
+      workspaces: ["services"]
+    }));
+    fs.writeFileSync(path.join(tmp, "services", "package.json"), "{}");
+    fs.writeFileSync(path.join(tmp, "services", "src", "__tests__", "ai-chat.e2e.test.ts"), "");
+
+    const task = "fix jest error in src/__tests__/ai-chat.e2e.test.ts(12,21)";
+
+    expect(findExplicitPromptFiles({ cwd: tmp, task }).map((file) => file.path)).toEqual([
+      path.join("services", "src", "__tests__", "ai-chat.e2e.test.ts")
+    ]);
+  });
+
   it("suggests package manifests for monorepo run and connect prompts", async () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-manifest-files-"));
     fs.mkdirSync(path.join(tmp, "webapp"), { recursive: true });

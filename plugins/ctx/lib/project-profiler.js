@@ -6,6 +6,7 @@ const PROFILE_CACHE_FILE = "project-profile.json";
 const MAX_DEPENDENCIES = 80;
 const MAX_SCRIPTS = 30;
 const MAX_RECENT_FILES = 20;
+const MAX_FUSED_PROFILE_CHARS = 500;
 
 export function projectProfile({ cwd = process.cwd(), dataDir } = {}) {
   const fingerprint = projectFingerprint(cwd);
@@ -30,7 +31,10 @@ export function projectProfile({ cwd = process.cwd(), dataDir } = {}) {
 
 export function fusedProjectQuery({ prompt = "", cwd = process.cwd(), dataDir } = {}) {
   const profile = projectProfile({ cwd, dataDir });
-  return [String(prompt || "").trim(), profile.embeddableString].filter(Boolean).join("\n");
+  const profileSignal = profile.embeddableString
+    ? profile.embeddableString.slice(0, MAX_FUSED_PROFILE_CHARS)
+    : "";
+  return [String(prompt || "").trim(), profileSignal].filter(Boolean).join("\n");
 }
 
 function readCachedProfile(cachePath, fingerprint) {

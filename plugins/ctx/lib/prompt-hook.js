@@ -21,7 +21,7 @@ export async function handlePromptPayload(
     autoWarmWorkspace = maybeAutoWarmWorkspace,
     mcpDataDir,
     outputConfig,
-    directFallbackTimeoutMs = Number(process.env.CONTEXTOS_DIRECT_FALLBACK_TIMEOUT_MS || 6000)
+    directFallbackTimeoutMs = Number(process.env.CONTEXTOS_DIRECT_FALLBACK_TIMEOUT_MS || 2500)
   } = {}
 ) {
   const prompt = payload.prompt || payload.message || payload.user_prompt || "";
@@ -55,6 +55,7 @@ export async function handlePromptPayload(
         maxSkills: promptLimits.skills,
         maxWorkflows: promptLimits.workflows,
         dataDir: mcpDataDir || dataDir,
+        allowEmbeddings: false,
         embeddingTimeoutMs: Number(process.env.CONTEXTOS_HOOK_EMBEDDING_TIMEOUT_MS || 500),
         fileEmbeddingTimeoutMs: Number(process.env.CONTEXTOS_HOOK_FILE_EMBEDDING_TIMEOUT_MS || 1000),
         skillEmbeddingTimeoutMs: Number(process.env.CONTEXTOS_HOOK_SKILL_EMBEDDING_TIMEOUT_MS || 2000)
@@ -197,6 +198,9 @@ function emptyContextReason({ scheduled, outputConfig, injectContext }) {
   if (scheduled.suggestedSkills?.length) available.push("skills");
   if (scheduled.suggestedWorkflows?.length) available.push("workflows");
   if (!available.length) return "no-context-candidates";
+  const enabledMissing = ["rules", "files", "skills", "workflows"]
+    .filter((section) => sections[section] !== false && !available.includes(section));
+  if (enabledMissing.length) return `enabled-sections-missing-candidates:${enabledMissing.join(",")}`;
   const enabled = available.filter((section) => sections[section] !== false);
   return enabled.length ? "enabled-sections-empty-after-formatting" : `available-sections-disabled:${available.join(",")}`;
 }

@@ -29,7 +29,7 @@ import { installCopilotMcp } from "../plugins/ctx/lib/copilot-mcp.js";
 import { readCodexMcpServers, syncRules } from "../plugins/ctx/lib/ruler-sync.js";
 import { detectGraphStrategy, embedCodeReviewGraph, formatCodeReviewGraphEmbedding, formatGraphStrategy } from "../plugins/ctx/lib/graph-strategy.js";
 import { writeInnerGitignore, ensureRootGitignore } from "../plugins/ctx/lib/gitignore.js";
-import { repairSkillSymlinks, syncSkills, detectExistingSkills } from "../plugins/ctx/lib/skillshare-sync.js";
+import { dedupeAgentVisibleSkills, repairSkillSymlinks, syncSkills, detectExistingSkills } from "../plugins/ctx/lib/skillshare-sync.js";
 import { scanSkills, warmSkillEmbeddings } from "../plugins/ctx/lib/skill-discoverer.js";
 import { parsePassthroughArgs, runPassthrough } from "../plugins/ctx/lib/passthrough.js";
 import { parseAgentList, parseSetupArgs, setupSummaryLines } from "../plugins/ctx/lib/setup-wizard.js";
@@ -142,6 +142,10 @@ async function runCommunitySkillInstaller(agents = []) {
         const afterRepair = repairSkillSymlinks({ cwd: process.cwd(), home: os.homedir() });
         if (afterRepair.repaired.length || afterRepair.removedBroken.length) {
           console.log(`${DIM}│${RESET}  Repaired ${afterRepair.repaired.length} skill links after install.`);
+        }
+        const deduped = dedupeAgentVisibleSkills({ cwd: process.cwd(), home: os.homedir(), agents });
+        if (deduped.removed.length) {
+          console.log(`${DIM}│${RESET}  Removed ${deduped.removed.length} duplicate agent-visible skills.`);
         }
         successCount++;
 
