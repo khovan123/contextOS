@@ -192,6 +192,18 @@ ContextOS is designed to be OSS-friendly and low-friction:
 
 Positioning: ContextOS works standalone and gets smarter when graph or memory adapters are available.
 
+## Roadmap
+
+ContextOS is not heading toward a dashboard-first product. The next work is focused on making the existing local runtime more visible and reusable:
+
+| Next | Why |
+| --- | --- |
+| Agent Replay | Turn telemetry into a readable post-task narrative: prompt, selected skills, followed rules, suggested files, touched files, efficiency. |
+| ContextOS Hub | Let the community publish ContextOS-ready skill packs with triggers, evidence, negative gates, and workflows. |
+| Hallucination Benchmark | Show raw prompt-only agent guesses vs ContextOS evidence-routed recommendations. |
+
+See [docs/roadmap.md](docs/roadmap.md) for the current roadmap notes.
+
 ## Quick Commands
 
 | Command | Use it for |
