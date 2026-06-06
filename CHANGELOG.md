@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.7
+
+- **MCP proxy test stability:** Fixed the MCP proxy telemetry smoke test so it waits for the telemetry file before reading it and uses a stable stdin/stdout echo child. This removes the CI race where `telemetry.jsonl` could be read before it existed.
+
 ## 0.6.6
 
 - **Global-first skill coverage:** `ctx doctor` now treats global and community skills as valid skill coverage instead of requiring project-local skill packs. Project skills are reported separately as optional project overrides, so repositories with synced global skills no longer show `Skills: 0` or `Not Ready` just because `.codex/skills` is absent.
