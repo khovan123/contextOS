@@ -238,3 +238,48 @@ MVP scope:
 - Rules score from project `AGENTS.md`.
 - Skills score from project skill packs with `SKILL.md` and `skill.yaml`.
 - Workflows score from project workflow markdown with agent handoff chains.
+
+## P5: Auto Skill Extraction
+
+Today, humans write `skill.yaml`. The research direction is to let ContextOS propose skill packs from repository evidence.
+
+Possible command:
+
+```bash
+ctx skill generate
+```
+
+Input:
+
+```text
+repo
+```
+
+Output:
+
+```text
+Detected Skill:
+nestjs-module
+```
+
+Target generated pack:
+
+```text
+.codex/skills/nestjs-module/
+  SKILL.md
+  skill.yaml
+```
+
+Research shape:
+
+- Detect repeated project capabilities from dependencies, config files, route/controller names, tests, and recent git activity.
+- Generate `positive_triggers`, `evidence`, `negative_triggers`, and `workflow`.
+- Mark generated packs as drafts until reviewed.
+- Let an agent or maintainer publish a cleaned-up pack into `community-skills/`.
+
+Guardrails:
+
+- Do not auto-publish generated skills.
+- Do not infer high confidence from dependency names alone.
+- Prefer explainable evidence over opaque model output.
+- Keep generated workflows short and editable.

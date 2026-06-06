@@ -7,6 +7,7 @@
 - **Roadmap docs:** Added `docs/roadmap.md` covering Hallucination Leaderboard, Agent Replay, Community Skill Packs, and ContextOS Ready certification without committing to dashboard/cloud work.
 - **Community Skill Packs:** Added the initial `community-skills/` seed packs for EAS, Vercel, Prisma, Redis, Google OAuth, and JWT auth with `SKILL.md`, `skill.yaml`, contribution docs, and routing contract tests.
 - **ContextOS Ready:** Added `ctx doctor` to score repository readiness across project rules, skill packs, and workflows, plus README badge/docs and certification tests.
+- **Auto Skill Extraction roadmap:** Documented `ctx skill generate` as a research direction for detecting reusable repository skills and drafting publishable skill packs from project evidence.
 
 ## 0.5.53
 

@@ -203,6 +203,7 @@ ContextOS is not heading toward a dashboard-first product. The next work is focu
 | Agent Replay | Turn telemetry into a readable post-task narrative: prompt, selected skills, followed rules, suggested files, touched files, efficiency. |
 | Community Skill Packs | Let contributors PR ContextOS-ready skills with triggers, evidence, negative gates, and workflows before building a larger hub. |
 | ContextOS Ready | Define a repository readiness badge for AGENTS.md, skills, workflows, and evidence quality. |
+| Auto Skill Extraction | Research `ctx skill generate` so ContextOS can detect reusable skills from a repo and propose publishable skill packs. |
 
 See [docs/roadmap.md](docs/roadmap.md) for the current roadmap notes.
 
