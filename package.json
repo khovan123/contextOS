@@ -27,6 +27,7 @@
     "build": "node bin/ctx.js --version",
     "validate:plugin": "node test/validate-plugin.js",
     "benchmark:skills": "node bin/ctx.js benchmark --skills",
+    "leaderboard:hallucination": "node eval/hallucination/run-leaderboard.js",
     "test:mcp": "node test/mcp-protocol-smoke.js"
   },
   "engines": {

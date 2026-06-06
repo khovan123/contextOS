@@ -20,6 +20,7 @@ import { defaultDataRoot, workspaceDataDir, workspaceMarkerPath } from "../plugi
 import { installMcpTelemetryProxies } from "../plugins/ctx/lib/mcp-proxy-install.js";
 import { benchmarkWorkspace, formatBenchmark } from "../plugins/ctx/lib/benchmark.js";
 import { formatSkillRoutingBenchmark, runSkillRoutingEval } from "../eval/skill-routing/run-eval.js";
+import { formatHallucinationLeaderboard, runHallucinationLeaderboard } from "../eval/hallucination/run-leaderboard.js";
 import { copyDir, copyPackageRoot, syncPackageRoot } from "../plugins/ctx/lib/package-install.js";
 import { installClaudeHooks } from "../plugins/ctx/lib/claude-hooks.js";
 import { installClaudeMcp } from "../plugins/ctx/lib/claude-mcp.js";
@@ -197,6 +198,7 @@ Usage:
   ctx stats                                         Show workspace statistics
   ctx benchmark -- "task"                           Benchmark workspace for a task
   ctx benchmark --skills                            Run skill routing eval benchmark
+  ctx leaderboard --hallucination                   Compare raw agent guesses vs ContextOS routing
   ctx sync --rules                                  Sync AGENTS.md rules to all agents
   ctx sync --rules --agents <names>                 Sync rules to specific agents only
   ctx sync --rules --dry-run                        Preview rule sync without writing
@@ -1033,6 +1035,12 @@ try {
     const task = marker >= 0 ? args.slice(marker + 1).join(" ") : args.slice(1).join(" ");
     if (!task.trim()) throw new Error('Usage: ctx benchmark -- "task"');
     console.log(formatBenchmark(benchmarkWorkspace({ cwd: process.cwd(), task })));
+    }
+  } else if (command === "leaderboard") {
+    if (args.includes("--hallucination")) {
+      console.log(formatHallucinationLeaderboard(await runHallucinationLeaderboard({ rootDir })));
+    } else {
+      throw new Error("Usage: ctx leaderboard --hallucination");
     }
   } else if (command === "skills") {
     if (args[1] === "doctor") {

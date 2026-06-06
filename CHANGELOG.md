@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Hallucination Leaderboard:** Added `ctx leaderboard --hallucination` and `npm run leaderboard:hallucination` to compare raw prompt-only skill guesses against ContextOS evidence-routed skill selection across 20 fixture tasks.
+
 ## 0.6.0
 
 - **Launch demo framing:** Added Agent Hallucination Benchmark messaging, same-prompt/same-model/different-context copy, and `docs/launch-demos.md` with three short demo scripts: hallucination benchmark, AGENTS.md lost-in-the-middle, and repo-aware skills.

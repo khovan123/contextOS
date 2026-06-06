@@ -4,6 +4,8 @@ These are demo scripts for explaining ContextOS quickly. They are intentionally 
 
 ## 1. Agent Hallucination Benchmark
 
+GIF: [`docs/demo/same-prompt-different-context.gif`](demo/same-prompt-different-context.gif)
+
 Prompt:
 
 ```text
@@ -39,6 +41,8 @@ Same prompt. Same model. Different context.
 
 ## 2. AGENTS.md Lost In The Middle
 
+GIF: [`docs/demo/agents-lost-middle.gif`](demo/agents-lost-middle.gif)
+
 Setup:
 
 ```text
@@ -71,6 +75,8 @@ Important repo rules should not depend on where they appear in a long file.
 
 ## 3. Repo-Aware Skills
 
+GIF: [`docs/demo/same-prompt-different-context.gif`](demo/same-prompt-different-context.gif)
+
 Prompt:
 
 ```text
@@ -102,4 +108,20 @@ Message:
 
 ```text
 Context is not extra text. It changes the correct answer.
+```
+
+## 4. ContextOS Ready
+
+GIF: [`docs/demo/contextos-ready.gif`](demo/contextos-ready.gif)
+
+Command:
+
+```bash
+ctx doctor
+```
+
+Message:
+
+```text
+Repos now have a target: AGENTS.md + skills + workflows + evidence.
 ```

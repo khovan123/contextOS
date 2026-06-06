@@ -1,0 +1,28 @@
+$ cat AGENTS.md
+1. General style
+2. Formatting
+3. Test names
+...
+37. IMPORTANT: Always use code-review-graph before grep.
+...
+52. Release notes
+
+$ codex "fix failing test"
+Raw agent starts with grep
+Rule followed: no
+
+$ ctx debug -- "fix failing test"
+ContextOS debug
+Critical ContextOS rules:
+- IMPORTANT: Always use code-review-graph before grep.
+
+Suggested files to check:
+- test/score-context.test.js
+- plugins/ctx/lib/score-context.js
+
+$ codex + ContextOS
+Rule followed: yes
+Evidence: graph checked before file reads
+
+AGENTS.md did not change.
+The rule moved from buried context into runtime context.

@@ -1,0 +1,26 @@
+$ ctx leaderboard --hallucination
+Hallucination Leaderboard
+Repos: 12
+Tasks: 20
+
+System              Correct Skill
+------------------  -------------
+Raw Agent           10.0%
+ContextOS + Codex   80.0%
+
+$ ctx skills doctor -- "fix deployed"  # Expo repo
+ContextOS skill doctor
+1. eas high confidence
+   evidence: eas.json, app.json, expo dependency
+2. mobile-deployment high confidence
+3. github-actions-ci-cd medium confidence
+
+$ ctx skills doctor -- "fix deployed"  # Next.js repo
+ContextOS skill doctor
+1. vercel-deployment high confidence
+   evidence: vercel.json, next dependency
+2. github-actions-ci-cd high confidence
+3. env-secret-management medium confidence
+
+Same prompt. Same model. Different repo evidence.
+ContextOS routes the right skill before the agent edits code.
