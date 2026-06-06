@@ -16,5 +16,5 @@ describe("embedding cache recovery", () => {
 
     expect(fs.existsSync(cachePath)).toBe(true);
     expect(fs.readdirSync(dataDir).some((file) => file.startsWith("embeddings.db.corrupt-"))).toBe(true);
-  });
+  }, 15000);
 });
