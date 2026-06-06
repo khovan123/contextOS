@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.9
+
+- **Skill suggestion formatting:** ContextOS now renders automatic skill suggestions as plain skill names instead of `$skill-name`, preventing Codex from treating suggested skills as native skill activation requests. Explicit user-requested skills still preserve `$skill-name` syntax.
+
 ## 0.6.8
 
 - **Fallback context recovery:** Prompt-hook direct fallback now keeps ContextOS useful when `ctx-mcp` is unavailable by using indexed file text matches and lightweight evidence-based skill scoring instead of returning only workflows or an empty context.
