@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.0
 
 - **Launch demo framing:** Added Agent Hallucination Benchmark messaging, same-prompt/same-model/different-context copy, and `docs/launch-demos.md` with three short demo scripts: hallucination benchmark, AGENTS.md lost-in-the-middle, and repo-aware skills.
 - **Roadmap template expansion:** Extended the launch roadmap issue template with Hallucination Benchmark, Agent Replay, and Community Skill Packs areas.
