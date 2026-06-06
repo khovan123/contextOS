@@ -118,7 +118,7 @@ Non-goals for the first version:
 
 ## P3: Community Skill Packs
 
-Do not build a full Hub first. Start with a simple `community-skills/` repository or folder that accepts PRs.
+Do not build a full Hub first. Start with the local `community-skills/` folder that accepts PRs.
 
 Initial packs:
 
@@ -132,6 +132,13 @@ community-skills/
   jwt-auth/
 ```
 
+The seed packs now live in [`community-skills/`](../community-skills/). Each pack contains:
+
+```text
+SKILL.md
+skill.yaml
+```
+
 The Skill Router becomes more valuable when skill packs are ContextOS-ready instead of plain markdown folders.
 
 ContextOS-ready skill packs should include:
@@ -139,27 +146,21 @@ ContextOS-ready skill packs should include:
 ```yaml
 id: oauth-google
 name: Google OAuth
-triggers:
-  prompts:
-    - oauth
-    - google login
-  files:
-    - app/api/auth/*
-    - auth.config.ts
-  dependencies:
-    - next-auth
-    - "@auth/core"
+positive_triggers:
+  prompts: [oauth, google login, google sign in, callback]
+  files: [app/api/auth/*, auth.config.ts]
+  dependencies: [next-auth, "@auth/core"]
 evidence:
-  positive:
-    - package dependency exists
-    - auth callback route exists
-negative:
-  dependencies:
-    - passport-saml
+  files: [app/api/auth/*, auth.config.ts, .env.example]
+  dependencies: [next-auth, "@auth/core"]
+negative_triggers:
+  prompts: [jwt only, password login]
+  dependencies: [jsonwebtoken]
 workflow:
-  - inspect auth provider config
-  - verify callback route
-  - test login redirect
+  - Inspect auth provider config, callback URLs, scopes, secrets, and session creation.
+  - Verify frontend login entrypoints and backend callback routes agree.
+  - Patch the smallest auth boundary while preserving session conventions.
+  - Verify with focused auth tests, typecheck, or local callback flow.
 ```
 
 Possible future install flow:

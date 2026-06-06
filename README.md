@@ -205,6 +205,12 @@ ContextOS is not heading toward a dashboard-first product. The next work is focu
 
 See [docs/roadmap.md](docs/roadmap.md) for the current roadmap notes.
 
+## Community Skill Packs
+
+ContextOS starts the community loop with [`community-skills/`](community-skills/) instead of a hosted marketplace. The seed packs are `eas`, `vercel`, `prisma`, `redis`, `oauth-google`, and `jwt-auth`.
+
+Each pack contains a model-visible `SKILL.md` plus `skill.yaml` routing metadata with prompt triggers, project evidence, negative triggers, and a short workflow. Contributors can PR new packs by copying [`community-skills/_template/`](community-skills/_template/).
+
 ## Quick Commands
 
 | Command | Use it for |
