@@ -6,6 +6,7 @@ Rules, files, skills, workflows, and evidence: injected before the agent writes 
 
 [![npm version](https://img.shields.io/npm/v/@minhpnq1807/contextos.svg)](https://www.npmjs.com/package/@minhpnq1807/contextos)
 [![CI](https://github.com/khovan123/contextOS/actions/workflows/ci.yml/badge.svg)](https://github.com/khovan123/contextOS/actions/workflows/ci.yml)
+[![ContextOS Ready](https://img.shields.io/badge/ContextOS-Ready_Gold-2ea44f)](#contextos-ready)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 ```text
@@ -211,12 +212,34 @@ ContextOS starts the community loop with [`community-skills/`](community-skills/
 
 Each pack contains a model-visible `SKILL.md` plus `skill.yaml` routing metadata with prompt triggers, project evidence, negative triggers, and a short workflow. Contributors can PR new packs by copying [`community-skills/_template/`](community-skills/_template/).
 
+## ContextOS Ready
+
+`ctx doctor` scores whether a repository is ready for ContextOS-style agent routing:
+
+```bash
+ctx doctor
+```
+
+```text
+Repository Score
+
+Rules: 92
+Skills: 88
+Workflows: 84
+
+Overall:
+ContextOS Ready Gold
+```
+
+The score checks project `AGENTS.md` rules, project skill packs under `.codex/skills/` or `.agents/skills/`, and project workflows under `.codex/workflows/` or `.claude/workflows/`. Use the badge only after `ctx doctor` reports Bronze, Silver, or Gold.
+
 ## Quick Commands
 
 | Command | Use it for |
 | --- | --- |
 | `ctx setup` | Recommended first-run install flow. |
 | `ctx debug -- "Recheck authen flow"` | Preview what ContextOS would inject. |
+| `ctx doctor` | Score repository readiness for the `ContextOS Ready` badge. |
 | `ctx report` | Show the last task's compliance summary. |
 | `ctx evidence` | Show why each rule was marked followed/ignored/unknown. |
 | `ctx stats` | Show workspace-level usage and effectiveness metrics. |
@@ -540,6 +563,7 @@ This warning comes from a transitive dependency in the local embedding/WASM stac
 | `ctx setup --no-skills` | Skips skillshare sync during setup. | You do not want shared skills configured. | Does not run `ctx sync --skills`. |
 | `ctx setup --quiet` | Runs setup in measurement-only mode. | You want reports/stats without visible injected prompt context. | Installs hooks with prompt context injection disabled. |
 | `ctx debug -- "task"` | Runs the scheduler locally for a fake prompt. | You want to see which AGENTS.md rules and files ContextOS would inject before using Codex. | Prints rule scores, scoring reasons, suggested files, and final `additionalContext`. |
+| `ctx doctor` | Scores repository ContextOS readiness. | You want to add or verify a `ContextOS Ready` badge. | Prints Rules, Skills, Workflows, Overall tier, evidence, and next recommendations. |
 | `ctx report` | Shows the last Stop-hook compliance report for the current workspace. | An agent task has finished and you want the summary again. | Prints sectioned tables for summary, rule outcomes, suggested files, and runtime telemetry from `~/.ctx/contextos/workspaces/<workspace-id>/last-report.json`. |
 | `ctx evidence` | Shows detailed evidence behind the last report for the current workspace. | You want to inspect why a rule was marked `followed`, `ignored`, `unknown`, or `unmeasurable`. | Prints a compact evidence table plus per-rule detail tables. |
 | `ctx stats` | Shows aggregate runtime metrics for the current workspace. | You want to know whether ContextOS is active and useful over time. | Prints sectioned tables for prompt/report counts, injection rate, efficiency, rule outcomes, hook events, last prompt, and last report. |

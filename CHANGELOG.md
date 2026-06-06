@@ -6,6 +6,7 @@
 - **Roadmap template expansion:** Extended the launch roadmap issue template with Hallucination Benchmark, Agent Replay, and Community Skill Packs areas.
 - **Roadmap docs:** Added `docs/roadmap.md` covering Hallucination Leaderboard, Agent Replay, Community Skill Packs, and ContextOS Ready certification without committing to dashboard/cloud work.
 - **Community Skill Packs:** Added the initial `community-skills/` seed packs for EAS, Vercel, Prisma, Redis, Google OAuth, and JWT auth with `SKILL.md`, `skill.yaml`, contribution docs, and routing contract tests.
+- **ContextOS Ready:** Added `ctx doctor` to score repository readiness across project rules, skill packs, and workflows, plus README badge/docs and certification tests.
 
 ## 0.5.53
 

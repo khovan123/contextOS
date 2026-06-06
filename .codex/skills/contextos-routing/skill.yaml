@@ -1,0 +1,20 @@
+id: contextos-routing
+name: ContextOS Routing
+description: Work on ContextOS rule, file, skill, workflow, and evidence routing.
+positive_triggers:
+  prompts: [contextos routing, prompt hook, skill router, workflow router, evidence, scoring, ctx-mcp]
+  files: [plugins/ctx/lib/score-context.js, plugins/ctx/lib/skill-discoverer.js, plugins/ctx/lib/workflow-discoverer.js, plugins/ctx/lib/prompt-hook.js]
+  dependencies: [@modelcontextprotocol/sdk]
+evidence:
+  files: [plugins/ctx/lib/score-context.js, plugins/ctx/lib/skill-discoverer.js, plugins/ctx/mcp/server.js]
+  dependencies: [@modelcontextprotocol/sdk, @xenova/transformers]
+negative_triggers:
+  prompts: [dashboard, cloud service, hosted marketplace]
+workflow:
+  - Inspect the existing routing module before changing behavior.
+  - Keep prompt-hook hot paths bounded and fail-open.
+  - Add focused tests for ranking, output, or telemetry behavior.
+  - Run npm test plus build and plugin validation for runtime changes.
+related_skills:
+  - mcp-tool-developer
+  - agent-memory-mcp

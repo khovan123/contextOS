@@ -205,7 +205,7 @@ skills/
 workflows/
 ```
 
-Possible future command:
+Command:
 
 ```bash
 ctx doctor
@@ -229,3 +229,12 @@ Why it matters:
 - It gives projects a concrete target.
 - It creates a badge people can add to README files.
 - It encourages community contributions without requiring a cloud product.
+
+MVP scope:
+
+- Local-only scoring.
+- No hosted account.
+- No external leaderboard dependency.
+- Rules score from project `AGENTS.md`.
+- Skills score from project skill packs with `SKILL.md` and `skill.yaml`.
+- Workflows score from project workflow markdown with agent handoff chains.

@@ -41,6 +41,7 @@ import { checkForUpdate } from "../plugins/ctx/lib/update-notifier.js";
 import { fetchSkillsForAgents, printSkillRecommendations, getAllLibraries, getInstallCommands } from "../plugins/ctx/lib/skill-library.js";
 import { invalidateCtxMcpSocket } from "../plugins/ctx/lib/ctx-mcp-client.js";
 import { runPrefixedCommand } from "../plugins/ctx/lib/shell-runner.js";
+import { formatContextOSReady, inspectContextOSReady } from "../plugins/ctx/lib/certification.js";
 
 /**
  * Run a shell command with all output lines prefixed by │  
@@ -190,6 +191,7 @@ Usage:
   ctx setup --no-skills                             Skip skill sync
   ctx setup --quiet                                 Quiet mode (minimal output)
   ctx debug -- "task"                               Debug a task with ContextOS tracing
+  ctx doctor                                       Score repository ContextOS readiness
   ctx report                                        Show last ContextOS compliance report
   ctx evidence                                      Show evidence from last report
   ctx stats                                         Show workspace statistics
@@ -1001,6 +1003,8 @@ try {
     const task = marker >= 0 ? args.slice(marker + 1).join(" ") : args.slice(1).join(" ");
     if (!task.trim()) throw new Error('Usage: ctx debug -- "task"');
     await debug(task);
+  } else if (command === "doctor") {
+    console.log(formatContextOSReady(inspectContextOSReady({ cwd: process.cwd() })));
   } else if (command === "refresh") {
     await refresh();
   } else if (command === "autowarm") {

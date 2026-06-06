@@ -1,0 +1,20 @@
+id: contextos-release
+name: ContextOS Release
+description: Prepare ContextOS npm releases, changelog updates, tags, and package validation.
+positive_triggers:
+  prompts: [release, bump version, changelog, npm publish, tag, package, validate plugin]
+  files: [package.json, plugins/ctx/.codex-plugin/plugin.json, CHANGELOG.md, README.md]
+  dependencies: [vitest]
+evidence:
+  files: [package.json, plugins/ctx/.codex-plugin/plugin.json, CHANGELOG.md]
+  dependencies: [vitest]
+negative_triggers:
+  prompts: [application feature, dashboard UI, backend API]
+workflow:
+  - Update README and CHANGELOG before tagging.
+  - Verify package and plugin versions stay aligned.
+  - Run build, plugin validation, MCP smoke, tests, and npm pack dry-run.
+  - Commit, tag, push, and verify release automation.
+related_skills:
+  - npm-package-release
+  - github-actions-ci-cd
