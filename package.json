@@ -10,6 +10,7 @@
   "files": [
     "bin/",
     "plugins/",
+    "scripts/",
     ".codex/skills/",
     ".codex/workflows/",
     ".agents/",
@@ -28,6 +29,9 @@
     "validate:plugin": "node test/validate-plugin.js",
     "benchmark:skills": "node bin/ctx.js benchmark --skills",
     "leaderboard:hallucination": "node eval/hallucination/run-leaderboard.js",
+    "leaderboard:agents": "node eval/hallucination/run-agent-leaderboard.js --agents=codex,gemini",
+    "demo:capture": "node docs/demo/capture-live-demos.mjs",
+    "sync:community-skills": "node scripts/sync-community-skills.mjs",
     "test:mcp": "node test/mcp-protocol-smoke.js"
   },
   "engines": {

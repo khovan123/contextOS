@@ -21,6 +21,7 @@ import { installMcpTelemetryProxies } from "../plugins/ctx/lib/mcp-proxy-install
 import { benchmarkWorkspace, formatBenchmark } from "../plugins/ctx/lib/benchmark.js";
 import { formatSkillRoutingBenchmark, runSkillRoutingEval } from "../eval/skill-routing/run-eval.js";
 import { formatHallucinationLeaderboard, runHallucinationLeaderboard } from "../eval/hallucination/run-leaderboard.js";
+import { formatAgentLeaderboard, runAgentLeaderboard } from "../eval/hallucination/run-agent-leaderboard.js";
 import { copyDir, copyPackageRoot, syncPackageRoot } from "../plugins/ctx/lib/package-install.js";
 import { installClaudeHooks } from "../plugins/ctx/lib/claude-hooks.js";
 import { installClaudeMcp } from "../plugins/ctx/lib/claude-mcp.js";
@@ -199,6 +200,7 @@ Usage:
   ctx benchmark -- "task"                           Benchmark workspace for a task
   ctx benchmark --skills                            Run skill routing eval benchmark
   ctx leaderboard --hallucination                   Compare raw agent guesses vs ContextOS routing
+  ctx leaderboard --agents codex,gemini             Run live CLI leaderboard for installed agents
   ctx sync --rules                                  Sync AGENTS.md rules to all agents
   ctx sync --rules --agents <names>                 Sync rules to specific agents only
   ctx sync --rules --dry-run                        Preview rule sync without writing
@@ -1039,8 +1041,19 @@ try {
   } else if (command === "leaderboard") {
     if (args.includes("--hallucination")) {
       console.log(formatHallucinationLeaderboard(await runHallucinationLeaderboard({ rootDir })));
+    } else if (args.includes("--agents")) {
+      const index = args.indexOf("--agents");
+      const agents = String(args[index + 1] || "").split(",").map((agent) => agent.trim()).filter(Boolean);
+      const limitIndex = args.indexOf("--limit");
+      const timeoutIndex = args.indexOf("--timeout-ms");
+      console.log(formatAgentLeaderboard(runAgentLeaderboard({
+        rootDir,
+        agents: agents.length ? agents : undefined,
+        caseLimit: limitIndex >= 0 ? Number(args[limitIndex + 1]) : undefined,
+        timeoutMs: timeoutIndex >= 0 ? Number(args[timeoutIndex + 1]) : undefined
+      })));
     } else {
-      throw new Error("Usage: ctx leaderboard --hallucination");
+      throw new Error("Usage: ctx leaderboard --hallucination OR ctx leaderboard --agents codex,gemini");
     }
   } else if (command === "skills") {
     if (args[1] === "doctor") {

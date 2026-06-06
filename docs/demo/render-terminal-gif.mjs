@@ -35,7 +35,7 @@ for (let count = 1; count <= displayLines.length; count += frameStep) {
 frames.push(writeFrame({ tmpDir, index: frames.length, lines: displayLines }));
 
 fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-execFileSync("convert", ["-delay", "12", "-loop", "0", ...frames, outputPath], { stdio: "inherit" });
+execFileSync("convert", ["-limit", "time", "120", "-delay", "12", "-loop", "0", ...frames, outputPath], { stdio: "inherit" });
 console.log(`Wrote ${outputPath}`);
 
 function writeFrame({ tmpDir, index, lines }) {

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- **Live agent leaderboard:** Added `ctx leaderboard --agents codex,gemini` and `npm run leaderboard:agents` to run the hallucination benchmark through installed Codex/Gemini CLIs with timeouts and skip/error reporting for missing or unauthenticated agents.
+- **Live GIF capture:** Added `npm run demo:capture` to regenerate the three launch GIFs from real local `ctx` command output across ContextOS and skill-routing fixture repos.
+- **Community skills sync:** Added `scripts/sync-community-skills.mjs`, `npm run sync:community-skills`, and a scheduled/manual GitHub Action that opens PRs from `khovan123/contextOS-skills` back into `community-skills/`.
+
 ## 0.6.1
 
 - **Hallucination Leaderboard:** Added `ctx leaderboard --hallucination` and `npm run leaderboard:hallucination` to compare raw prompt-only skill guesses against ContextOS evidence-routed skill selection across 20 fixture tasks.

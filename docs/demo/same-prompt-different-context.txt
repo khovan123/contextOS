@@ -8,19 +8,44 @@ System              Correct Skill
 Raw Agent           10.0%
 ContextOS + Codex   80.0%
 
-$ ctx skills doctor -- "fix deployed"  # Expo repo
-ContextOS skill doctor
-1. eas high confidence
-   evidence: eas.json, app.json, expo dependency
-2. mobile-deployment high confidence
-3. github-actions-ci-cd medium confidence
+Sample failures:
+- expo-eas: "fix deployed"
+  expected: eas, mobile-deployment, github-actions-ci-cd
+  raw: eas, env-secret-management, railway-render-deployment ✗
+  contextos: eas, github-actions-ci-cd, mobile-deployment ✓
+- next-vercel: "fix deployed"
+  expected: vercel-deployment, github-actions-ci-cd, env-secret-management
+  raw: eas, env-secret-management, railway-render-deployment ✗
+  contextos: vercel-deployment, github-actions-ci-cd, env-secret-management ✓
+- docker-node: "docker image build failed"
+  expected: docker, build-log-debugging
+  raw: docker, build-log-debugging, github-actions-ci-cd ✗
+  contextos: build-log-debugging, docker ✓
+- railway-render: "Railway deploy health check failed"
+  expected: railway-render-deployment, build-log-debugging
+  raw: railway-render-deployment, build-log-debugging, firebase-hosting ✗
+  contextos: build-log-debugging, railway-render-deployment ✓
+- firebase-hosting: "deploy firebase hosting"
+  expected: firebase-hosting
+  raw: firebase-hosting, flutter-firebase, railway-render-deployment ✗
+  contextos: firebase-hosting ✓
+- nest-prisma: "optimize slow prisma queries"
+  expected: prisma, nestjs-module
+  raw: prisma, nestjs-module, android-signing ✗
+  contextos: nestjs-module, prisma ✓
 
-$ ctx skills doctor -- "fix deployed"  # Next.js repo
+$ ctx skills doctor -- "fix deployed"  # Expo fixture
 ContextOS skill doctor
-1. vercel-deployment high confidence
-   evidence: vercel.json, next dependency
-2. github-actions-ci-cd high confidence
-3. env-secret-management medium confidence
+fixture: expo-eas
+prompt: fix deployed
+selected: eas, github-actions-ci-cd, mobile-deployment
+expected: eas, mobile-deployment, github-actions-ci-cd
+rejected: vercel-deployment
 
-Same prompt. Same model. Different repo evidence.
-ContextOS routes the right skill before the agent edits code.
+$ ctx skills doctor -- "fix deployed"  # Next/Vercel fixture
+ContextOS skill doctor
+fixture: next-vercel
+prompt: fix deployed
+selected: vercel-deployment, github-actions-ci-cd, env-secret-management
+expected: vercel-deployment, github-actions-ci-cd, env-secret-management
+rejected: eas

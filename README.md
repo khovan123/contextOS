@@ -49,6 +49,12 @@ More 10-second demos:
 | AGENTS.md Lost In The Middle | [docs/demo/agents-lost-middle.gif](docs/demo/agents-lost-middle.gif) |
 | ContextOS Ready Gold | [docs/demo/contextos-ready.gif](docs/demo/contextos-ready.gif) |
 
+Regenerate the GIFs from real local `ctx` command output:
+
+```bash
+npm run demo:capture
+```
+
 ## Agent Hallucination Benchmark
 
 Generic agents often guess deployment tooling from the prompt alone:
@@ -267,6 +273,7 @@ The score checks project `AGENTS.md` rules, project skill packs under `.codex/sk
 | `ctx benchmark -- "task"` | Compare raw AGENTS.md ordering vs ContextOS scheduling. |
 | `ctx benchmark --skills` | Run the Skill Router eval benchmark. |
 | `ctx leaderboard --hallucination` | Compare raw prompt-only guesses vs ContextOS routing. |
+| `ctx leaderboard --agents codex,gemini` | Run the live CLI leaderboard when Codex/Gemini credentials are available. |
 | `ctx sync --rules` | Sync AGENTS/Ruler/MCP config across agents. |
 | `ctx sync --skills` | Sync skills across agents through skillshare. |
 | `ctx sync --workflows` | Sync workflow markdown across Claude/Codex/Antigravity. |
@@ -592,6 +599,7 @@ This warning comes from a transitive dependency in the local embedding/WASM stac
 | `ctx benchmark -- "task"` | Compares baseline AGENTS.md ordering with ContextOS task-aware scheduling. | You want a before/after signal for lost-in-the-middle risk. | Prints tables for parsed/actionable/filtered rules, baseline middle-risk, scheduled high/mid rules, recency reminder status, and top scored rules. |
 | `ctx benchmark --skills` | Runs the Skill Router eval benchmark. | You want evidence for skill routing accuracy and negative gates. | Prints top-1 accuracy, top-3 recall, false positive rate, confidence calibration, and negative gate accuracy across `eval/skill-routing` fixtures. |
 | `ctx leaderboard --hallucination` | Compares raw prompt-only skill guesses with ContextOS evidence routing. | You want launch evidence for the hallucination problem. | Runs 20 fixture tasks across 10+ repo contexts and prints Raw Agent vs ContextOS correctness plus sample failures. |
+| `ctx leaderboard --agents codex,gemini` | Runs the same benchmark shape through installed agent CLIs. | You want real agent output instead of the deterministic raw baseline. | Calls `codex exec` in read-only mode and the local Gemini CLI with timeouts; missing or unauthenticated CLIs are reported as skipped/errors instead of blocking. |
 | `ctx sync --rules` | Syncs project rules and MCP servers through Ruler. | You want Codex, Claude Code, and Antigravity to share one project rule/MCP source of truth. | Ensures `.ruler/ruler.toml`, injects `ctx-mcp`, imports existing MCP servers from Codex and project `.mcp.json`, runs `ruler apply --agents codex,claude,antigravity`, mirrors MCP servers to Antigravity MCP configs, and verifies generated config. |
 | `ctx sync --rules --agents <list>` | Syncs only selected agents through Ruler. | You want to update one or two agents without touching the others. | Accepts comma-separated values such as `codex`, `claude`, `agy`, `antigravity`, or `codex,claude,agy`; `agy` is normalized to Ruler's `antigravity`. |
 | `ctx sync --rules --dry-run` | Previews Ruler sync without writing files or running apply. | You want to inspect behavior before changing project config. | Prints the same flow with dry-run status. |
