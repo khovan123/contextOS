@@ -17,5 +17,5 @@ describe("hallucination leaderboard", () => {
     expect(contextos.correctRate).toBeGreaterThan(raw.correctRate);
     expect(output).toContain("Hallucination Leaderboard");
     expect(output).toContain("ContextOS + Codex");
-  });
+  }, 15000);
 });

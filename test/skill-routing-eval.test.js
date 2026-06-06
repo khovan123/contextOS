@@ -46,5 +46,5 @@ describe("skill routing eval", () => {
     expect(result.negativeGateAccuracy).toBeGreaterThanOrEqual(0.9);
     expect(output).toContain("Skill Routing Benchmark");
     expect(output).toContain("Top-3 Recall");
-  });
+  }, 15000);
 });

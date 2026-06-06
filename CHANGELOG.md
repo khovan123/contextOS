@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.1
 
 - **Hallucination Leaderboard:** Added `ctx leaderboard --hallucination` and `npm run leaderboard:hallucination` to compare raw prompt-only skill guesses against ContextOS evidence-routed skill selection across 20 fixture tasks.
 
