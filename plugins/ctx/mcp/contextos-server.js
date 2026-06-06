@@ -4,10 +4,30 @@ import { z } from "zod";
 import { scoreContext } from "../lib/score-context.js";
 import { scheduleContext } from "../lib/scheduler.js";
 
-export function createContextOSMcpServer({ dataDir }) {
+export function createContextOSMcpServer({ dataDir, getHealth = defaultHealth }) {
   const server = new McpServer({
     name: "ctx-mcp",
     version: "0.1.0"
+  });
+
+  server.registerTool("ctx_health", {
+    title: "ContextOS health",
+    description: "Reports ContextOS MCP bridge and embedding model readiness.",
+    inputSchema: {},
+    outputSchema: {
+      model_cache_ready: z.boolean(),
+      embedding_pipeline_loaded: z.boolean(),
+      bridge_ready: z.boolean(),
+      preload_status: z.string().optional(),
+      loaded_at: z.number().optional(),
+      error: z.string().optional()
+    }
+  }, async () => {
+    const health = getHealth();
+    return {
+      content: [{ type: "text", text: JSON.stringify(health) }],
+      structuredContent: health
+    };
   });
 
   server.registerTool("ctx_score_context", {
@@ -90,3 +110,11 @@ export function createContextOSMcpServer({ dataDir }) {
   return server;
 }
 
+function defaultHealth() {
+  return {
+    model_cache_ready: false,
+    embedding_pipeline_loaded: false,
+    bridge_ready: false,
+    preload_status: "unknown"
+  };
+}

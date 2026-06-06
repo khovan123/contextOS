@@ -1,8 +1,12 @@
 # ContextOS
 
-Codex ignores the middle of your `AGENTS.md`. ContextOS fixes that.
+Runtime context router for coding agents.
 
-It ranks your project rules against the current prompt, injects the right ones at the moment the agent starts work, suggests relevant files/skills/workflows, and reports what the agent actually followed after the task.
+Rules, files, skills, workflows, and evidence: injected before the agent writes code.
+
+[![npm version](https://img.shields.io/npm/v/@minhpnq1807/contextos.svg)](https://www.npmjs.com/package/@minhpnq1807/contextos)
+[![CI](https://github.com/khovan123/contextOS/actions/workflows/ci.yml/badge.svg)](https://github.com/khovan123/contextOS/actions/workflows/ci.yml)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 ```text
 WITHOUT ContextOS
@@ -17,11 +21,38 @@ WITH ContextOS
          -> report followed / ignored / unknown
 ```
 
+ContextOS is not another `AGENTS.md` loader. It is a runtime context router for coding agents: it chooses the task-relevant rules, files, skills, workflows, and evidence before the agent starts editing.
+
 Published package: [`@minhpnq1807/contextos`](https://www.npmjs.com/package/@minhpnq1807/contextos)
 
 ## Demo
 
-![ContextOS actual terminal demo](docs/demo/contextos-demo.gif)
+![ContextOS demo: same prompt, different repo, correct skills](docs/demo/contextos-demo.gif)
+
+Same prompt. Different repo. Correct skills.
+
+```bash
+ctx skills doctor -- "fix deployed"
+```
+
+| Repo evidence | Expected route |
+| --- | --- |
+| `eas.json`, `expo`, `react-native` | `eas`, `mobile-deployment`, `github-actions-ci-cd` |
+| `vercel.json`, `next`, GitHub workflow | `vercel-deployment`, `github-actions-ci-cd`, `env-secret-management` |
+| ContextOS repo with no app deploy evidence | no deployment skill selected |
+
+Skill Router internal fixture benchmark:
+
+| Metric | Result |
+| --- | ---: |
+| Cases | 52 |
+| Top-1 Accuracy | 92.3% |
+| Top-3 Recall | 94.2% |
+| False Positive Rate | 0.0% |
+| Confidence Calibration | 100.0% |
+| Negative Gate Accuracy | 100.0% |
+
+This is an internal fixture benchmark, not an external real-world benchmark. It is designed to prove the router behavior across controlled Expo/EAS, Next/Vercel, Docker, Railway/Render, Firebase, auth, database, testing, mobile, and adversarial negative-gate cases.
 
 Example hook context injected before the agent works:
 
@@ -50,6 +81,8 @@ Runtime telemetry: code-review-graph, code-review-graph.query_graph_tool
 ```
 
 ## Quick Install
+
+Install in 30 seconds:
 
 ```bash
 npm install -g @minhpnq1807/contextos
@@ -104,6 +137,14 @@ The problem is not that agents cannot read `AGENTS.md`. The problem is that larg
 | Sync | Rules/MCP via Ruler, skills via skillshare, workflows via ContextOS. |
 | Evidence | Stop hooks persist `followed`, `ignored`, `unknown`, and runtime telemetry for explicit reports. |
 
+## Comparison
+
+| Approach | What it gives the agent | Main gap |
+| --- | --- | --- |
+| Plain `AGENTS.md` | Static repo instructions. | Important rules get buried or ignored when the task changes. |
+| Generic RAG | Semantically related files or snippets. | It usually does not route skills/workflows or prove rule compliance. |
+| ContextOS | Task-routed rules, files, skills, workflows, and evidence. | Requires local setup and warm indexes for best results. |
+
 ## Quick Commands
 
 | Command | Use it for |
@@ -114,6 +155,7 @@ The problem is not that agents cannot read `AGENTS.md`. The problem is that larg
 | `ctx evidence` | Show why each rule was marked followed/ignored/unknown. |
 | `ctx stats` | Show workspace-level usage and effectiveness metrics. |
 | `ctx benchmark -- "task"` | Compare raw AGENTS.md ordering vs ContextOS scheduling. |
+| `ctx benchmark --skills` | Run the Skill Router eval benchmark. |
 | `ctx sync --rules` | Sync AGENTS/Ruler/MCP config across agents. |
 | `ctx sync --skills` | Sync skills across agents through skillshare. |
 | `ctx sync --workflows` | Sync workflow markdown across Claude/Codex/Antigravity. |
@@ -224,6 +266,14 @@ Antigravity does not use `UserPromptSubmit`; ContextOS injects context through `
 Restart Antigravity or `agy` after installing.
 
 The embedding model is mandatory. `ctx install` checks `~/.ctx/contextos/models` first and downloads the MiniLM model only when the required local files are missing. It intentionally fails if the model cannot be prepared, because otherwise the first prompt hook would have to cold-load or download the model.
+
+ContextOS keeps the embedding model hot inside `ctx-mcp`. Prompt hooks never cold-load transformers; if the MCP bridge is unavailable or the model is still warming, hooks fail open with lightweight scoring. Current local smoke metrics:
+
+```text
+MCP warm p95: 15-58ms observed
+Hook lightweight fallback: 0.69s
+MCP embedding hot startup: 477ms
+```
 
 During install, ContextOS prints a 0-100 progress indicator. The longest stage is usually embedding warmup; if the model is already cached, install skips the download and only refreshes vectors.
 
@@ -418,7 +468,7 @@ This warning comes from a transitive dependency in the local embedding/WASM stac
 | `ctx install --inject` | Installs ContextOS with explicit injection mode. | You want to be explicit in scripts or docs. | Same runtime behavior as the default install mode; if combined with `--quiet`, `--inject` wins. |
 | `ctx install --copy` | Copies only the plugin payload to `$CODEX_HOME/plugins/ctx`. | Legacy local development or manual plugin experiments. | Does not sync the active marketplace, rebuild indexes, register MCP, or install global hooks. Prefer `ctx refresh` for active local updates. |
 | `ctx setup` | Runs the first-run setup wizard. | You want the recommended onboarding flow after `npm install -g @minhpnq1807/contextos`. | Installs selected agents, optionally syncs Ruler rules/MCP and skillshare skills, asks which prompt sections to show, then prints next steps. |
-| `ctx setup --yes` | Runs setup with defaults non-interactively. | You want scriptable all-agent setup. | Uses `codex,claude,agy`, enables injection, syncs rules, syncs skills, and passes `--yes` to dependency setup prompts. |
+| `ctx setup --yes` | Runs setup with defaults non-interactively. | You want scriptable Codex setup. | Uses `codex`, enables injection, syncs rules, syncs skills, skips interactive community-skill installation when no TTY is available, and passes `--yes` to dependency setup prompts. Use `--agents codex,claude,agy` for multi-agent setup. |
 | `ctx setup --agents <list>` | Runs setup for selected agents. | You want only part of the default set. | Accepts comma-separated `codex`, `claude`, `agy`, or `antigravity`. |
 | `ctx setup --no-rules` | Skips Ruler sync during setup. | You only want hooks/MCP install and maybe skill sync. | Does not run `ctx sync --rules`. |
 | `ctx setup --no-skills` | Skips skillshare sync during setup. | You do not want shared skills configured. | Does not run `ctx sync --skills`. |
@@ -428,6 +478,7 @@ This warning comes from a transitive dependency in the local embedding/WASM stac
 | `ctx evidence` | Shows detailed evidence behind the last report for the current workspace. | You want to inspect why a rule was marked `followed`, `ignored`, `unknown`, or `unmeasurable`. | Prints a compact evidence table plus per-rule detail tables. |
 | `ctx stats` | Shows aggregate runtime metrics for the current workspace. | You want to know whether ContextOS is active and useful over time. | Prints sectioned tables for prompt/report counts, injection rate, efficiency, rule outcomes, hook events, last prompt, and last report. |
 | `ctx benchmark -- "task"` | Compares baseline AGENTS.md ordering with ContextOS task-aware scheduling. | You want a before/after signal for lost-in-the-middle risk. | Prints tables for parsed/actionable/filtered rules, baseline middle-risk, scheduled high/mid rules, recency reminder status, and top scored rules. |
+| `ctx benchmark --skills` | Runs the Skill Router eval benchmark. | You want evidence for skill routing accuracy and negative gates. | Prints top-1 accuracy, top-3 recall, false positive rate, confidence calibration, and negative gate accuracy across `eval/skill-routing` fixtures. |
 | `ctx sync --rules` | Syncs project rules and MCP servers through Ruler. | You want Codex, Claude Code, and Antigravity to share one project rule/MCP source of truth. | Ensures `.ruler/ruler.toml`, injects `ctx-mcp`, imports existing MCP servers from Codex and project `.mcp.json`, runs `ruler apply --agents codex,claude,antigravity`, mirrors MCP servers to Antigravity MCP configs, and verifies generated config. |
 | `ctx sync --rules --agents <list>` | Syncs only selected agents through Ruler. | You want to update one or two agents without touching the others. | Accepts comma-separated values such as `codex`, `claude`, `agy`, `antigravity`, or `codex,claude,agy`; `agy` is normalized to Ruler's `antigravity`. |
 | `ctx sync --rules --dry-run` | Previews Ruler sync without writing files or running apply. | You want to inspect behavior before changing project config. | Prints the same flow with dry-run status. |
@@ -521,13 +572,67 @@ Injected prompt sections are intentionally compact: rules show only detected rul
 
 Codex may flatten newlines in its `UserPromptSubmit hook (completed)` preview. The injected `additionalContext` payload remains multiline; this is a Codex preview display limitation.
 
-Skill ranking is semantic-only. ContextOS builds a fused query from the user prompt plus a cached project profile, then compares that vector with cached skill vectors:
+Skill ranking uses Skill Router v2. ContextOS still starts with semantic retrieval, but final confidence is evidence-based:
 
 ```text
-embed(prompt + project profile) -> cosine -> embed(skill name + description)
+final_score =
+  semantic_score * 0.35
++ prompt_trigger_score * 0.20
++ project_evidence_score * 0.25
++ file_config_score * 0.10
++ graph_score * 0.05
+- negative_penalty * 0.20
 ```
 
-The project profile is an embeddable string built from bounded root/workspace `package.json` metadata, dependencies, scripts, detected languages, and recent git files. It is cached under the ContextOS workspace data directory and invalidated when package metadata or git `HEAD` changes. ContextOS does not maintain a skill taxonomy or domain gate list for ranking; if the skill index is cold for a large catalog, prompt hooks fail open instead of falling back to arbitrary keyword matches. Skill catalogs are deduplicated by normalized skill name before indexing and rendering.
+Skill metadata can live beside `SKILL.md` as `skill.yaml`:
+
+```yaml
+id: eas
+name: Expo EAS Deployment
+positive_triggers:
+  prompts: [eas, expo build, deployed, android, ios]
+  files: [eas.json, app.json, app.config.ts]
+  dependencies: [expo, eas-cli]
+negative_triggers:
+  dependencies: [next, vite]
+  files: [vercel.json]
+related_skills:
+  - mobile-deployment
+  - github-actions-ci-cd
+  - env-secret-management
+```
+
+The project profile is built from bounded root/workspace `package.json` metadata, dependencies, scripts, detected languages, recent git files, and config files such as `eas.json`, `app.json`, `vercel.json`, and `.github/workflows/*`. ContextOS only gives high confidence to domain-specific skills when project evidence supports them. For example, `fix deployed` can rank `eas` highly in an Expo project with `eas.json` and `expo`, but a Next.js/Vercel project should route to Vercel and CI/CD deployment skills instead. Skill catalogs are deduplicated by normalized skill name before indexing and rendering.
+
+Use `ctx skills doctor -- "task"` to inspect routing:
+
+```bash
+ctx skills doctor -- "fix deployed"
+```
+
+The doctor output shows semantic score, prompt triggers, dependency/file evidence, negative signals, and final confidence for each selected skill.
+Confidence is calibrated separately from ranking and includes a band:
+
+```text
+high: >= 0.85
+medium: 0.65-0.84
+low: < 0.65
+```
+
+Use `ctx benchmark --skills` to run the local Skill Router benchmark. The eval lives in `eval/skill-routing` and currently covers 52 cases across deployment, auth, database, testing, mobile, and adversarial negative gates.
+
+Current local benchmark:
+
+```text
+Cases: 52
+Top-1 Accuracy: 92.3%
+Top-3 Recall: 94.2%
+False Positive Rate: 0.0%
+Confidence Calibration: 100.0%
+Negative Gate Accuracy: 100.0%
+```
+
+The benchmark includes same-prompt/different-repo checks such as `fix deployed` in Expo/EAS, Next/Vercel, and ContextOS itself, plus adversarial cases like `expo-with-vercel-json` where `eas` is expected and `vercel-deployment` must be rejected.
 
 After `ctx refresh`, ContextOS invalidates the private hook bridge socket so prompts fall back to direct scoring until Codex restarts the long-running `ctx-mcp` process. Hook clients also discard a same-inode socket if an older bridge revision is detected.
 
@@ -541,10 +646,10 @@ CONTEXTOS_EMBEDDINGS=0            disable embedding rule scoring
 CONTEXTOS_MCP_CONNECT_TIMEOUT_MS=100 stale ctx-mcp socket connect timeout
 CONTEXTOS_MCP_BRIDGE_TIMEOUT_MS=2000 ctx-mcp hook bridge timeout
 CONTEXTOS_HOOK_DEADLINE_MS=8500 hard fail-open deadline for prompt hooks
-CONTEXTOS_DIRECT_FALLBACK_TIMEOUT_MS=6000 direct scoring timeout when the bridge is unavailable
+CONTEXTOS_DIRECT_FALLBACK_TIMEOUT_MS=2500 direct scoring timeout when the bridge is unavailable
 CONTEXTOS_HOOK_EMBEDDING_TIMEOUT_MS=500 rule embedding timeout during hook direct fallback
 CONTEXTOS_EMBEDDING_TIMEOUT_MS=800 embedding scoring timeout inside ctx-mcp/debug
-CONTEXTOS_HOOK_SKILL_EMBEDDING_TIMEOUT_MS=2000 skill retrieval timeout during hook direct fallback
+CONTEXTOS_HOOK_SKILL_EMBEDDING_TIMEOUT_MS=2000 skill retrieval timeout when embeddings are enabled
 CONTEXTOS_SKILL_EMBEDDING_TIMEOUT_MS=2000 skill retrieval timeout inside ctx-mcp/debug
 CONTEXTOS_FILE_EMBEDDINGS=0       disable file-path embedding retrieval
 CONTEXTOS_HOOK_FILE_EMBEDDING_TIMEOUT_MS=500 file retrieval timeout during hook direct fallback

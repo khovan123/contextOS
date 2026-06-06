@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { parseSkillFrontmatter, projectSkillHints, scanSkills, skillSearchRoots, suggestSkills } from "../plugins/ctx/lib/skill-discoverer.js";
+import { diagnoseSkills, parseSkillFrontmatter, parseSkillMetadata, projectSkillHints, scanSkills, skillSearchRoots, suggestSkills } from "../plugins/ctx/lib/skill-discoverer.js";
 
 describe("skill discoverer", () => {
   it("parses SKILL.md YAML frontmatter", () => {
@@ -46,6 +46,29 @@ describe("skill discoverer", () => {
     });
 
     expect(skill.description.length).toBeLessThanOrEqual(500);
+  });
+
+  it("parses skill.yaml trigger metadata", () => {
+    expect(parseSkillMetadata([
+      "id: eas",
+      "positive_triggers:",
+      "  prompts:",
+      "    - deployed",
+      "    - eas",
+      "  files:",
+      "    - eas.json",
+      "  dependencies:",
+      "    - expo",
+      "negative_triggers:",
+      "  dependencies:",
+      "    - next"
+    ].join("\n"))).toMatchObject({
+      id: "eas",
+      positivePrompts: ["deployed", "eas"],
+      files: ["eas.json"],
+      dependencies: ["expo"],
+      negativeDependencies: ["next"]
+    });
   });
 
 
@@ -328,6 +351,121 @@ describe("skill discoverer", () => {
     expect(projectSkillHints({ cwd })).toEqual(expect.arrayContaining(["expo", "react", "native", "eas", "json"]));
     expect(suggested[0].name).toBe("expo-cicd-workflows");
     expect(suggested.map((skill) => skill.name)).not.toContain("audit-skills");
+  });
+
+  it("uses skill.yaml project evidence and negative triggers for deployment routing", async () => {
+    const expoRoot = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-skill-router-expo-"));
+    fs.mkdirSync(path.join(expoRoot, ".github", "workflows"), { recursive: true });
+    fs.writeFileSync(path.join(expoRoot, "package.json"), JSON.stringify({
+      dependencies: { expo: "^56.0.0", "react-native": "^0.85.0" }
+    }));
+    fs.writeFileSync(path.join(expoRoot, "eas.json"), "{}");
+    fs.writeFileSync(path.join(expoRoot, "app.json"), "{}");
+    fs.writeFileSync(path.join(expoRoot, ".github", "workflows", "build.yml"), "name: build\n");
+
+    const skillsRoot = path.join(expoRoot, ".codex", "skills");
+    writeSkillWithMetadata(path.join(skillsRoot, "eas"), "eas", [
+      "id: eas",
+      "positive_triggers:",
+      "  prompts:",
+      "    - deployed",
+      "    - deploy",
+      "  files:",
+      "    - eas.json",
+      "    - app.json",
+      "    - .github/workflows/*",
+      "  dependencies:",
+      "    - expo",
+      "negative_triggers:",
+      "  dependencies:",
+      "    - next"
+    ].join("\n"));
+    writeSkillWithMetadata(path.join(skillsRoot, "vercel-deployment"), "vercel-deployment", [
+      "id: vercel-deployment",
+      "positive_triggers:",
+      "  prompts:",
+      "    - deployed",
+      "  files:",
+      "    - vercel.json",
+      "  dependencies:",
+      "    - next",
+      "negative_triggers:",
+      "  dependencies:",
+      "    - expo"
+    ].join("\n"));
+
+    const expoSkills = scanSkills({ cwd: expoRoot, roots: [skillsRoot] });
+    const expoSuggested = await suggestSkills({
+      cwd: expoRoot,
+      prompt: "fix deployed",
+      skills: expoSkills,
+      dataDir: fs.mkdtempSync(path.join(os.tmpdir(), "ctx-skill-router-expo-data-")),
+      indexedSearcher: indexedSearcherFor({
+        eas: 0.7,
+        "vercel-deployment": 0.7
+      }),
+      limit: 2
+    });
+
+    expect(expoSuggested[0].name).toBe("eas");
+    expect(expoSuggested[0].confidence).toBeGreaterThan(0.7);
+    expect(expoSuggested[0].evidence).toEqual(expect.arrayContaining([
+      "dependency:expo",
+      "file:eas.json"
+    ]));
+    expect(expoSuggested.map((skill) => skill.name)).not.toContain("vercel-deployment");
+
+    const nextRoot = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-skill-router-next-"));
+    fs.writeFileSync(path.join(nextRoot, "package.json"), JSON.stringify({
+      dependencies: { next: "^15.0.0", react: "^19.0.0" }
+    }));
+    fs.writeFileSync(path.join(nextRoot, "vercel.json"), "{}");
+    const nextSuggested = await suggestSkills({
+      cwd: nextRoot,
+      prompt: "fix deployed",
+      skills: expoSkills,
+      dataDir: fs.mkdtempSync(path.join(os.tmpdir(), "ctx-skill-router-next-data-")),
+      indexedSearcher: indexedSearcherFor({
+        eas: 0.7,
+        "vercel-deployment": 0.7
+      }),
+      limit: 2
+    });
+
+    expect(nextSuggested[0].name).toBe("vercel-deployment");
+    expect(nextSuggested.map((skill) => skill.name)).not.toContain("eas");
+  });
+
+  it("explains skill routing decisions for doctor output", async () => {
+    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-skill-doctor-"));
+    fs.writeFileSync(path.join(cwd, "package.json"), JSON.stringify({
+      dependencies: { expo: "^56.0.0" }
+    }));
+    fs.writeFileSync(path.join(cwd, "eas.json"), "{}");
+    const skills = [{
+      name: "eas",
+      description: "Fix Expo EAS deployments.",
+      path: "/skills/eas/SKILL.md"
+    }];
+
+    const result = await diagnoseSkills({
+      cwd,
+      prompt: "fix deployed",
+      skills,
+      dataDir: fs.mkdtempSync(path.join(os.tmpdir(), "ctx-skill-doctor-data-")),
+      indexedSearcher: indexedSearcherFor({ eas: 0.8 }),
+      limit: 1
+    });
+
+    expect(result.projectEvidence.dependencies).toContain("expo");
+    expect(result.skills[0]).toMatchObject({
+      name: "eas",
+      confidenceBand: "high"
+    });
+    expect(result.skills[0].evidence).toEqual(expect.arrayContaining([
+      "dependency:expo",
+      "file:eas.json"
+    ]));
   });
 
   it("suggests frontend and auth skills for Vietnamese role-based UI prompts", async () => {
@@ -834,6 +972,11 @@ function writeSkill(directory, name) {
     `description: Use for ${name} tasks.`,
     "---"
   ].join("\n"));
+}
+
+function writeSkillWithMetadata(directory, name, metadata) {
+  writeSkill(directory, name);
+  fs.writeFileSync(path.join(directory, "skill.yaml"), `${metadata}\n`);
 }
 
 function indexedSearcherFor(scoresBySkillName, onTask) {

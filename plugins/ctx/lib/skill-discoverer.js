@@ -16,6 +16,7 @@ const SCAN_CACHE_TTL_MS = 5 * 60 * 1000;
 const MAX_DESCRIPTION_CHARS = 500;
 const SKILL_EMBEDDING_THRESHOLD = 0.45;
 const DEFAULT_SKILL_TIMEOUT_MS = 2000;
+const DEFAULT_ROUTER_THRESHOLD = 0.35;
 
 const scanCache = new Map();
 
@@ -48,6 +49,40 @@ export function parseSkillFrontmatter(content = "", { fallbackName = "", skillPa
     description: truncateDescription(fields.description || fallbackDescription),
     path: skillPath
   };
+}
+
+export function parseSkillMetadata(content = "") {
+  const lines = String(content || "").split(/\r?\n/);
+  const root = {};
+  const stack = [{ indent: -1, value: root }];
+
+  for (const rawLine of lines) {
+    if (!rawLine.trim() || rawLine.trimStart().startsWith("#")) continue;
+    const indent = rawLine.match(/^\s*/)?.[0].length || 0;
+    const line = rawLine.trim();
+    while (stack.length > 1 && indent <= stack.at(-1).indent) stack.pop();
+    const parent = stack.at(-1).value;
+
+    if (line.startsWith("- ")) {
+      if (!Array.isArray(parent)) continue;
+      parent.push(parseScalar(line.slice(2)));
+      continue;
+    }
+
+    const match = line.match(/^([A-Za-z0-9_-]+):\s*(.*)$/);
+    if (!match) continue;
+    const [, key, rawValue] = match;
+    if (rawValue) {
+      parent[key] = parseScalar(rawValue);
+      continue;
+    }
+
+    const next = nextMeaningfulLine(lines, rawLine);
+    parent[key] = next?.trim().startsWith("- ") ? [] : {};
+    stack.push({ indent, value: parent[key] });
+  }
+
+  return normalizeSkillMetadata(root);
 }
 
 function truncateDescription(value) {
@@ -101,8 +136,10 @@ export function scanSkills({ cwd = process.cwd(), roots = skillSearchRoots({ cwd
         skillPath
       });
       if (!skill.name || !skill.description) continue;
+      const metadata = readSkillMetadata({ skillPath, skill });
       skills.push(enrichSkill({
         ...skill,
+        metadata,
         root,
         scope: isInsidePath(skillPath, cwd) ? "project" : "global",
         relativePath: path.relative(cwd, skillPath)
@@ -175,7 +212,8 @@ export async function suggestSkills({
   const query = skillQuery({ prompt, cwd, dataDir });
   const byId = new Map(catalog.map((skill) => [skillIndexId(skill), skill]));
   const explicitSkills = explicitSkillSuggestions({ prompt, byId });
-  if (!embeddingsEnabled) return finalizeSkillScores(explicitSkills, limit);
+  const projectEvidence = detectProjectEvidence({ cwd });
+  if (!embeddingsEnabled) return finalizeSkillScores(explicitSkills, limit, { cwd, prompt, projectEvidence });
 
   if (dataDir) {
     const indexed = await searchSkillIndexes({ cwd, query, dataDir, timeoutMs, indexedSearcher });
@@ -189,14 +227,14 @@ export async function suggestSkills({
           return skillScoreFromEmbedding(skill, item.embeddingScore, [`embedding:${Number(item.embeddingScore || 0).toFixed(2)}`]);
         })
         .filter(Boolean)
-      ], limit);
+      ], limit, { cwd, prompt, projectEvidence });
     }
   }
 
-  if (catalog.length > DEFAULT_EMBEDDING_CANDIDATES) return finalizeSkillScores(explicitSkills, limit);
+  if (catalog.length > DEFAULT_EMBEDDING_CANDIDATES) return finalizeSkillScores(explicitSkills, limit, { cwd, prompt, projectEvidence });
 
   const embeddingCandidates = catalog.map((skill, index) => skillRule({ skill, index }));
-  if (!embeddingCandidates.length) return finalizeSkillScores(explicitSkills, limit);
+  if (!embeddingCandidates.length) return finalizeSkillScores(explicitSkills, limit, { cwd, prompt, projectEvidence });
 
   const embedding = await embeddingEnhancer(embeddingCandidates, query, {
     dataDir,
@@ -205,7 +243,7 @@ export async function suggestSkills({
     allowRemote: false
   });
 
-  return finalizeSkillScores([...explicitSkills, ...embedding.rules], limit);
+  return finalizeSkillScores([...explicitSkills, ...embedding.rules], limit, { cwd, prompt, projectEvidence });
 }
 
 function skillQuery({ prompt = "", cwd = process.cwd(), dataDir } = {}) {
@@ -237,19 +275,28 @@ function extractExplicitSkillNames(prompt = "") {
   return names;
 }
 
-function finalizeSkillScores(skills, limit) {
+export async function diagnoseSkills({
+  prompt = "",
+  skills = [],
+  dataDir,
+  cwd = process.cwd(),
+  limit = 10,
+  ...options
+} = {}) {
+  const suggestions = await suggestSkills({ prompt, skills, dataDir, cwd, limit, ...options });
+  const projectEvidence = detectProjectEvidence({ cwd });
+  return {
+    prompt,
+    cwd,
+    projectEvidence,
+    skills: suggestions
+  };
+}
+
+function finalizeSkillScores(skills, limit, { cwd = process.cwd(), prompt = "", projectEvidence = detectProjectEvidence({ cwd }) } = {}) {
   const ranked = skills
-    .map((rule) => ({
-      name: rule.name,
-      description: rule.description,
-      path: rule.path,
-      scope: rule.scope,
-      score: Math.min(1, Number(rule.score || 0)),
-      embeddingScore: rule.embeddingScore,
-      rankScore: Math.min(1, Number(rule.score || 0)),
-      reasons: rule.reasons || []
-    }))
-    .filter((skill) => Number(skill.embeddingScore || skill.score || 0) >= SKILL_EMBEDDING_THRESHOLD)
+    .map((rule) => hybridSkillScore(rule, { prompt, projectEvidence }))
+    .filter((skill) => skill.explicit || Number(skill.rankScore || 0) >= DEFAULT_ROUTER_THRESHOLD)
     .sort((a, b) => b.rankScore - a.rankScore
       || b.score - a.score
       || scopePriority(b.scope) - scopePriority(a.scope)
@@ -324,6 +371,7 @@ function skillScoreFromEmbedding(skill, embeddingScore, reasons = []) {
     description: skill.description,
     path: skill.path,
     scope: skill.scope,
+    metadata: skill.metadata,
     score,
     embeddingScore: score,
     reasons
@@ -387,7 +435,14 @@ function skillIndexId(skill) {
 }
 
 function skillEmbeddingText(skill) {
-  return [skill.name, skill.description].filter(Boolean).join("\n");
+  const metadata = skill.metadata || {};
+  return [
+    skill.name,
+    skill.description,
+    ...(metadata.positivePrompts || []),
+    ...(metadata.dependencies || []),
+    ...(metadata.files || [])
+  ].filter(Boolean).join("\n");
 }
 
 export function projectSkillHints({ cwd = process.cwd() } = {}) {
@@ -418,6 +473,365 @@ function readJson(filePath) {
   } catch {
     return null;
   }
+}
+
+function readSkillMetadata({ skillPath, skill }) {
+  const skillDir = path.dirname(skillPath);
+  for (const fileName of ["skill.yaml", "skill.yml"]) {
+    const metadataPath = path.join(skillDir, fileName);
+    if (!fs.existsSync(metadataPath)) continue;
+    try {
+      return {
+        ...inferSkillMetadata(skill),
+        ...parseSkillMetadata(fs.readFileSync(metadataPath, "utf8")),
+        sourcePath: metadataPath
+      };
+    } catch {
+      return inferSkillMetadata(skill);
+    }
+  }
+  return inferSkillMetadata(skill);
+}
+
+function normalizeSkillMetadata(metadata = {}) {
+  const positive = metadata.positive_triggers || metadata.triggers || {};
+  const negative = metadata.negative_triggers || {};
+  return {
+    id: metadata.id,
+    name: metadata.name,
+    positivePrompts: asArray(positive.prompts || positive.keywords || metadata.keywords),
+    files: asArray(positive.files || metadata.files),
+    dependencies: asArray(positive.dependencies || metadata.dependencies),
+    negativePrompts: asArray(negative.prompts || negative.keywords),
+    negativeFiles: asArray(negative.files),
+    negativeDependencies: asArray(negative.dependencies),
+    relatedSkills: asArray(metadata.related_skills)
+  };
+}
+
+function inferSkillMetadata(skill = {}) {
+  const text = normalize(`${skill.name || ""} ${skill.description || ""}`);
+  const metadata = {
+    positivePrompts: [],
+    files: [],
+    dependencies: [],
+    negativePrompts: [],
+    negativeFiles: [],
+    negativeDependencies: [],
+    relatedSkills: []
+  };
+  if (/\b(eas|expo|react native|mobile deployment|app store)\b/.test(text)) {
+    metadata.positivePrompts.push("eas", "expo build", "deployed", "deploy", "submit", "android", "ios", "mobile release", "qr", "connect");
+    metadata.files.push("eas.json", "app.json", "app.config.js", "app.config.ts", ".github/workflows/*");
+    metadata.dependencies.push("expo", "eas-cli", "expo-router", "react-native");
+    metadata.negativeDependencies.push("next", "vite");
+    metadata.negativeFiles.push("vercel.json");
+  }
+  if (/\bgithub actions|ci cd|cicd\b/.test(text)) {
+    metadata.positivePrompts.push("deploy", "deployed", "ci", "workflow", "github actions", "build failed");
+    metadata.files.push(".github/workflows/*");
+  }
+  if (/\benv|secret|credential|api key\b/.test(text)) {
+    metadata.positivePrompts.push("secret", "env", "environment", "api key", "deploy", "deployed");
+    metadata.files.push(".env", ".env.example", ".github/workflows/*");
+  }
+  if (/\bbuild log|debugging|debug|error|failed|failure\b/.test(text)) {
+    metadata.positivePrompts.push("error", "failed", "failure", "fix", "debug", "build", "deployed");
+  }
+  if (/\bvercel\b/.test(text)) {
+    metadata.positivePrompts.push("vercel", "deploy", "deployed");
+    metadata.files.push("vercel.json", "next.config.js", "next.config.ts");
+    metadata.dependencies.push("next", "vercel");
+    metadata.negativeDependencies.push("expo", "react-native");
+    metadata.negativeFiles.push("eas.json");
+  }
+  if (/\bnext|app router\b/.test(text)) {
+    metadata.dependencies.push("next", "react");
+    metadata.positivePrompts.push("frontend", "ui", "role", "dashboard", "app router");
+  }
+  return metadata;
+}
+
+function hybridSkillScore(skill, { prompt, projectEvidence }) {
+  const semanticScore = Math.min(1, Number(skill.embeddingScore || skill.score || 0));
+  const metadata = skill.metadata || inferSkillMetadata(skill);
+  const hasRouterSignals = metadataHasSignals(metadata);
+  const promptMatch = matchTextTriggers(prompt, metadata.positivePrompts);
+  const dependencyEvidence = matchList(projectEvidence.dependencies, metadata.dependencies);
+  const fileEvidence = matchFiles(projectEvidence.files, metadata.files);
+  const negativeDependencies = matchList(projectEvidence.dependencies, metadata.negativeDependencies);
+  const negativeFiles = matchFiles(projectEvidence.files, metadata.negativeFiles);
+  const negativePrompts = matchTextTriggers(prompt, metadata.negativePrompts);
+  const negativePenalty = Math.max(negativeDependencies.score, negativeFiles.score, negativePrompts.score);
+  const projectEvidenceScore = dependencyEvidence.score;
+  const fileConfigScore = fileEvidence.score;
+  const graphScore = 0;
+  const hybridScore = Math.max(0, Math.min(1,
+    semanticScore * 0.35
+    + promptMatch.score * 0.20
+    + projectEvidenceScore * 0.25
+    + fileConfigScore * 0.10
+    + graphScore * 0.05
+    - negativePenalty * 0.20
+  ));
+  const explicit = (skill.reasons || []).includes("explicit-skill");
+  const finalScore = hasRouterSignals ? hybridScore : semanticScore;
+  const calibratedConfidence = calibrateSkillConfidence(finalScore, {
+    prompt,
+    promptMatch,
+    dependencyEvidence,
+    fileEvidence,
+    negativePenalty,
+    explicit
+  });
+  const evidence = [...new Set([
+    ...(skill.reasons || []),
+    ...promptMatch.matches.map((item) => `prompt:${item}`),
+    ...dependencyEvidence.matches.map((item) => `dependency:${item}`),
+    ...fileEvidence.matches.map((item) => `file:${item}`)
+  ])];
+  const negativeEvidence = [
+    ...negativeDependencies.matches.map((item) => `dependency:${item}`),
+    ...negativeFiles.matches.map((item) => `file:${item}`),
+    ...negativePrompts.matches.map((item) => `prompt:${item}`)
+  ];
+  const rankScore = explicit ? semanticScore : finalScore;
+  return {
+    name: skill.name,
+    description: skill.description,
+    path: skill.path,
+    scope: skill.scope,
+    score: finalScore,
+    confidence: calibratedConfidence,
+    confidenceBand: confidenceBand(calibratedConfidence),
+    embeddingScore: semanticScore,
+    semanticScore,
+    promptTriggerScore: promptMatch.score,
+    projectEvidenceScore,
+    fileConfigScore,
+    graphScore,
+    negativePenalty,
+    rankScore,
+    explicit,
+    evidence,
+    negativeEvidence,
+    reasons: skill.reasons || []
+  };
+}
+
+function calibrateSkillConfidence(score, {
+  prompt = "",
+  promptMatch,
+  dependencyEvidence,
+  fileEvidence,
+  negativePenalty = 0,
+  explicit = false
+} = {}) {
+  let confidence = Math.max(0, Math.min(1, Number(score || 0)));
+  const hasDependencyEvidence = Boolean(dependencyEvidence?.matches?.length);
+  const hasFileEvidence = Boolean(fileEvidence?.matches?.length);
+  const hasPromptEvidence = Boolean(promptMatch?.matches?.length);
+  const hasProjectEvidence = hasDependencyEvidence || hasFileEvidence;
+
+  if (!hasProjectEvidence && !explicit) {
+    confidence = Math.min(confidence, 0.62);
+  }
+  if (isAmbiguousPrompt(prompt) && !(hasDependencyEvidence && hasFileEvidence) && !explicit) {
+    confidence = Math.min(confidence, 0.64);
+  }
+  if (hasPromptEvidence && hasProjectEvidence && confidence >= 0.5) {
+    confidence = Math.max(confidence, 0.68);
+  }
+  if (hasDependencyEvidence && hasFileEvidence) {
+    confidence = Math.max(confidence, 0.88);
+  }
+  if (negativePenalty > 0) {
+    confidence = Math.min(confidence, 0.74);
+  }
+  return Math.max(0, Math.min(1, confidence));
+}
+
+function confidenceBand(confidence) {
+  const value = Number(confidence || 0);
+  if (value >= 0.85) return "high";
+  if (value >= 0.65) return "medium";
+  return "low";
+}
+
+function isAmbiguousPrompt(prompt = "") {
+  const tokens = normalize(prompt).split(" ").filter(Boolean);
+  if (tokens.length <= 2) return true;
+  const generic = new Set(["fix", "add", "update", "debug", "deploy", "deployed", "auth", "cache", "test", "error"]);
+  return tokens.length <= 4 && tokens.every((token) => generic.has(token));
+}
+
+function detectProjectEvidence({ cwd = process.cwd() } = {}) {
+  const dependencies = new Set();
+  const scripts = new Set();
+  const files = new Set();
+  for (const packagePath of workspacePackagePaths(cwd)) {
+    const packageDir = path.dirname(packagePath);
+    const packageJson = readJson(packagePath);
+    files.add(normalizeFile(path.relative(cwd, packagePath) || "package.json"));
+    for (const name of Object.keys({
+      ...(packageJson?.dependencies || {}),
+      ...(packageJson?.devDependencies || {}),
+      ...(packageJson?.peerDependencies || {})
+    })) dependencies.add(normalizeDependency(name));
+    for (const name of Object.keys(packageJson?.scripts || {})) scripts.add(normalize(name));
+    for (const fileName of knownProjectConfigFiles()) {
+      if (fs.existsSync(path.join(packageDir, fileName))) files.add(normalizeFile(path.relative(cwd, path.join(packageDir, fileName))));
+    }
+  }
+  for (const fileName of knownProjectConfigFiles()) {
+    if (fs.existsSync(path.join(cwd, fileName))) files.add(normalizeFile(fileName));
+  }
+  const pubspecPath = path.join(cwd, "pubspec.yaml");
+  if (fs.existsSync(pubspecPath)) {
+    files.add("pubspec.yaml");
+    for (const dependency of readPubspecDependencies(pubspecPath)) dependencies.add(normalizeDependency(dependency));
+  }
+  collectExistingFiles(cwd, [".github/workflows"], files);
+  return {
+    dependencies: [...dependencies],
+    scripts: [...scripts],
+    files: [...files]
+  };
+}
+
+function knownProjectConfigFiles() {
+  return [
+    "eas.json",
+    "app.json",
+    "app.config.js",
+    "app.config.ts",
+    "vercel.json",
+    "next.config.js",
+    "next.config.ts",
+    "firebase.json",
+    "railway.json",
+    "render.yaml",
+    "Dockerfile",
+    "docker-compose.yml",
+    "jest.config.js",
+    "jest.config.ts",
+    "playwright.config.js",
+    "playwright.config.ts"
+  ];
+}
+
+function readPubspecDependencies(filePath) {
+  const dependencies = [];
+  let inDependencies = false;
+  try {
+    for (const line of fs.readFileSync(filePath, "utf8").split(/\r?\n/)) {
+      if (/^dependencies:\s*$/.test(line)) {
+        inDependencies = true;
+        continue;
+      }
+      if (inDependencies && /^\S/.test(line) && !/^dependencies:\s*$/.test(line)) break;
+      const match = line.match(/^\s{2}([A-Za-z0-9_-]+):/);
+      if (inDependencies && match) dependencies.push(match[1]);
+    }
+  } catch {
+    return [];
+  }
+  return dependencies;
+}
+
+function collectExistingFiles(cwd, relativeDirs, files) {
+  for (const relativeDir of relativeDirs) {
+    const directory = path.join(cwd, relativeDir);
+    let entries = [];
+    try {
+      entries = fs.readdirSync(directory, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    files.add(normalizeFile(relativeDir));
+    for (const entry of entries) {
+      if (entry.isFile()) files.add(normalizeFile(path.join(relativeDir, entry.name)));
+    }
+  }
+}
+
+function matchTextTriggers(text, triggers = []) {
+  const normalizedText = normalize(text);
+  const matches = [];
+  for (const trigger of triggers || []) {
+    const normalizedTrigger = normalize(trigger);
+    if (!normalizedTrigger) continue;
+    if (normalizedText.includes(normalizedTrigger)) matches.push(trigger);
+  }
+  return { score: matches.length ? 1 : 0, matches };
+}
+
+function matchList(values = [], triggers = []) {
+  const valueSet = new Set(values.map(normalizeDependency));
+  const matches = [];
+  for (const trigger of triggers || []) {
+    const normalizedTrigger = normalizeDependency(trigger);
+    if (valueSet.has(normalizedTrigger)) matches.push(trigger);
+  }
+  return { score: matches.length ? 1 : 0, matches };
+}
+
+function matchFiles(files = [], triggers = []) {
+  const normalizedFiles = files.map(normalizeFile);
+  const matches = [];
+  for (const trigger of triggers || []) {
+    const normalizedTrigger = normalizeFile(trigger);
+    if (!normalizedTrigger) continue;
+    if (normalizedTrigger.endsWith("/*")) {
+      const prefix = normalizedTrigger.slice(0, -1);
+      if (normalizedFiles.some((file) => file.startsWith(prefix))) matches.push(trigger);
+      continue;
+    }
+    if (normalizedFiles.some((file) => file === normalizedTrigger || file.endsWith(`/${normalizedTrigger}`))) matches.push(trigger);
+  }
+  return { score: matches.length ? 1 : 0, matches };
+}
+
+function metadataHasSignals(metadata = {}) {
+  return [
+    metadata.positivePrompts,
+    metadata.files,
+    metadata.dependencies,
+    metadata.negativePrompts,
+    metadata.negativeFiles,
+    metadata.negativeDependencies
+  ].some((items) => Array.isArray(items) && items.length > 0);
+}
+
+function asArray(value) {
+  if (Array.isArray(value)) return value.map(String).filter(Boolean);
+  if (value === undefined || value === null || value === "") return [];
+  return [String(value)];
+}
+
+function parseScalar(value) {
+  const trimmed = String(value || "").trim();
+  if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+    return trimmed.slice(1, -1).split(",").map((item) => item.trim().replace(/^["']|["']$/g, "")).filter(Boolean);
+  }
+  return trimmed.replace(/^["']|["']$/g, "");
+}
+
+function nextMeaningfulLine(lines, currentRawLine) {
+  const start = lines.indexOf(currentRawLine);
+  for (let index = start + 1; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (line.trim() && !line.trimStart().startsWith("#")) return line;
+  }
+  return null;
+}
+
+function normalizeFile(value) {
+  return String(value || "").replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
+}
+
+function normalizeDependency(value) {
+  return String(value || "").toLowerCase().trim();
 }
 
 function addHintText(hints, value) {

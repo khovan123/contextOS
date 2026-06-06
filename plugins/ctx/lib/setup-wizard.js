@@ -1,17 +1,22 @@
-// No agents pre-selected by default — user must choose explicitly
+// Interactive setup starts empty so users choose intentionally. Non-interactive
+// --yes needs a deterministic target, so it defaults to Codex.
 const DEFAULT_AGENTS = [];
+const DEFAULT_YES_AGENTS = ["codex"];
 
 export function parseSetupArgs(args = []) {
   const agentsFlag = args.indexOf("--agents");
   const agentsProvided = agentsFlag >= 0;
+  const yes = args.includes("--yes") || args.includes("-y");
   const agents = agentsFlag >= 0
     ? parseAgentList(args[agentsFlag + 1])
-    : DEFAULT_AGENTS;
+    : yes
+      ? DEFAULT_YES_AGENTS
+      : DEFAULT_AGENTS;
 
   return {
     agents,
     agentsProvided,
-    yes: args.includes("--yes") || args.includes("-y"),
+    yes,
     quiet: args.includes("--quiet"),
     syncRules: !args.includes("--no-rules"),
     syncSkills: !args.includes("--no-skills")

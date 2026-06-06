@@ -29,6 +29,25 @@ export async function callCtxScoreContext(payload, {
   connectTimeoutMs = Number(process.env.CONTEXTOS_MCP_CONNECT_TIMEOUT_MS || DEFAULT_CONNECT_TIMEOUT_MS),
   createConnection = net.createConnection
 } = {}) {
+  return callBridge(payload, { dataDir, timeoutMs, connectTimeoutMs, createConnection });
+}
+
+export async function callCtxHealth({
+  dataDir = defaultDataDir(),
+  timeoutMs = Number(process.env.CONTEXTOS_MCP_HEALTH_TIMEOUT_MS || 250),
+  connectTimeoutMs = Number(process.env.CONTEXTOS_MCP_CONNECT_TIMEOUT_MS || DEFAULT_CONNECT_TIMEOUT_MS),
+  createConnection = net.createConnection
+} = {}) {
+  const response = await callBridge({ type: "health" }, { dataDir, timeoutMs, connectTimeoutMs, createConnection });
+  return response.health || {};
+}
+
+async function callBridge(payload, {
+  dataDir,
+  timeoutMs,
+  connectTimeoutMs,
+  createConnection
+}) {
   const socketPath = ctxMcpSocketPath(dataDir);
   if (!fs.existsSync(socketPath)) {
     throw new Error(`ctx-mcp bridge socket not found: ${socketPath}`);

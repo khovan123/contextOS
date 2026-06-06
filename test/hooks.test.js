@@ -236,6 +236,49 @@ describe("hook contracts", () => {
     expect(runtime.telemetry.bridgeStatus).toBe("fallback");
   });
 
+  it("skips MCP scoring when bridge health says the model is not hot", async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-hook-health-fallback-"));
+    const dataPath = path.join(tmp, ".data", "last-prompt-context.json");
+    const seenDirectPayloads = [];
+    let scoreCalled = false;
+
+    const output = await handlePromptPayload(
+      { prompt: "review code changes", cwd: tmp, hook_event_name: "UserPromptSubmit" },
+      {
+        dataPath,
+        requireHotMcp: true,
+        healthContextClient: async () => ({
+          model_cache_ready: true,
+          embedding_pipeline_loaded: false,
+          bridge_ready: true,
+          preload_status: "loading"
+        }),
+        scoreContextClient: async () => {
+          scoreCalled = true;
+          throw new Error("should not call hot scorer");
+        },
+        scoreContextDirectClient: async (payload) => {
+          seenDirectPayloads.push(payload);
+          return {
+            scoredRules: [],
+            suggestedFiles: [{ path: "package.json", score: 10 }],
+            suggestedSkills: [],
+            suggestedWorkflows: [],
+            telemetry: { elapsedMs: 1, modelStatus: "disabled" }
+          };
+        },
+        outputConfig: defaultOutputConfig()
+      }
+    );
+    const runtime = JSON.parse(fs.readFileSync(dataPath, "utf8"));
+
+    expect(output.continue).toBe(true);
+    expect(scoreCalled).toBe(false);
+    expect(seenDirectPayloads[0]).toMatchObject({ allowEmbeddings: false });
+    expect(runtime.telemetry.bridgeError).toContain("ctx-mcp scorer not hot");
+    expect(runtime.scheduled.additionalContext).toContain("package.json");
+  });
+
   it("fails open when direct fallback scoring exceeds the hook budget", async () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-hook-direct-timeout-"));
     const dataPath = path.join(tmp, ".data", "last-prompt-context.json");

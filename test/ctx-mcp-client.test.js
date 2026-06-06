@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { callCtxScoreContext, ctxMcpSocketPath, invalidateCtxMcpSocket } from "../plugins/ctx/lib/ctx-mcp-client.js";
+import { callCtxHealth, callCtxScoreContext, ctxMcpSocketPath, invalidateCtxMcpSocket } from "../plugins/ctx/lib/ctx-mcp-client.js";
 
 describe("ctx mcp client", () => {
   it("fails stale socket connects within the connect timeout", async () => {
@@ -56,6 +56,34 @@ describe("ctx mcp client", () => {
 
     await expect(pending).rejects.toThrow("ctx-mcp bridge revision mismatch");
     expect(fs.existsSync(ctxMcpSocketPath(dataDir))).toBe(false);
+  });
+
+  it("reads bridge health before scoring", async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-mcp-health-"));
+    fs.writeFileSync(ctxMcpSocketPath(dataDir), "");
+    const client = fakeClient();
+    const pending = callCtxHealth({
+      dataDir,
+      createConnection: () => client
+    });
+    client.emit("connect");
+    client.emit("data", Buffer.from(JSON.stringify({
+      bridgeRevision: 2,
+      health: {
+        model_cache_ready: true,
+        embedding_pipeline_loaded: true,
+        bridge_ready: true,
+        preload_status: "loaded"
+      }
+    })));
+    client.emit("end");
+
+    await expect(pending).resolves.toMatchObject({
+      model_cache_ready: true,
+      embedding_pipeline_loaded: true,
+      bridge_ready: true
+    });
+    expect(client.writes).toEqual(['{"type":"health"}\n']);
   });
 
   it("invalidates an existing private bridge socket", () => {

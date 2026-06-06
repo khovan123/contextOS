@@ -1,7 +1,15 @@
 # Changelog
 
-## 0.5.51
+## 0.5.52
 
+- **Release candidate polish:** Updated README positioning around ContextOS as a runtime context router, added npm/CI/license badges, a same-prompt/different-repo demo section, a benchmark table, a 30-second install callout, and an AGENTS.md vs RAG vs ContextOS comparison table.
+- **Non-interactive setup safety:** `ctx setup --yes` now defaults to Codex instead of failing with no selected agents, and skips the community skill installer when no TTY is available so release/install smoke tests can complete unattended.
+- **Hot MCP scorer:** `ctx-mcp` now preloads the local embedding pipeline and exposes `ctx_health`/bridge health so prompt hooks only call semantic scoring when the long-running scorer is ready.
+- **Skill Router v2:** Skill suggestions now combine semantic similarity with prompt triggers, dependency evidence, config-file evidence, negative triggers, and confidence explanations. Optional `skill.yaml` metadata beside `SKILL.md` can define positive/negative triggers and related skills.
+- **Confidence calibration:** Skill Router confidence is now calibrated separately from ranking. Prompt-only or semantic-only matches are capped, prompt+project-evidence matches are promoted to medium confidence, dependency+file evidence promotes to high confidence, negative signals cap confidence, and `ctx skills doctor` shows `high`/`medium`/`low` bands.
+- **Skill doctor:** Added `ctx skills doctor -- "task"` to explain selected skills with semantic score, prompt trigger score, project evidence, file evidence, negative signals, and final confidence.
+- **Skill routing eval:** Added `eval/skill-routing` fixtures and `ctx benchmark --skills` to report top-1 accuracy, top-3 recall, false positive rate, confidence calibration, and negative gate accuracy for evidence-based skill routing.
+- **Expanded Skill Router benchmark:** Expanded the eval from the initial 6-case smoke set to 52 cases across deployment, auth, database, testing, mobile, and adversarial negative gates. Current local benchmark: Top-1 Accuracy 92.3%, Top-3 Recall 94.2%, False Positive Rate 0.0%, Confidence Calibration 100.0%, Negative Gate Accuracy 100.0%.
 - **Faster prompt fallback:** Direct prompt-hook fallback now skips embedding work and uses a shorter timeout, so context injection can still return deterministic rule, file, skill, and workflow candidates when MCP or semantic scoring is unavailable.
 - **Shared skill index fallback:** Skill discovery now warms a shared global skill index and searches it when the workspace-specific skill index has no matches, improving reuse across projects.
 - **Agent-visible skill dedupe:** Community skill installs and skill sync now remove duplicate skills visible through shared, Codex, and Antigravity roots while preserving unique agent-specific skills.

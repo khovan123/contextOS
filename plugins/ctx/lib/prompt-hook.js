@@ -1,7 +1,7 @@
 import { scheduleContext } from "./scheduler.js";
 import { appendJsonLine, writeJsonFile } from "./fs-utils.js";
 import { maybeAutoWarmWorkspace } from "./auto-warm.js";
-import { callCtxScoreContext } from "./ctx-mcp-client.js";
+import { callCtxHealth, callCtxScoreContext } from "./ctx-mcp-client.js";
 import { resolveHookCwd } from "./hook-io.js";
 import { loadOutputConfig, outputConfigLimits } from "./output-config.js";
 import { scoreContext as scoreContextDirect } from "./score-context.js";
@@ -17,11 +17,13 @@ export async function handlePromptPayload(
     started = Date.now(),
     injectContext = process.env.CONTEXTOS_INJECT !== "0",
     scoreContextClient = callCtxScoreContext,
+    healthContextClient = callCtxHealth,
     scoreContextDirectClient = scoreContextDirect,
     autoWarmWorkspace = maybeAutoWarmWorkspace,
     mcpDataDir,
     outputConfig,
-    directFallbackTimeoutMs = Number(process.env.CONTEXTOS_DIRECT_FALLBACK_TIMEOUT_MS || 2500)
+    directFallbackTimeoutMs = Number(process.env.CONTEXTOS_DIRECT_FALLBACK_TIMEOUT_MS || 2500),
+    requireHotMcp = scoreContextClient === callCtxScoreContext
   } = {}
 ) {
   const prompt = payload.prompt || payload.message || payload.user_prompt || "";
@@ -34,6 +36,15 @@ export async function handlePromptPayload(
 
   let scored;
   try {
+    if (requireHotMcp) {
+      const health = await healthContextClient({
+        dataDir: mcpDataDir || dataDir,
+        timeoutMs: Number(process.env.CONTEXTOS_MCP_HEALTH_TIMEOUT_MS || 250)
+      });
+      if (!health.embedding_pipeline_loaded) {
+        throw new Error(`ctx-mcp scorer not hot: ${health.preload_status || "unknown"}`);
+      }
+    }
     scored = await scoreContextClient({
       cwd,
       prompt,

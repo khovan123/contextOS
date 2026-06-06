@@ -1,6 +1,6 @@
 {
   "name": "@minhpnq1807/contextos",
-  "version": "0.5.51",
+  "version": "0.5.52",
   "description": "Task-aware AGENTS.md context injection and compliance reporting for Codex, Claude Code, and Antigravity.",
   "type": "module",
   "bin": {
@@ -14,6 +14,7 @@
     "README.md",
     "DEMO.md",
     "LAUNCH.md",
+    "eval/",
     "docs/",
     "LICENSE",
     "CHANGELOG.md"
@@ -22,6 +23,7 @@
     "test": "vitest run test",
     "build": "node bin/ctx.js --version",
     "validate:plugin": "node test/validate-plugin.js",
+    "benchmark:skills": "node bin/ctx.js benchmark --skills",
     "test:mcp": "node test/mcp-protocol-smoke.js"
   },
   "engines": {

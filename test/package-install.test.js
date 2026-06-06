@@ -11,11 +11,14 @@ describe("package install", () => {
     const rootDir = path.join(tmp, "source");
     const targetRoot = path.join(tmp, "marketplace");
     fs.mkdirSync(path.join(rootDir, "plugins", "ctx"), { recursive: true });
+    fs.mkdirSync(path.join(rootDir, "eval", "skill-routing"), { recursive: true });
     fs.writeFileSync(path.join(rootDir, "package.json"), "{}");
     fs.writeFileSync(path.join(rootDir, "plugins", "ctx", "marker.txt"), "fresh");
+    fs.writeFileSync(path.join(rootDir, "eval", "skill-routing", "run-eval.js"), "export {};");
 
     expect(syncPackageRoot({ rootDir, targetRoot })).toEqual({ targetRoot, synced: true });
     expect(fs.readFileSync(path.join(targetRoot, "plugins", "ctx", "marker.txt"), "utf8")).toBe("fresh");
+    expect(fs.existsSync(path.join(targetRoot, "eval", "skill-routing", "run-eval.js"))).toBe(true);
   });
 
   it("does not remove files when the package root is already active", () => {

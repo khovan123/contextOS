@@ -28,7 +28,7 @@ export function copyPath(src, dest) {
 
 export function copyPackageRoot({ rootDir, targetRoot }) {
   fs.rmSync(targetRoot, { recursive: true, force: true });
-  for (const entry of [".agents", "bin", "plugins", "package.json", "package-lock.json", "README.md", "LICENSE", "node_modules"]) {
+  for (const entry of [".agents", "bin", "plugins", "eval", "docs", "package.json", "package-lock.json", "README.md", "CHANGELOG.md", "DEMO.md", "LAUNCH.md", "LICENSE", "node_modules"]) {
     const src = path.join(rootDir, entry);
     if (fs.existsSync(src)) copyPath(src, path.join(targetRoot, entry));
   }

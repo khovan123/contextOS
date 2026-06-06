@@ -19,6 +19,14 @@ describe("setup wizard", () => {
     });
   });
 
+  it("uses codex as the non-interactive setup target", () => {
+    expect(parseSetupArgs(["--yes"])).toMatchObject({
+      agents: ["codex"],
+      agentsProvided: false,
+      yes: true
+    });
+  });
+
   it("parses setup flags", () => {
     expect(parseSetupArgs([
       "--yes",

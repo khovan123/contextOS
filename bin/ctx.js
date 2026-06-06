@@ -19,6 +19,7 @@ import { scoreContext } from "../plugins/ctx/lib/score-context.js";
 import { defaultDataRoot, workspaceDataDir, workspaceMarkerPath } from "../plugins/ctx/lib/workspace-data.js";
 import { installMcpTelemetryProxies } from "../plugins/ctx/lib/mcp-proxy-install.js";
 import { benchmarkWorkspace, formatBenchmark } from "../plugins/ctx/lib/benchmark.js";
+import { formatSkillRoutingBenchmark, runSkillRoutingEval } from "../eval/skill-routing/run-eval.js";
 import { copyDir, copyPackageRoot, syncPackageRoot } from "../plugins/ctx/lib/package-install.js";
 import { installClaudeHooks } from "../plugins/ctx/lib/claude-hooks.js";
 import { installClaudeMcp } from "../plugins/ctx/lib/claude-mcp.js";
@@ -30,7 +31,7 @@ import { readCodexMcpServers, syncRules } from "../plugins/ctx/lib/ruler-sync.js
 import { detectGraphStrategy, embedCodeReviewGraph, formatCodeReviewGraphEmbedding, formatGraphStrategy } from "../plugins/ctx/lib/graph-strategy.js";
 import { writeInnerGitignore, ensureRootGitignore } from "../plugins/ctx/lib/gitignore.js";
 import { dedupeAgentVisibleSkills, repairSkillSymlinks, syncSkills, detectExistingSkills } from "../plugins/ctx/lib/skillshare-sync.js";
-import { scanSkills, warmSkillEmbeddings } from "../plugins/ctx/lib/skill-discoverer.js";
+import { diagnoseSkills, scanSkills, warmSkillEmbeddings } from "../plugins/ctx/lib/skill-discoverer.js";
 import { parsePassthroughArgs, runPassthrough } from "../plugins/ctx/lib/passthrough.js";
 import { parseAgentList, parseSetupArgs, setupSummaryLines } from "../plugins/ctx/lib/setup-wizard.js";
 import { multiSelect } from "../plugins/ctx/lib/multi-select.js";
@@ -193,6 +194,7 @@ Usage:
   ctx evidence                                      Show evidence from last report
   ctx stats                                         Show workspace statistics
   ctx benchmark -- "task"                           Benchmark workspace for a task
+  ctx benchmark --skills                            Run skill routing eval benchmark
   ctx sync --rules                                  Sync AGENTS.md rules to all agents
   ctx sync --rules --agents <names>                 Sync rules to specific agents only
   ctx sync --rules --dry-run                        Preview rule sync without writing
@@ -207,6 +209,7 @@ Usage:
   ctx sync --workflows --agents <names>             Sync workflows to specific agents
   ctx sync --workflows --dry-run                    Preview workflow sync without writing
   ctx skills                                        Browse community skill libraries
+  ctx skills doctor -- "task"                       Explain skill routing for a task
   ctx skills --agents <names>                       Filter skills for specific agents
   ctx skills --refresh                              Force refresh skill library cache
   ctx --config                                      Choose prompt context sections to show
@@ -650,6 +653,38 @@ async function debug(task) {
   console.log(scheduled.additionalContext || "(empty)");
 }
 
+async function skillsDoctor(task) {
+  if (!String(task || "").trim()) throw new Error('Usage: ctx skills doctor -- "task"');
+  const result = await diagnoseSkills({
+    cwd: process.cwd(),
+    prompt: task,
+    dataDir: contextOSDataDir(),
+    skills: scanSkills({ cwd: process.cwd() }),
+    limit: outputConfigLimits(loadOutputConfig({ dataRoot: contextOSDataDir() })).skills,
+    timeoutMs: Number(process.env.CONTEXTOS_SKILL_DOCTOR_TIMEOUT_MS || 3000)
+  });
+
+  console.log("ContextOS skill doctor");
+  console.log(`cwd: ${result.cwd}`);
+  console.log(`prompt: ${result.prompt}`);
+  console.log("");
+  console.log("Project evidence:");
+  console.log(`dependencies: ${result.projectEvidence.dependencies.slice(0, 30).join(", ") || "(none)"}`);
+  console.log(`files: ${result.projectEvidence.files.slice(0, 30).join(", ") || "(none)"}`);
+  console.log("");
+  console.log("Skills:");
+  if (!result.skills.length) {
+    console.log("(none)");
+    return;
+  }
+  for (const skill of result.skills) {
+    console.log(`${Number(skill.confidence || skill.score || 0).toFixed(2)}  ${skill.confidenceBand || "low"}  ${skill.name}`);
+    console.log(`      semantic:${Number(skill.semanticScore || 0).toFixed(2)} prompt:${Number(skill.promptTriggerScore || 0).toFixed(2)} project:${Number(skill.projectEvidenceScore || 0).toFixed(2)} files:${Number(skill.fileConfigScore || 0).toFixed(2)} negative:${Number(skill.negativePenalty || 0).toFixed(2)}`);
+    if (skill.evidence?.length) console.log(`      evidence: ${skill.evidence.join(", ")}`);
+    if (skill.negativeEvidence?.length) console.log(`      rejected signals: ${skill.negativeEvidence.join(", ")}`);
+  }
+}
+
 async function warmEmbeddings(task, { syncMarketplace = true, quiet = false } = {}) {
   const warmResult = await warmWorkspaceIndexes({ task });
   const marketplaceSync = syncMarketplace ? syncActiveCodexMarketplace() : null;
@@ -874,15 +909,21 @@ async function setup({ args = [], cwd = process.cwd() } = {}) {
     const totalExisting = existing.reduce((sum, e) => sum + e.count, 0);
     if (totalExisting === 0) {
       console.log("");
-      console.log(`${YELLOW}⚠${RESET}  No skills found on this machine.`);
-      console.log(`${DIM}│${RESET}  Install community skills to get started.`);
+      console.log("⚠  No skills found on this machine.");
+      console.log("│  Install community skills to get started.");
       console.log("");
 
-      const installed = await runCommunitySkillInstaller(options.agents);
-      if (installed > 0) {
+      if (options.yes || !process.stdin.isTTY) {
+        console.log("│  Skipping community skill installer in non-interactive setup.");
+        console.log("│  Run: ctx skills");
         console.log("");
-        console.log("◇ Re-syncing skills after install...");
-        await doSyncSkills();
+      } else {
+        const installed = await runCommunitySkillInstaller(options.agents);
+        if (installed > 0) {
+          console.log("");
+          console.log("◇ Re-syncing skills after install...");
+          await doSyncSkills();
+        }
       }
     }
   }
@@ -981,11 +1022,21 @@ try {
   } else if (command === "stats") {
     console.log(formatStats(loadStats(contextOSWorkspaceDataDir())));
   } else if (command === "benchmark") {
+    if (args.includes("--skills")) {
+      console.log(formatSkillRoutingBenchmark(await runSkillRoutingEval({ rootDir })));
+    } else {
     const marker = args.indexOf("--");
     const task = marker >= 0 ? args.slice(marker + 1).join(" ") : args.slice(1).join(" ");
     if (!task.trim()) throw new Error('Usage: ctx benchmark -- "task"');
     console.log(formatBenchmark(benchmarkWorkspace({ cwd: process.cwd(), task })));
+    }
   } else if (command === "skills") {
+    if (args[1] === "doctor") {
+      const marker = args.indexOf("--");
+      const task = marker >= 0 ? args.slice(marker + 1).join(" ") : args.slice(2).join(" ");
+      await skillsDoctor(task);
+      process.exitCode = 0;
+    } else {
     // Interactive community skill library selector + installer
     const agentsFlag = args.indexOf("--agents");
     const forceRefresh = args.includes("--refresh");
@@ -1020,6 +1071,7 @@ try {
       }));
     }
     console.log("");
+    }
   } else if (command === "sync") {
     if (args.includes("--workflows")) {
       await syncWorkflows({

@@ -4,7 +4,7 @@ import net from "node:net";
 
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 
-import { isModelCacheReady, modelCacheDir } from "../lib/embedding-scorer.js";
+import { isModelCacheReady, modelCacheDir, preloadEmbeddingPipeline } from "../lib/embedding-scorer.js";
 import { scoreContext } from "../lib/score-context.js";
 import { CTX_MCP_BRIDGE_REVISION, ctxMcpSocketPath } from "../lib/ctx-mcp-client.js";
 import { defaultDataRoot } from "../lib/workspace-data.js";
@@ -12,20 +12,48 @@ import { createContextOSMcpServer } from "./contextos-server.js";
 
 const dataDir = defaultDataRoot();
 const socketPath = ctxMcpSocketPath(dataDir);
+const modelState = {
+  modelCacheReady: false,
+  embeddingPipelineLoaded: false,
+  bridgeReady: false,
+  preloadStatus: "starting",
+  loadedAt: null,
+  error: null
+};
 
 fs.mkdirSync(dataDir, { recursive: true });
 await ensureModelReady();
 if (process.env.CONTEXTOS_DISABLE_BRIDGE !== "1") startBridge();
+preloadEmbeddingModel();
 const keepAlive = setInterval(() => {}, 2 ** 31 - 1);
 
-const server = createContextOSMcpServer({ dataDir });
+const server = createContextOSMcpServer({ dataDir, getHealth: bridgeHealth });
 console.error("ctx-mcp ready");
 await server.connect(new StdioServerTransport());
 
 async function ensureModelReady() {
   const modelDir = modelCacheDir(dataDir);
-  if (!fs.existsSync(modelDir) || !isModelCacheReady(dataDir)) {
+  modelState.modelCacheReady = fs.existsSync(modelDir) && isModelCacheReady(dataDir);
+  if (!modelState.modelCacheReady) {
     throw new Error(`ContextOS model cache missing: ${modelDir}. Run ctx install first.`);
+  }
+}
+
+async function preloadEmbeddingModel() {
+  modelState.preloadStatus = "loading";
+  const result = await preloadEmbeddingPipeline({
+    dataDir,
+    allowRemote: false,
+    warmText: "contextos warmup"
+  });
+  modelState.embeddingPipelineLoaded = Boolean(result.loaded);
+  modelState.preloadStatus = result.status;
+  modelState.loadedAt = result.loaded ? Date.now() : null;
+  modelState.error = result.error || null;
+  if (result.loaded) {
+    console.error(`ctx-mcp embedding model hot (${result.elapsedMs}ms)`);
+  } else {
+    console.error(`ctx-mcp embedding preload failed: ${result.error || result.status}`);
   }
 }
 
@@ -42,9 +70,12 @@ function startBridge() {
     });
   });
   bridge.on("error", (error) => {
+    modelState.bridgeReady = false;
     console.error(`ctx-mcp bridge disabled: ${error?.message || String(error)}`);
   });
-  bridge.listen(socketPath);
+  bridge.listen(socketPath, () => {
+    modelState.bridgeReady = true;
+  });
   process.on("exit", () => {
     clearInterval(keepAlive);
     fs.rmSync(socketPath, { force: true });
@@ -60,6 +91,10 @@ async function handleBridgeRequest(socket, raw) {
   socket.pause();
   try {
     const payload = JSON.parse(raw.trim() || "{}");
+    if (payload.type === "health") {
+      socket.end(JSON.stringify({ bridgeRevision: CTX_MCP_BRIDGE_REVISION, health: bridgeHealth() }));
+      return;
+    }
     const result = await scoreContext({
       cwd: payload.cwd || process.cwd(),
       prompt: payload.prompt || "",
@@ -83,4 +118,15 @@ async function handleBridgeRequest(socket, raw) {
       telemetry: { elapsedMs: 0, modelStatus: "error" }
     }));
   }
+}
+
+function bridgeHealth() {
+  return {
+    model_cache_ready: Boolean(modelState.modelCacheReady),
+    embedding_pipeline_loaded: Boolean(modelState.embeddingPipelineLoaded),
+    bridge_ready: Boolean(modelState.bridgeReady),
+    preload_status: modelState.preloadStatus,
+    loaded_at: modelState.loadedAt || undefined,
+    error: modelState.error || undefined
+  };
 }

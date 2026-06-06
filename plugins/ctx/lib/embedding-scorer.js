@@ -152,6 +152,40 @@ export async function warmIndexedEmbeddings({
   }
 }
 
+export async function preloadEmbeddingPipeline({
+  dataDir = defaultDataRoot(),
+  allowRemote = false,
+  warmText = "contextos warmup"
+} = {}) {
+  if (!allowRemote && !isModelCacheReady(dataDir)) {
+    return { status: "missing-model", loaded: false, cachePath: path.join(dataDir, "embeddings.db") };
+  }
+  const started = Date.now();
+  try {
+    const embedder = await getExtractor({ allowRemote, dataDir });
+    await embedder(String(warmText || "contextos warmup"), {
+      pooling: "mean",
+      normalize: true
+    });
+    return {
+      status: "loaded",
+      loaded: true,
+      model: DEFAULT_MODEL,
+      cachePath: path.join(dataDir, "embeddings.db"),
+      elapsedMs: Date.now() - started
+    };
+  } catch (error) {
+    return {
+      status: "load-failed",
+      loaded: false,
+      model: DEFAULT_MODEL,
+      cachePath: path.join(dataDir, "embeddings.db"),
+      elapsedMs: Date.now() - started,
+      error: error?.message || String(error)
+    };
+  }
+}
+
 async function enhanceRuleScores(rules, task, { dataDir, sources, allowRemote }) {
   const cache = await openEmbeddingCache(dataDir);
   const embedder = await getExtractor({ allowRemote, dataDir });
