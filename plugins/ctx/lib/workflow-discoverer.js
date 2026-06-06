@@ -30,11 +30,13 @@ const KNOWN_AGENT_NAMES = new Set([
 
 export function workflowSearchRoots({ cwd = process.cwd(), home = os.homedir() } = {}) {
   return [
+    path.join(cwd, ".agents", "workflows"),
     path.join(cwd, ".claude", "workflows"),
     path.join(cwd, ".codex", "workflows"),
     path.join(cwd, ".gemini", "workflows"),
     path.join(cwd, ".gemini", "antigravity", "workflows"),
     path.join(cwd, ".gemini", "antigravity-cli", "workflows"),
+    path.join(home, ".agents", "workflows"),
     path.join(home, ".claude", "workflows"),
     path.join(home, ".codex", "workflows"),
     path.join(home, ".gemini", "workflows"),

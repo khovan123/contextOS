@@ -542,6 +542,60 @@ describe("skill discoverer", () => {
     ]);
   });
 
+  it("uses global skills with project evidence for forum and chat feature prompts", async () => {
+    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-skill-global-forum-"));
+    fs.mkdirSync(path.join(cwd, "webapp"), { recursive: true });
+    fs.writeFileSync(path.join(cwd, "package.json"), JSON.stringify({
+      workspaces: ["webapp"]
+    }));
+    fs.writeFileSync(path.join(cwd, "webapp", "package.json"), JSON.stringify({
+      dependencies: { next: "^15.0.0", react: "^19.0.0" }
+    }));
+
+    const suggested = await suggestSkills({
+      cwd,
+      dataDir: fs.mkdtempSync(path.join(os.tmpdir(), "ctx-skill-global-forum-cache-")),
+      prompt: "create forum page, where to show new topic, trending, and chatting everyone",
+      skills: [
+        {
+          name: "nextjs-app-router-patterns",
+          description: "Build Next.js App Router pages, layouts, route groups, and React UI features.",
+          path: "/home/user/.agents/skills/nextjs-app-router-patterns/SKILL.md",
+          scope: "global"
+        },
+        {
+          name: "realtime-chat",
+          description: "Implement forum discussions, topics, realtime chat, messages, and websocket UX.",
+          path: "/home/user/.config/skillshare/skills/realtime-chat/SKILL.md",
+          scope: "global"
+        },
+        {
+          name: "metasploit-framework",
+          description: "Use for penetration testing and exploit workflows.",
+          path: "/home/user/.agents/skills/metasploit-framework/SKILL.md",
+          scope: "global"
+        }
+      ],
+      indexedSearcher: indexedSearcherFor({
+        "nextjs-app-router-patterns": 0.93,
+        "realtime-chat": 0.9,
+        "metasploit-framework": 0.2
+      }),
+      limit: 3
+    });
+
+    expect(suggested.map((skill) => skill.name)).toEqual([
+      "realtime-chat",
+      "nextjs-app-router-patterns"
+    ]);
+    expect(suggested[0].evidence).toEqual(expect.arrayContaining([
+      "source:community",
+      "dependency:next",
+      "file:package.json"
+    ]));
+    expect(suggested[1].sourceBoostScore).toBe(0);
+  });
+
   it("suggests Expo runtime skills for QR/connect run prompts in Expo projects", async () => {
     const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-skill-expo-qr-"));
     fs.mkdirSync(path.join(cwd, "webapp"), { recursive: true });

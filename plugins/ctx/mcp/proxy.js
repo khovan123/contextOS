@@ -9,6 +9,9 @@ const { serverName, command, args } = parseArgs(process.argv.slice(2));
 const cwd = process.cwd();
 const telemetryPath = path.join(workspaceDataDir({ cwd }), "telemetry.jsonl");
 let inspectBuffer = "";
+let childExit = null;
+let pendingStdinWrites = 0;
+let stdinEnded = false;
 
 const child = spawn(command, args, {
   cwd,
@@ -18,20 +21,32 @@ const child = spawn(command, args, {
 
 process.stdin.on("data", (chunk) => {
   inspectClientChunk(chunk);
-  child.stdin.write(chunk);
+  pendingStdinWrites += 1;
+  if (!child.stdin.write(chunk, onChildStdinWrite)) process.stdin.pause();
+});
+
+child.stdin.on("drain", () => {
+  process.stdin.resume();
 });
 
 process.stdin.on("end", () => {
-  child.stdin.end();
+  stdinEnded = true;
+  maybeEndChildStdin();
 });
 
-child.stdout.on("data", (chunk) => {
-  process.stdout.write(chunk);
-});
+function onChildStdinWrite() {
+  pendingStdinWrites -= 1;
+  maybeEndChildStdin();
+}
 
-child.stderr.on("data", (chunk) => {
-  process.stderr.write(chunk);
-});
+function maybeEndChildStdin() {
+  if (stdinEnded && pendingStdinWrites === 0 && !child.stdin.destroyed) {
+    child.stdin.end();
+  }
+}
+
+child.stdout.pipe(process.stdout);
+child.stderr.pipe(process.stderr);
 
 child.on("error", (error) => {
   process.stderr.write(`contextos mcp proxy failed to start ${serverName}: ${error?.message || String(error)}\n`);
@@ -39,9 +54,15 @@ child.on("error", (error) => {
 });
 
 child.on("exit", (code, signal) => {
-  if (signal) process.kill(process.pid, signal);
-  else process.exit(code ?? 0);
+  childExit = { code, signal };
+  maybeFinish();
 });
+
+function maybeFinish() {
+  if (!childExit) return;
+  if (childExit.signal) process.kill(process.pid, childExit.signal);
+  else process.exitCode = childExit.code ?? 0;
+}
 
 function inspectClientChunk(chunk) {
   inspectBuffer += chunk.toString("utf8");

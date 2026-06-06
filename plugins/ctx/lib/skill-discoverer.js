@@ -551,7 +551,16 @@ function inferSkillMetadata(skill = {}) {
   }
   if (/\bnext|app router\b/.test(text)) {
     metadata.dependencies.push("next", "react");
-    metadata.positivePrompts.push("frontend", "ui", "role", "dashboard", "app router");
+    metadata.positivePrompts.push("frontend", "ui", "role", "dashboard", "app router", "page", "webapp");
+  }
+  if (/\b(frontend|react|ui|component|layout|design)\b/.test(text)) {
+    metadata.dependencies.push("react");
+    metadata.positivePrompts.push("frontend", "ui", "component", "page", "layout", "button", "modal");
+  }
+  if (/\b(forum|topic|community|chat|message|realtime|websocket|socket|conversation)\b/.test(text)) {
+    metadata.positivePrompts.push("forum", "topic", "new topic", "trending", "chat", "chatting", "message", "realtime", "websocket");
+    metadata.files.push("package.json", "webapp/package.json", "services/*/package.json");
+    metadata.dependencies.push("next", "react", "socket.io", "ws", "@nestjs/websockets");
   }
   return metadata;
 }
@@ -570,16 +579,18 @@ function hybridSkillScore(skill, { prompt, projectEvidence }) {
   const projectEvidenceScore = dependencyEvidence.score;
   const fileConfigScore = fileEvidence.score;
   const importGraphScore = 0;
+  const sourceBoostScore = skillSourceBoostScore(skill);
   const externalGraphScore = 0;
   const memoryScore = 0;
   const hybridScore = Math.max(0, Math.min(1,
-    semanticScore * 0.30
+    semanticScore * 0.25
     + promptMatch.score * 0.20
-    + projectEvidenceScore * 0.20
+    + projectEvidenceScore * 0.25
     + fileConfigScore * 0.10
     + importGraphScore * 0.10
-    + externalGraphScore * 0.05
-    + memoryScore * 0.05
+    + sourceBoostScore * 0.05
+    + externalGraphScore * 0.03
+    + memoryScore * 0.02
     - negativePenalty * 0.20
   ));
   const explicit = (skill.reasons || []).includes("explicit-skill");
@@ -590,13 +601,15 @@ function hybridSkillScore(skill, { prompt, projectEvidence }) {
     dependencyEvidence,
     fileEvidence,
     negativePenalty,
-    explicit
+    explicit,
+    semanticScore
   });
   const evidence = [...new Set([
     ...(skill.reasons || []),
     ...promptMatch.matches.map((item) => `prompt:${item}`),
     ...dependencyEvidence.matches.map((item) => `dependency:${item}`),
-    ...fileEvidence.matches.map((item) => `file:${item}`)
+    ...fileEvidence.matches.map((item) => `file:${item}`),
+    ...(sourceBoostScore ? [`source:${skillSourceLabel(skill)}`] : [])
   ])];
   const negativeEvidence = [
     ...negativeDependencies.matches.map((item) => `dependency:${item}`),
@@ -618,6 +631,7 @@ function hybridSkillScore(skill, { prompt, projectEvidence }) {
     projectEvidenceScore,
     fileConfigScore,
     importGraphScore,
+    sourceBoostScore,
     externalGraphScore,
     memoryScore,
     graphScore: externalGraphScore,
@@ -636,7 +650,8 @@ function calibrateSkillConfidence(score, {
   dependencyEvidence,
   fileEvidence,
   negativePenalty = 0,
-  explicit = false
+  explicit = false,
+  semanticScore = 0
 } = {}) {
   let confidence = Math.max(0, Math.min(1, Number(score || 0)));
   const hasDependencyEvidence = Boolean(dependencyEvidence?.matches?.length);
@@ -646,6 +661,9 @@ function calibrateSkillConfidence(score, {
 
   if (!hasProjectEvidence && !explicit) {
     confidence = Math.min(confidence, 0.62);
+  }
+  if (!hasProjectEvidence && hasPromptEvidence && Number(semanticScore || 0) >= 0.75 && !explicit) {
+    confidence = Math.max(confidence, 0.56);
   }
   if (isAmbiguousPrompt(prompt) && !(hasDependencyEvidence && hasFileEvidence) && !explicit) {
     confidence = Math.min(confidence, 0.64);
@@ -660,6 +678,22 @@ function calibrateSkillConfidence(score, {
     confidence = Math.min(confidence, 0.74);
   }
   return Math.max(0, Math.min(1, confidence));
+}
+
+function skillSourceBoostScore(skill = {}) {
+  if (skill.scope === "project") return 1;
+  if (isCommunitySkill(skill)) return 0.4;
+  return 0;
+}
+
+function skillSourceLabel(skill = {}) {
+  if (skill.scope === "project") return "project";
+  if (isCommunitySkill(skill)) return "community";
+  return "global";
+}
+
+function isCommunitySkill(skill = {}) {
+  return String(skill.path || "").includes(`${path.sep}.config${path.sep}skillshare${path.sep}skills${path.sep}`);
 }
 
 function confidenceBand(confidence) {

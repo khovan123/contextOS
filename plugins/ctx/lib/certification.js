@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { filterActionableRules, parseRules } from "./analyzer.js";
 import { readAgentsChain } from "./reader.js";
-import { scanSkills } from "./skill-discoverer.js";
+import { scanSkills, skillSearchRoots } from "./skill-discoverer.js";
 import { scanWorkflows } from "./workflow-discoverer.js";
 
 const PROJECT_SKILL_ROOTS = [
@@ -17,6 +17,7 @@ const PROJECT_SKILL_ROOTS = [
 ];
 
 const PROJECT_WORKFLOW_ROOTS = [
+  [".agents", "workflows"],
   [".claude", "workflows"],
   [".codex", "workflows"],
   [".gemini", "workflows"],
@@ -27,7 +28,7 @@ const PROJECT_WORKFLOW_ROOTS = [
 export function inspectContextOSReady({ cwd = process.cwd(), home = os.homedir() } = {}) {
   const root = findProjectRoot(cwd);
   const rules = inspectRules({ cwd, root, home });
-  const skills = inspectSkills({ root });
+  const skills = inspectSkills({ root, home });
   const workflows = inspectWorkflows({ root });
   const overall = Math.round((rules.score + skills.score + workflows.score) / 3);
   const tier = readinessTier(overall, { rules, skills, workflows });
@@ -48,7 +49,8 @@ export function formatContextOSReady(result) {
     "Repository Score",
     "",
     `Rules: ${result.rules.score}`,
-    `Skills: ${result.skills.score}`,
+    `Skill Coverage: ${result.skills.score}`,
+    `Project Skill Overrides: ${result.skills.projectOverrideScore}`,
     `Workflows: ${result.workflows.score}`,
     "",
     "Overall:",
@@ -56,7 +58,8 @@ export function formatContextOSReady(result) {
     "",
     "Evidence:",
     `- Rules: ${result.rules.summary}`,
-    `- Skills: ${result.skills.summary}`,
+    `- Skill Coverage: ${result.skills.summary}`,
+    `- Project Skill Overrides: ${result.skills.projectSummary}`,
     `- Workflows: ${result.workflows.summary}`
   ];
 
@@ -108,10 +111,15 @@ function inspectRules({ cwd, root, home }) {
   };
 }
 
-function inspectSkills({ root }) {
-  const roots = PROJECT_SKILL_ROOTS.map((parts) => path.join(root, ...parts));
-  const skills = scanSkills({ cwd: root, roots, maxSkills: 500 });
-  const metadataFiles = findFiles(roots, (filePath) => /skill\.ya?ml$/i.test(path.basename(filePath)));
+function inspectSkills({ root, home }) {
+  const projectRoots = PROJECT_SKILL_ROOTS.map((parts) => path.join(root, ...parts));
+  const roots = skillSearchRoots({ cwd: root, home });
+  const skills = scanSkills({ cwd: root, roots, maxSkills: 5000 });
+  const projectSkills = skills.filter((skill) => skill.scope === "project");
+  const sharedSkills = skills.filter((skill) => skill.scope !== "project");
+  const communitySkills = skills.filter((skill) => isCommunitySkillPath(skill.path));
+  const globalSkills = sharedSkills.filter((skill) => !isCommunitySkillPath(skill.path));
+  const metadataFiles = findFiles(projectRoots, (filePath) => /skill\.ya?ml$/i.test(path.basename(filePath)));
   const richMetadata = metadataFiles.filter((filePath) => {
     const content = safeRead(filePath);
     return /^positive_triggers:/m.test(content)
@@ -123,27 +131,50 @@ function inspectSkills({ root }) {
   const recommendations = [];
 
   if (skills.length) score += 50;
-  else recommendations.push("Add project skills under .codex/skills/ or .agents/skills/.");
+  else recommendations.push("Sync or install global skills with `ctx setup` or `ctx sync --skills`.");
 
-  if (metadataFiles.length) score += 20;
-  else recommendations.push("Add skill.yaml metadata beside important SKILL.md files.");
+  if (sharedSkills.length || projectSkills.length >= 3) score += 25;
 
-  if (richMetadata.length) score += 20;
-  else recommendations.push("Include positive_triggers, negative_triggers, evidence, and workflow in skill.yaml.");
+  if (projectSkills.length) score += 10;
 
-  if (skills.length >= 3) score += 10;
-  else recommendations.push("Provide at least three project-relevant skills for common tasks.");
+  if (metadataFiles.length) score += 5;
+  if (richMetadata.length) score += 10;
+  if (projectSkills.length && !metadataFiles.length) {
+    recommendations.push("Add skill.yaml metadata beside project-specific SKILL.md files.");
+  }
+  if (projectSkills.length && !richMetadata.length) {
+    recommendations.push("Include positive_triggers, negative_triggers, evidence, and workflow in project skill.yaml files.");
+  }
 
   return {
     score: Math.min(100, score),
     count: skills.length,
+    globalCount: globalSkills.length,
+    communityCount: communitySkills.length,
+    sharedCount: sharedSkills.length,
+    projectCount: projectSkills.length,
+    projectOverrideScore: projectSkillOverrideScore(projectSkills),
     metadataCount: metadataFiles.length,
     richMetadataCount: richMetadata.length,
     summary: skills.length
-      ? `${skills.length} skill(s), ${metadataFiles.length} metadata file(s)`
-      : "missing project skill packs",
+      ? `${skills.length} skill(s): ${globalSkills.length} global, ${communitySkills.length} community/shared, ${projectSkills.length} project override(s)`
+      : "missing global/community/project skill catalog",
+    projectSummary: projectSkills.length
+      ? `${projectSkills.length} project override skill(s), ${metadataFiles.length} metadata file(s)`
+      : "0 project override skill(s); global/community skills remain valid",
     recommendations
   };
+}
+
+function projectSkillOverrideScore(projectSkills = []) {
+  if (projectSkills.length >= 3) return 100;
+  if (projectSkills.length === 2) return 70;
+  if (projectSkills.length === 1) return 40;
+  return 0;
+}
+
+function isCommunitySkillPath(filePath = "") {
+  return String(filePath || "").includes(`${path.sep}.config${path.sep}skillshare${path.sep}skills${path.sep}`);
 }
 
 function inspectWorkflows({ root }) {
@@ -175,6 +206,7 @@ function inspectWorkflows({ root }) {
 
 function readinessTier(overall, { rules, skills, workflows }) {
   if (rules.score < 50 || skills.score < 50 || workflows.score < 50) return "Not Ready";
+  if (!skills.projectCount && overall >= 85) return "Silver";
   if (overall >= 85) return "Gold";
   if (overall >= 70) return "Silver";
   if (overall >= 50) return "Bronze";

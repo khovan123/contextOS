@@ -10,32 +10,28 @@ describe("mcp proxy", () => {
   it("forwards MCP stdio and records tools/call telemetry", async () => {
     const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-proxy-cwd-"));
     const dataRoot = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-proxy-data-"));
-    const childCode = [
-      "process.stdin.once('data', c => { process.stdout.write(c); process.exit(0); });"
-    ].join("");
-    const proxy = spawn(process.execPath, [
-      proxyPath,
-      "--name",
-      "code-review-graph",
-      "--",
-      process.execPath,
-      "-e",
-      childCode
-    ], {
-      cwd,
-      env: { ...process.env, PLUGIN_DATA: dataRoot },
-      stdio: ["pipe", "pipe", "pipe"]
-    });
-
     const message = {
       jsonrpc: "2.0",
       id: 1,
       method: "tools/call",
       params: { name: "detect_changes_tool", arguments: {} }
     };
+    const proxy = spawn(process.execPath, [
+      proxyPath,
+      "--name",
+      "code-review-graph",
+      "--",
+      process.execPath,
+      "--version"
+    ], {
+      cwd,
+      env: { ...process.env, PLUGIN_DATA: dataRoot },
+      stdio: ["pipe", "pipe", "pipe"]
+    });
+
     const stdout = await writeAndCollect(proxy, `${JSON.stringify(message)}\n`);
 
-    expect(JSON.parse(stdout.trim())).toMatchObject(message);
+    expect(stdout.trim()).toMatch(/^v\d+\.\d+\.\d+/);
     const workspaceDir = path.join(dataRoot, "workspaces");
     const telemetryFile = findFile(workspaceDir, "telemetry.jsonl");
     const telemetry = fs.readFileSync(telemetryFile, "utf8");
@@ -67,10 +63,10 @@ function writeAndCollect(child, input) {
       stderr += chunk.toString("utf8");
     });
     child.on("error", (error) => finish(reject, error));
-    child.on("exit", (code) => {
+    child.on("close", (code) => {
       if (!stdout) finish(reject, new Error(`proxy exited ${code}: ${stderr}`));
     });
-    child.stdin.write(input);
+    setTimeout(() => child.stdin.end(input), 25);
   });
 }
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.6
+
+- **Global-first skill coverage:** `ctx doctor` now treats global and community skills as valid skill coverage instead of requiring project-local skill packs. Project skills are reported separately as optional project overrides, so repositories with synced global skills no longer show `Skills: 0` or `Not Ready` just because `.codex/skills` is absent.
+- **Evidence-gated skill routing:** Updated Skill Router scoring so global skills are first-class candidates, community skills get a small source boost, and project skills get an override boost without penalizing global catalogs. Prompt+semantic matches without project evidence now remain medium-confidence candidates instead of disappearing.
+- **Shared project context:** `ctx doctor --fix` and `ctx setup --generate-project-context` now scaffold shared project context under `.agents/skills/` and `.agents/workflows/` instead of Codex-only `.codex/` paths. Workflow discovery and certification now read `.agents/workflows` so the same generated context can be synced to Codex, Claude Code, Gemini, and Antigravity.
+
 ## 0.6.5
 
 - **Generated skill frontmatter:** Fixed `ctx doctor --fix` starter `SKILL.md` output so generated project skills include YAML frontmatter with `name` and `description`. This prevents invalid-skill warnings after generated skills are synced through skillshare.

@@ -44,7 +44,37 @@ describe("ContextOS certification doctor", () => {
     expect(result.tier).toBe("Gold");
     expect(result.overall).toBeGreaterThanOrEqual(85);
     expect(output).toContain("Repository Score");
+    expect(output).toContain("Skill Coverage:");
+    expect(output).toContain("Project Skill Overrides:");
     expect(output).toContain("ContextOS Ready Gold");
+  });
+
+  it("treats global skills as valid coverage when project overrides are absent", () => {
+    const repo = makeRepo();
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-certified-home-"));
+    fs.writeFileSync(path.join(repo, "AGENTS.md"), "- Always run focused tests.\n- Use project rules.\n- Avoid unrelated edits.\n");
+    writeWorkflow(repo, ".codex/workflows/primary.md", [
+      "# Primary Workflow",
+      "",
+      "Use this workflow for implementation tasks.",
+      "",
+      "planner -> tester -> code-reviewer",
+      "",
+      "Inspect, implement, verify."
+    ]);
+    writeSkillAt(path.join(home, ".agents", "skills", "nextjs-app-router"), "nextjs-app-router");
+    writeSkillAt(path.join(home, ".config", "skillshare", "skills", "realtime-chat"), "realtime-chat");
+
+    const result = inspectContextOSReady({ cwd: repo, home });
+    const output = formatContextOSReady(result);
+
+    expect(result.skills.score).toBeGreaterThanOrEqual(50);
+    expect(result.skills.projectCount).toBe(0);
+    expect(result.skills.globalCount).toBe(1);
+    expect(result.skills.communityCount).toBe(1);
+    expect(result.tier).toBe("Silver");
+    expect(output).toContain("Project Skill Overrides: 0");
+    expect(output).toContain("global/community skills remain valid");
   });
 
   it("does not certify a repository missing skills and workflows", () => {
@@ -58,7 +88,7 @@ describe("ContextOS certification doctor", () => {
     expect(result.skills.score).toBe(0);
     expect(result.workflows.score).toBe(0);
     expect(output).toContain("ContextOS Ready: Not Ready");
-    expect(output).toContain("Add project skills");
+    expect(output).toContain("Sync or install global skills");
   });
 });
 
@@ -69,7 +99,10 @@ function makeRepo() {
 }
 
 function writeSkill(repo, id) {
-  const skillDir = path.join(repo, ".codex", "skills", id);
+  writeSkillAt(path.join(repo, ".codex", "skills", id), id);
+}
+
+function writeSkillAt(skillDir, id) {
   fs.mkdirSync(skillDir, { recursive: true });
   fs.writeFileSync(path.join(skillDir, "SKILL.md"), [
     "---",

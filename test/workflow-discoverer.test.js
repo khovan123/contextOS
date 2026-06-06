@@ -78,6 +78,24 @@ describe("workflow discoverer", () => {
     expect(workflows.map((workflow) => workflow.name)).toContain("primary-workflow");
   });
 
+  it("scans shared .agents workflow directories", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-shared-workflows-"));
+    const workflowsRoot = path.join(tmp, ".agents", "workflows");
+    writeWorkflow(workflowsRoot, "primary-workflow", [
+      "# Primary Workflow",
+      "",
+      "Shared feature implementation workflow for every installed agent.",
+      "",
+      "#### Code Implementation",
+      "Use `planner`, `tester`, and `code-reviewer`."
+    ].join("\n"));
+
+    const workflows = scanWorkflows({ cwd: tmp });
+
+    expect(workflows.map((workflow) => workflow.name)).toContain("primary-workflow");
+    expect(workflows[0].relativePath).toBe(path.join(".agents", "workflows", "primary-workflow.md"));
+  });
+
   it("deduplicates workflows by name across agent roots", () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-workflow-dedupe-"));
     const claudeRoot = path.join(tmp, ".claude", "workflows");

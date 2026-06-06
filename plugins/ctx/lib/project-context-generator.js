@@ -4,6 +4,7 @@ import path from "node:path";
 import { clearSkillScanCache } from "./skill-discoverer.js";
 
 const STARTER_SKILL_LIMIT = 3;
+const SHARED_PROJECT_CONTEXT_DIR = ".agents";
 
 export function generateProjectContext({ cwd = process.cwd(), force = false } = {}) {
   const root = findProjectRoot(cwd);
@@ -13,7 +14,7 @@ export function generateProjectContext({ cwd = process.cwd(), force = false } = 
   const skipped = [];
 
   for (const skill of skills) {
-    const dir = path.join(root, ".codex", "skills", skill.id);
+    const dir = path.join(root, SHARED_PROJECT_CONTEXT_DIR, "skills", skill.id);
     const skillPath = path.join(dir, "SKILL.md");
     const yamlPath = path.join(dir, "skill.yaml");
     fs.mkdirSync(dir, { recursive: true });
@@ -21,7 +22,7 @@ export function generateProjectContext({ cwd = process.cwd(), force = false } = 
     writeFile({ filePath: yamlPath, content: renderSkillYaml(skill), force, created, skipped });
   }
 
-  const workflowPath = path.join(root, ".codex", "workflows", "primary.md");
+  const workflowPath = path.join(root, SHARED_PROJECT_CONTEXT_DIR, "workflows", "primary.md");
   fs.mkdirSync(path.dirname(workflowPath), { recursive: true });
   writeFile({
     filePath: workflowPath,
@@ -61,7 +62,8 @@ export function formatProjectContextGeneration(result) {
     for (const filePath of result.skipped) lines.push(`- ${path.relative(result.root, filePath)}`);
   }
   lines.push("", "Next:");
-  lines.push("- Review generated skills/workflow and edit project-specific wording.");
+  lines.push("- Review generated shared skills/workflow and edit project-specific wording.");
+  lines.push("- Run: ctx sync --skills && ctx sync --workflows");
   lines.push("- Run: ctx doctor");
   lines.push("- Run: ctx debug -- \"your task\"");
   return lines.join("\n");

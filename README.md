@@ -246,14 +246,15 @@ ctx doctor
 Repository Score
 
 Rules: 92
-Skills: 88
+Skill Coverage: 88
+Project Skill Overrides: 0
 Workflows: 84
 
 Overall:
-ContextOS Ready Gold
+ContextOS Ready Silver
 ```
 
-The score checks project `AGENTS.md` rules, project skill packs under `.codex/skills/` or `.agents/skills/`, and project workflows under `.codex/workflows/` or `.claude/workflows/`. Use the badge only after `ctx doctor` reports Bronze, Silver, or Gold.
+The score checks project `AGENTS.md` rules, global/community skill coverage, optional project skill overrides, and project workflows. Shared project context should live under `.agents/skills/` and `.agents/workflows/`; ContextOS can sync it to Codex, Claude Code, Gemini, and Antigravity agent roots. Use the badge only after `ctx doctor` reports Bronze, Silver, or Gold.
 
 ## Quick Commands
 
@@ -584,14 +585,14 @@ This warning comes from a transitive dependency in the local embedding/WASM stac
 | `ctx install --copy` | Copies only the plugin payload to `$CODEX_HOME/plugins/ctx`. | Legacy local development or manual plugin experiments. | Does not sync the active marketplace, rebuild indexes, register MCP, or install global hooks. Prefer `ctx refresh` for active local updates. |
 | `ctx setup` | Runs the first-run setup wizard. | You want the recommended onboarding flow after `npm install -g @minhpnq1807/contextos`. | Installs selected agents, optionally syncs Ruler rules/MCP and skillshare skills, asks which prompt sections to show, then prints next steps. |
 | `ctx setup --yes` | Runs setup with defaults non-interactively. | You want scriptable Codex setup. | Uses `codex`, enables injection, syncs rules, syncs skills, skips interactive community-skill installation when no TTY is available, and passes `--yes` to dependency setup prompts. Use `--agents codex,claude,agy` for multi-agent setup. |
-| `ctx setup --generate-project-context` | Generates starter project skills and workflow during setup. | Your repo has rules but `ctx doctor` reports missing skills/workflows. | Creates `.codex/skills/<detected-skill>/SKILL.md`, matching `skill.yaml`, and `.codex/workflows/primary.md` without overwriting existing files. |
+| `ctx setup --generate-project-context` | Generates starter shared project skills and workflow during setup. | Your repo has rules but `ctx doctor` reports missing skills/workflows. | Creates `.agents/skills/<detected-skill>/SKILL.md`, matching `skill.yaml`, and `.agents/workflows/primary.md` without overwriting existing files. Run `ctx sync --skills` and `ctx sync --workflows` to push them to selected agents. |
 | `ctx setup --agents <list>` | Runs setup for selected agents. | You want only part of the default set. | Accepts comma-separated `codex`, `claude`, `agy`, or `antigravity`. |
 | `ctx setup --no-rules` | Skips Ruler sync during setup. | You only want hooks/MCP install and maybe skill sync. | Does not run `ctx sync --rules`. |
 | `ctx setup --no-skills` | Skips skillshare sync during setup. | You do not want shared skills configured. | Does not run `ctx sync --skills`. |
 | `ctx setup --quiet` | Runs setup in measurement-only mode. | You want reports/stats without visible injected prompt context. | Installs hooks with prompt context injection disabled. |
 | `ctx debug -- "task"` | Runs the scheduler locally for a fake prompt. | You want to see which AGENTS.md rules and files ContextOS would inject before using Codex. | Prints rule scores, scoring reasons, suggested files, and final `additionalContext`. |
 | `ctx doctor` | Scores repository ContextOS readiness. | You want to add or verify a `ContextOS Ready` badge. | Prints Rules, Skills, Workflows, Overall tier, evidence, and next recommendations. |
-| `ctx doctor --fix` | Generates starter ContextOS project context. | `ctx doctor` says skills/workflows are missing and you want explicit local scaffolding. | Detects package/config evidence, creates up to three starter project skills plus `.codex/workflows/primary.md`, then prints the updated readiness score. |
+| `ctx doctor --fix` | Generates starter ContextOS project context. | `ctx doctor` says skills/workflows are missing and you want explicit local scaffolding. | Detects package/config evidence, creates up to three shared project skills plus `.agents/workflows/primary.md`, then prints the updated readiness score. |
 | `ctx report` | Shows the last Stop-hook compliance report for the current workspace. | An agent task has finished and you want the summary again. | Prints sectioned tables for summary, rule outcomes, suggested files, and runtime telemetry from `~/.ctx/contextos/workspaces/<workspace-id>/last-report.json`. |
 | `ctx evidence` | Shows detailed evidence behind the last report for the current workspace. | You want to inspect why a rule was marked `followed`, `ignored`, `unknown`, or `unmeasurable`. | Prints a compact evidence table plus per-rule detail tables. |
 | `ctx stats` | Shows aggregate runtime metrics for the current workspace. | You want to know whether ContextOS is active and useful over time. | Prints sectioned tables for prompt/report counts, injection rate, efficiency, rule outcomes, hook events, last prompt, and last report. |
@@ -611,7 +612,7 @@ This warning comes from a transitive dependency in the local embedding/WASM stac
 | `ctx sync --skills --no-collect` | Skips collecting existing agent skills into skillshare. | You already manage `~/.config/skillshare/skills` and only want to push it out. | Initializes/syncs skillshare without running `skillshare backup` or `skillshare collect --all`. |
 | `ctx sync --skills --no-embeddings` | Skips ContextOS skill embedding rebuild after skillshare sync. | You have a very large skill catalog and want sync to finish quickly. | Runs skillshare sync, then leaves embeddings to a later `ctx embeddings warm -- "task"` run. |
 | `ctx sync --skills --verbose` | Shows native skillshare token budget warnings during sync. | You are diagnosing skillshare path overlap or always-loaded context size. | Omits ContextOS' default `skillshare sync --quiet` behavior. |
-| `ctx sync --workflows` | Syncs and indexes agent workflow markdown files for prompt-time workflow suggestions. | You use `.claude/workflows/`, `.codex/workflows/`, or Antigravity workflow folders and want every agent to see the same deduped workflow set. | Scans project/global workflow folders, dedupes by workflow name, copies unique workflows to selected global agent roots, warms workflow embeddings, and makes `ctx debug`/prompt hooks show relevant workflow hints. |
+| `ctx sync --workflows` | Syncs and indexes agent workflow markdown files for prompt-time workflow suggestions. | You use `.agents/workflows/`, `.claude/workflows/`, `.codex/workflows/`, or Gemini/Antigravity workflow folders and want every agent to see the same deduped workflow set. | Scans project/global workflow folders, dedupes by workflow name, copies unique workflows to selected global agent roots, warms workflow embeddings, and makes `ctx debug`/prompt hooks show relevant workflow hints. |
 | `ctx sync --workflows --agents <list>` | Syncs workflows only for selected agents. | You want a subset such as `codex,claude` or `codex,claude,agy`. | Accepts comma-separated `codex`, `claude`, `agy`, or `antigravity`; `agy` writes the Gemini/Antigravity workflow roots. |
 | `ctx sync --workflows --dry-run` | Previews workflow sync without writing files. | You want to inspect source workflows and target roots first. | Prints planned sync/index output and skips copying target files. |
 | `ctx skills` | Installs community skill libraries. | You want curated skills without running the full setup wizard. | Opens the community installer, uses a portable shell on Windows/Linux/macOS, repairs unsafe skill symlinks, and syncs installed skills to selected agents. |
