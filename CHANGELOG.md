@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.2
 
 - **Live agent leaderboard:** Added `ctx leaderboard --agents codex,gemini` and `npm run leaderboard:agents` to run the hallucination benchmark through installed Codex/Gemini CLIs with timeouts and skip/error reporting for missing or unauthenticated agents.
 - **Live GIF capture:** Added `npm run demo:capture` to regenerate the three launch GIFs from real local `ctx` command output across ContextOS and skill-routing fixture repos.
