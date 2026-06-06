@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.3
+
+- **Launch benchmark wording:** Clarified that `ctx leaderboard --hallucination` is an offline deterministic benchmark comparing a raw heuristic baseline with ContextOS evidence-based context selection, while live agent results remain pending external CLI environments.
+- **Offline leaderboard labels:** Renamed offline leaderboard output from agent-like labels to `Raw heuristic baseline` and `ContextOS evidence benchmark` so the 10% to 80% result is not confused with a live Codex/Gemini comparison.
+- **Live leaderboard alias:** Added `ctx leaderboard --hallucination --live --agent <name>` as a launch-friendly alias for running the hallucination benchmark through one installed agent CLI. Live benchmark output now reports `OK`/`SKIPPED`/`ERROR` style statuses and supports `CONTEXTOS_<AGENT>_CMD` command templates for external wrappers.
+
 ## 0.6.2
 
 - **Live agent leaderboard:** Added `ctx leaderboard --agents codex,gemini` and `npm run leaderboard:agents` to run the hallucination benchmark through installed Codex/Gemini CLIs with timeouts and skip/error reporting for missing or unauthenticated agents.

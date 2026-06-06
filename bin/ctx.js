@@ -199,7 +199,9 @@ Usage:
   ctx stats                                         Show workspace statistics
   ctx benchmark -- "task"                           Benchmark workspace for a task
   ctx benchmark --skills                            Run skill routing eval benchmark
-  ctx leaderboard --hallucination                   Compare raw agent guesses vs ContextOS routing
+  ctx leaderboard --hallucination                   Run offline deterministic hallucination benchmark
+  ctx leaderboard --hallucination --live --agent codex
+                                                    Run hallucination benchmark through one live CLI
   ctx leaderboard --agents codex,gemini             Run live CLI leaderboard for installed agents
   ctx sync --rules                                  Sync AGENTS.md rules to all agents
   ctx sync --rules --agents <names>                 Sync rules to specific agents only
@@ -252,6 +254,18 @@ function normalizeInstallAgent(agent) {
   if (normalized === "antigravity") return "agy";
   return normalized;
 }
+
+function leaderboardAgentsFromArgs(args) {
+  const agentIndex = args.indexOf("--agent");
+  const agentsIndex = args.indexOf("--agents");
+  const index = agentIndex >= 0 ? agentIndex : agentsIndex;
+  if (index < 0) return [];
+  return String(args[index + 1] || "")
+    .split(",")
+    .map((agent) => agent.trim())
+    .filter(Boolean);
+}
+
 /**
  * Intercept console.log from an async fn,
  * printing each line immediately with "│  " prefix for real-time feedback.
@@ -1039,7 +1053,17 @@ try {
     console.log(formatBenchmark(benchmarkWorkspace({ cwd: process.cwd(), task })));
     }
   } else if (command === "leaderboard") {
-    if (args.includes("--hallucination")) {
+    if (args.includes("--hallucination") && args.includes("--live")) {
+      const agents = leaderboardAgentsFromArgs(args);
+      const limitIndex = args.indexOf("--limit");
+      const timeoutIndex = args.indexOf("--timeout-ms");
+      console.log(formatAgentLeaderboard(runAgentLeaderboard({
+        rootDir,
+        agents: agents.length ? agents : undefined,
+        caseLimit: limitIndex >= 0 ? Number(args[limitIndex + 1]) : undefined,
+        timeoutMs: timeoutIndex >= 0 ? Number(args[timeoutIndex + 1]) : undefined
+      })));
+    } else if (args.includes("--hallucination")) {
       console.log(formatHallucinationLeaderboard(await runHallucinationLeaderboard({ rootDir })));
     } else if (args.includes("--agents")) {
       const index = args.indexOf("--agents");
@@ -1053,7 +1077,7 @@ try {
         timeoutMs: timeoutIndex >= 0 ? Number(args[timeoutIndex + 1]) : undefined
       })));
     } else {
-      throw new Error("Usage: ctx leaderboard --hallucination OR ctx leaderboard --agents codex,gemini");
+      throw new Error("Usage: ctx leaderboard --hallucination OR ctx leaderboard --hallucination --live --agent codex OR ctx leaderboard --agents codex,gemini");
     }
   } else if (command === "skills") {
     if (args[1] === "doctor") {

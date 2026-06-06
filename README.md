@@ -1,8 +1,8 @@
 # ContextOS
 
-Runtime context router for coding agents.
+Stop coding agents from ignoring repo rules, guessing the wrong path, and reading random files.
 
-Rules, files, skills, workflows, and evidence: injected before the agent writes code.
+ContextOS gives the agent the right rules, files, skills, workflows, and evidence before it writes code.
 
 [![npm version](https://img.shields.io/npm/v/@minhpnq1807/contextos.svg)](https://www.npmjs.com/package/@minhpnq1807/contextos)
 [![CI](https://github.com/khovan123/contextOS/actions/workflows/ci.yml/badge.svg)](https://github.com/khovan123/contextOS/actions/workflows/ci.yml)
@@ -10,19 +10,17 @@ Rules, files, skills, workflows, and evidence: injected before the agent writes 
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 ```text
-WITHOUT ContextOS
-  AGENTS.md is a long static blob
-  important rules drift into the middle
-  agent starts by grepping files and misses the repo contract
+Problem: Agents ignore project rules.
+Fix: ContextOS puts the relevant AGENTS.md rules in front of the agent for this task.
 
-WITH ContextOS
-  prompt -> score relevant AGENTS.md rules
-         -> inject critical rules at top and bottom
-         -> suggest files, skills, workflows
-         -> report followed / ignored / unknown
+Problem: Agents choose the wrong deployment path.
+Fix: ContextOS checks repo evidence before suggesting skills like EAS, Vercel, Docker, or CI/CD.
+
+Problem: Agents grep random files.
+Fix: ContextOS suggests the files and workflows to check first.
 ```
 
-ContextOS is not another `AGENTS.md` loader. It is a runtime context router for coding agents: it chooses the task-relevant rules, files, skills, workflows, and evidence before the agent starts editing.
+ContextOS is not another `AGENTS.md` loader. It is a pre-flight context layer for coding agents: it turns repo rules, project signals, skills, workflows, and evidence into a compact task brief before the agent starts editing.
 
 Published package: [`@minhpnq1807/contextos`](https://www.npmjs.com/package/@minhpnq1807/contextos)
 
@@ -36,7 +34,7 @@ Same prompt. Same model. Different context.
 ctx skills doctor -- "fix deployed"
 ```
 
-| Repo evidence | Expected route |
+| Repo evidence | What ContextOS tells the agent |
 | --- | --- |
 | `eas.json`, `expo`, `react-native` | `eas`, `mobile-deployment`, `github-actions-ci-cd` |
 | `vercel.json`, `next`, GitHub workflow | `vercel-deployment`, `github-actions-ci-cd`, `env-secret-management` |
@@ -55,7 +53,7 @@ Regenerate the GIFs from real local `ctx` command output:
 npm run demo:capture
 ```
 
-## Agent Hallucination Benchmark
+## Wrong Path Benchmark
 
 Generic agents often guess deployment tooling from the prompt alone:
 
@@ -64,7 +62,7 @@ Prompt: Fix deployment
 Raw agent guess: Vercel, Docker, Railway
 ```
 
-ContextOS routes from project evidence instead:
+ContextOS checks the repo first:
 
 ```text
 Detected evidence:
@@ -78,9 +76,9 @@ Selected skills:
 - github-actions-ci-cd
 ```
 
-That is the core launch demo: same prompt, same model, different repo context, correct skills.
+That is the core launch demo: same prompt, same model, different repo, correct next step.
 
-Skill Router internal fixture benchmark:
+Internal fixture benchmark:
 
 | Metric | Result |
 | --- | ---: |
@@ -91,26 +89,44 @@ Skill Router internal fixture benchmark:
 | Confidence Calibration | 100.0% |
 | Negative Gate Accuracy | 100.0% |
 
-This is an internal fixture benchmark, not an external real-world benchmark. It is designed to prove the router behavior across controlled Expo/EAS, Next/Vercel, Docker, Railway/Render, Firebase, auth, database, testing, mobile, and adversarial negative-gate cases.
+This is an internal fixture benchmark, not an external real-world benchmark. It is designed to prove that ContextOS changes its suggestions from repo evidence across controlled Expo/EAS, Next/Vercel, Docker, Railway/Render, Firebase, auth, database, testing, mobile, and adversarial negative cases.
 
-Hallucination leaderboard:
+Offline hallucination leaderboard:
 
 ```bash
 ctx leaderboard --hallucination
 ```
 
-Current local result across 20 fixture tasks and 12 repo contexts:
+Current deterministic result across 20 fixture tasks and 12 repo contexts:
 
-| System | Correct Skill |
+| System | Correct context choice |
 | --- | ---: |
-| Raw Agent | 10.0% |
-| ContextOS + Codex | 80.0% |
+| Raw heuristic baseline | 10.0% |
+| ContextOS evidence benchmark | 80.0% |
+
+This means ContextOS improves deterministic context routing from 10% to 80% on the offline hallucination task set. It does not claim ContextOS beats Codex, Gemini, Claude Code, or Cursor in live runs.
+
+Live agent benchmark support exists, but results are pending an external environment with working CLI auth/session access:
+
+```bash
+ctx leaderboard --hallucination --live --agent codex
+ctx leaderboard --hallucination --live --agent gemini
+```
+
+If a CLI cannot run in the current environment, the command reports `SKIPPED` or an agent error instead of blocking launch.
+
+Live benchmark tracking:
+
+- [Run Codex live benchmark](https://github.com/khovan123/contextOS/issues/1)
+- [Run Claude Code live benchmark](https://github.com/khovan123/contextOS/issues/3)
+- [Run Gemini CLI live benchmark](https://github.com/khovan123/contextOS/issues/4)
+- [Run Cursor live benchmark](https://github.com/khovan123/contextOS/issues/2)
 
 Example hook context injected before the agent works:
 
 ```text
 ## Critical ContextOS rules
-- IMPORTANT: This project has a knowledge graph. ALWAYS use code-review-graph MCP tools before Grep/Glob/Read.
+- IMPORTANT: This project has a knowledge graph. Use it before broad file search.
 - Use `query_graph` pattern="tests_for" to check coverage.
 
 ## Suggested files to check
@@ -129,7 +145,7 @@ ContextOS report
 Efficiency: 100%
 Injected rules: 8
 Rule outcomes: 8 followed, 0 ignored, 0 unknown
-Runtime telemetry: code-review-graph, code-review-graph.query_graph_tool
+Runtime evidence: project graph was used before file search
 ```
 
 ## Quick Install
@@ -172,37 +188,44 @@ ctx install agy
 
 Restart the agent after setup. Then use the agent normally.
 
-## Why
+## Why ContextOS Exists
 
 Developers put real operating instructions in `AGENTS.md`: use this graph tool before reading files, run these tests, follow this architecture boundary, avoid this migration path.
 
-The problem is not that agents cannot read `AGENTS.md`. The problem is that large context windows bury the important rule in the middle, where attention is weak. ContextOS turns a static rules file into task-aware runtime context.
+The problem is not that agents cannot read `AGENTS.md`. The problem is that large context windows bury the important rule in the middle, where attention is weak.
+
+The same thing happens with project structure:
+
+- A deployment prompt says "fix deploy", and the agent guesses Vercel in an Expo repo.
+- A backend error mentions Fastify, and the agent loads frontend skills.
+- A feature request names one route, and the agent starts with broad grep instead of the files that matter.
+
+ContextOS fixes those three failures before the agent starts work.
 
 The next visible demo is not another feature. It is showing the pain in a few seconds:
 
 ```text
 Raw agent: guesses from the prompt.
-ContextOS: routes from repo evidence.
+ContextOS: checks repo evidence first.
 ```
 
 ## What ContextOS Does
 
-| Layer | What happens |
+| Agent failure | ContextOS behavior |
 | --- | --- |
-| Hooks | Codex, Claude Code, and Antigravity hooks run before/after each task. |
-| Scoring | Local MiniLM embeddings plus heuristics rank AGENTS.md rules by the prompt. |
-| Injection | Critical rules are placed with primacy + recency, not buried in the middle. |
-| Discovery | Relevant files, skills, and workflows are suggested before work starts. |
-| Sync | Rules/MCP via Ruler, skills via skillshare, workflows via ContextOS. |
-| Evidence | Stop hooks persist `followed`, `ignored`, `unknown`, and runtime telemetry for explicit reports. |
+| Ignores project rules | Shows the relevant rules at the start of the task. |
+| Picks the wrong tool or deployment path | Suggests skills only when the repo has supporting evidence. |
+| Reads random files first | Suggests the likely files and workflows before exploration starts. |
+| Claims compliance without proof | Reports which rules were followed, ignored, or unknown after the task. |
+| Needs to work across agents | Supports Codex, Claude Code, and Antigravity with the same project context. |
 
 ## Comparison
 
 | Approach | What it gives the agent | Main gap |
 | --- | --- | --- |
 | Plain `AGENTS.md` | Static repo instructions. | Important rules get buried or ignored when the task changes. |
-| Generic RAG | Semantically related files or snippets. | It usually does not route skills/workflows or prove rule compliance. |
-| ContextOS | Task-routed rules, files, skills, workflows, and evidence. | Requires local setup and warm indexes for best results. |
+| Generic RAG | Related files or snippets. | It usually does not choose skills/workflows or prove rule compliance. |
+| ContextOS | Task-specific rules, files, skills, workflows, and evidence. | Requires local setup and prepared indexes for best results. |
 
 ## Safety Model
 
@@ -212,20 +235,20 @@ ContextOS is designed to be OSS-friendly and low-friction:
 | --- | --- |
 | Standalone by default | `ctx setup` works without `code-review-graph`, `codegraph`, or `agent-memory`. |
 | Optional adapters | Graph and memory backends add signal when available; missing adapters contribute score `0`. |
-| Fail-open hooks | Prompt hooks return local context or nothing instead of blocking the agent when MCP, embeddings, graph, or memory is unavailable. |
+| Fail-open hooks | Prompt hooks return local context or nothing instead of blocking the agent when optional runtime pieces are unavailable. |
 | Local-only telemetry | Reports, prompt history, evidence, and telemetry stay under `~/.ctx/contextos/`. |
-| No hook network calls | Prompt and stop hooks do not call external services. Install/warm commands may download the local embedding model when explicitly run. |
+| No hook network calls | Prompt and stop hooks do not call external services. Install/warm commands may prepare local indexes when explicitly run. |
 | No postinstall surprise | `npm install` only installs the CLI. Setup runs only when you call `ctx setup`. |
 
-Positioning: ContextOS works standalone and gets smarter when graph or memory adapters are available.
+Positioning: ContextOS works standalone and gets smarter when project graph or memory adapters are available.
 
 ## Roadmap
 
-ContextOS is not heading toward a dashboard-first product. The next work is focused on making the existing local runtime more visible and reusable:
+ContextOS is not heading toward a dashboard-first product. The next work is focused on making the existing local behavior more visible and reusable:
 
 | Next | Why |
 | --- | --- |
-| Hallucination Leaderboard | Compare raw agent guesses vs ContextOS evidence-routed recommendations across the same repos and tasks. |
+| Hallucination Leaderboard | Compare raw agent guesses vs ContextOS evidence-based recommendations across the same repos and tasks. |
 | Agent Replay | Turn telemetry into a readable post-task narrative: prompt, selected skills, followed rules, suggested files, touched files, efficiency. |
 | Community Skill Packs | Let contributors PR ContextOS-ready skills with triggers, evidence, negative gates, and workflows before building a larger hub. |
 | ContextOS Ready | Define a repository readiness badge for AGENTS.md, skills, workflows, and evidence quality. |
@@ -237,11 +260,11 @@ See [docs/roadmap.md](docs/roadmap.md) for the current roadmap notes.
 
 ContextOS starts the community loop with [`community-skills/`](community-skills/) instead of a hosted marketplace. The seed packs are `eas`, `vercel`, `prisma`, `redis`, `oauth-google`, and `jwt-auth`.
 
-Each pack contains a model-visible `SKILL.md` plus `skill.yaml` routing metadata with prompt triggers, project evidence, negative triggers, and a short workflow. Contributors can PR new packs by copying [`community-skills/_template/`](community-skills/_template/).
+Each pack contains a model-visible `SKILL.md` plus `skill.yaml` metadata with prompt triggers, project evidence, negative triggers, and a short workflow. Contributors can PR new packs by copying [`community-skills/_template/`](community-skills/_template/).
 
 ## ContextOS Ready
 
-`ctx doctor` scores whether a repository is ready for ContextOS-style agent routing:
+`ctx doctor` scores whether a repository is ready for ContextOS-style agent guidance:
 
 ```bash
 ctx doctor
@@ -271,10 +294,11 @@ The score checks project `AGENTS.md` rules, project skill packs under `.codex/sk
 | `ctx evidence` | Show why each rule was marked followed/ignored/unknown. |
 | `ctx stats` | Show workspace-level usage and effectiveness metrics. |
 | `ctx benchmark -- "task"` | Compare raw AGENTS.md ordering vs ContextOS scheduling. |
-| `ctx benchmark --skills` | Run the Skill Router eval benchmark. |
-| `ctx leaderboard --hallucination` | Compare raw prompt-only guesses vs ContextOS routing. |
-| `ctx leaderboard --agents codex,gemini` | Run the live CLI leaderboard when Codex/Gemini credentials are available. |
-| `ctx sync --rules` | Sync AGENTS/Ruler/MCP config across agents. |
+| `ctx benchmark --skills` | Run the skill selection eval benchmark. |
+| `ctx leaderboard --hallucination` | Run the offline deterministic hallucination benchmark. |
+| `ctx leaderboard --hallucination --live --agent codex` | Run the live CLI benchmark when agent auth/session is available. |
+| `ctx leaderboard --agents codex,gemini` | Legacy live CLI leaderboard form. |
+| `ctx sync --rules` | Sync project rules across agents. |
 | `ctx sync --skills` | Sync skills across agents through skillshare. |
 | `ctx sync --workflows` | Sync workflow markdown across Claude/Codex/Antigravity. |
 
@@ -283,7 +307,7 @@ The score checks project `AGENTS.md` rules, project skill packs under `.codex/sk
 1. Start in a repo with an `AGENTS.md` that contains a rule like:
 
 ```text
-Always use code-review-graph MCP tools before reading files.
+Always use the project graph before reading files.
 ```
 
 2. Install:
@@ -598,8 +622,9 @@ This warning comes from a transitive dependency in the local embedding/WASM stac
 | `ctx stats` | Shows aggregate runtime metrics for the current workspace. | You want to know whether ContextOS is active and useful over time. | Prints sectioned tables for prompt/report counts, injection rate, efficiency, rule outcomes, hook events, last prompt, and last report. |
 | `ctx benchmark -- "task"` | Compares baseline AGENTS.md ordering with ContextOS task-aware scheduling. | You want a before/after signal for lost-in-the-middle risk. | Prints tables for parsed/actionable/filtered rules, baseline middle-risk, scheduled high/mid rules, recency reminder status, and top scored rules. |
 | `ctx benchmark --skills` | Runs the Skill Router eval benchmark. | You want evidence for skill routing accuracy and negative gates. | Prints top-1 accuracy, top-3 recall, false positive rate, confidence calibration, and negative gate accuracy across `eval/skill-routing` fixtures. |
-| `ctx leaderboard --hallucination` | Compares raw prompt-only skill guesses with ContextOS evidence routing. | You want launch evidence for the hallucination problem. | Runs 20 fixture tasks across 10+ repo contexts and prints Raw Agent vs ContextOS correctness plus sample failures. |
-| `ctx leaderboard --agents codex,gemini` | Runs the same benchmark shape through installed agent CLIs. | You want real agent output instead of the deterministic raw baseline. | Calls `codex exec` in read-only mode and the local Gemini CLI with timeouts; missing or unauthenticated CLIs are reported as skipped/errors instead of blocking. |
+| `ctx leaderboard --hallucination` | Runs the offline deterministic hallucination benchmark. | You want launch evidence for the wrong-context problem without depending on external agent auth. | Runs 20 fixture tasks across 10+ repo contexts and prints Raw heuristic baseline vs ContextOS evidence benchmark plus sample failures. |
+| `ctx leaderboard --hallucination --live --agent codex` | Runs the hallucination benchmark through one installed agent CLI. | You want real agent output and have CLI auth/session available. | Calls the selected CLI with timeouts; missing, blocked, or unauthenticated CLIs are reported as skipped/errors instead of blocking. |
+| `ctx leaderboard --agents codex,gemini` | Legacy live CLI leaderboard form. | You want to run multiple live agents at once. | Equivalent live-agent benchmark shape for comma-separated CLIs. |
 | `ctx sync --rules` | Syncs project rules and MCP servers through Ruler. | You want Codex, Claude Code, and Antigravity to share one project rule/MCP source of truth. | Ensures `.ruler/ruler.toml`, injects `ctx-mcp`, imports existing MCP servers from Codex and project `.mcp.json`, runs `ruler apply --agents codex,claude,antigravity`, mirrors MCP servers to Antigravity MCP configs, and verifies generated config. |
 | `ctx sync --rules --agents <list>` | Syncs only selected agents through Ruler. | You want to update one or two agents without touching the others. | Accepts comma-separated values such as `codex`, `claude`, `agy`, `antigravity`, or `codex,claude,agy`; `agy` is normalized to Ruler's `antigravity`. |
 | `ctx sync --rules --dry-run` | Previews Ruler sync without writing files or running apply. | You want to inspect behavior before changing project config. | Prints the same flow with dry-run status. |
@@ -664,7 +689,7 @@ These files are local telemetry only. Hooks do not make network calls.
 
 ## Project Understanding
 
-ContextOS works standalone. The core path is local rules, file embeddings, import graph expansion, skill routing, workflow routing, and evidence capture.
+ContextOS works standalone. The default path is local project rules, prepared file indexes, project skills, workflows, and evidence capture.
 
 Project graph and memory backends are optional adapters:
 
@@ -676,26 +701,24 @@ Project graph and memory backends are optional adapters:
 
 ContextOS does not require `code-review-graph`, `codegraph`, or `agent-memory` to install or run. It gets smarter when those backends are available; when they are missing, the adapter scores stay at zero and the hook continues with local context.
 
-For file suggestions, ContextOS now runs a local RAG-style retrieval pass:
+For file suggestions, ContextOS uses prepared local indexes:
 
 ```text
 prompt
-  -> UserPromptSubmit hook calls ctx-mcp bridge
-  -> ctx-mcp reads AGENTS.md and scores rules with local MiniLM
-  -> query the persisted file-vector index in embeddings.db for semantic file candidates
-  -> expand candidates through relative import graph links
-  -> optionally query code-review-graph semantic_search_nodes with seed entity names
-  -> merge and deduplicate semantic, import-graph, and optional graph matches
-  -> inject top suggested files with graph evidence reasons
+  -> read task-relevant AGENTS.md rules
+  -> suggest prepared file candidates
+  -> expand nearby imports
+  -> add optional project-graph matches when available
+  -> inject a compact list of files to check
 ```
 
-This keeps the hook fast and local while still using graph semantics when available. The graph search path is visible in runtime data through file reasons such as `graph:content-moderation.service`. When no graph adapter is available, file suggestions still use local file vectors and import graph expansion.
+This keeps the hook fast and local while still using project graph signal when available. When no graph adapter is available, file suggestions still use local file indexes and import expansion.
 
-Prompt scoring does not walk the repository for file candidates or import expansion. `ctx install` and `ctx embeddings warm` rebuild the persisted file-vector index and one-hop import adjacency index by walking source paths once; prompt hooks query those indexes directly. Rules, files, skills, and workflows are scored concurrently with `Promise.all()`.
+Prompt-time file suggestions do not walk the repository. `ctx install` and `ctx embeddings warm` rebuild the file index and one-hop import adjacency by walking source paths once; prompt hooks query those prepared indexes directly. Rules, files, skills, and workflows are resolved concurrently.
 
 `ctx embeddings warm` automatically refreshes the active Codex marketplace payload before rebuilding indexes. Use `ctx refresh` when you want the same marketplace sync plus install-style file, skill, import, and code-review-graph embedding refresh in one command.
 
-If a prompt has no usable context candidates, the hook fails open without emitting an empty `hook context` block, records `emptyContextReason` in the workspace runtime file, and starts a detached `autowarm` rebuild with a cooldown. That background rebuild refreshes file vectors, skill/workflow vectors, import adjacency, and available code-review-graph node embeddings for the next prompt while keeping repository walking out of the current prompt hot path.
+If a prompt has no usable context candidates, the hook fails open without emitting an empty `hook context` block, records `emptyContextReason` in the workspace runtime file, and starts a detached `autowarm` rebuild with a cooldown. That background rebuild refreshes prepared indexes for the next prompt while keeping repository walking out of the current prompt path.
 
 Use `ctx --config` to choose which prompt sections ContextOS injects and how many suggestions each section may show. Interactive `ctx setup` includes the same section picker and limit prompts, while `ctx setup --yes` keeps the current saved config for automation. The panel supports multiple selection with `Space` and persists the global choice in `~/.ctx/contextos/output-config.json`. Defaults are five suggested files, five skills, and five workflows; caps are 20 files, 10 skills, and 5 workflows. Disabling rules hides both critical and additional relevant rule sections; compliance metadata remains available for reports.
 

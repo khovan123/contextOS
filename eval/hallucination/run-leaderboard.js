@@ -41,8 +41,8 @@ export async function runHallucinationLeaderboard({
     caseCount: selectedCases.length,
     repoCount: new Set(selectedCases.map((row) => row.fixture)).size,
     systems: [
-      summarizeSystem("Raw Agent", rawRows),
-      summarizeSystem("ContextOS + Codex", contextRows)
+      summarizeSystem("Raw heuristic baseline", rawRows),
+      summarizeSystem("ContextOS evidence benchmark", contextRows)
     ],
     rows: selectedCases.map((testCase) => ({
       prompt: testCase.prompt,
@@ -60,11 +60,11 @@ export function formatHallucinationLeaderboard(result) {
     `Repos: ${result.repoCount}`,
     `Tasks: ${result.caseCount}`,
     "",
-    "System              Correct Skill",
-    "------------------  -------------"
+    "System                        Correct Context",
+    "----------------------------  ---------------"
   ];
   for (const system of result.systems) {
-    lines.push(`${system.name.padEnd(18)}  ${percent(system.correctRate)}`);
+    lines.push(`${system.name.padEnd(28)}  ${percent(system.correctRate)}`);
   }
   lines.push("", "Sample failures:");
   const failures = result.rows

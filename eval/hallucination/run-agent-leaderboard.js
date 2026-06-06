@@ -29,7 +29,8 @@ export function runAgentLeaderboard({
   const systems = [];
 
   for (const agent of agents) {
-    const binary = findBinary(agent);
+    const template = agentCommandTemplate(agent);
+    const binary = template ? template.split(/\s+/).filter(Boolean)[0] : findBinary(agent);
     if (!binary) {
       systems.push({ name: agent, status: "skipped", reason: "binary not found", rows: [], correctRate: 0 });
       continue;
@@ -71,7 +72,7 @@ export function formatAgentLeaderboard(result) {
   ];
   for (const system of result.systems) {
     const score = system.status === "ok" ? percent(system.correctRate) : system.reason;
-    lines.push(`${system.name.padEnd(8)}  ${system.status.padEnd(8)}  ${score}`);
+    lines.push(`${system.name.padEnd(8)}  ${system.status.toUpperCase().padEnd(8)}  ${score}`);
   }
   lines.push("", "Cases:");
   for (const system of result.systems) {
@@ -123,6 +124,8 @@ function runAgentCase({ agent, binary, testCase, skillIds, timeoutMs, rootDir })
 }
 
 function agentArgs({ agent, cwd, prompt }) {
+  const genericTemplate = agentCommandTemplate(agent);
+  if (genericTemplate) return expandTemplate(genericTemplate, { cwd, prompt }).slice(1);
   if (agent === "codex") {
     return [
       "exec",
@@ -138,6 +141,11 @@ function agentArgs({ agent, cwd, prompt }) {
     return ["-p", prompt];
   }
   return [prompt];
+}
+
+function agentCommandTemplate(agent) {
+  const envKey = `CONTEXTOS_${String(agent || "").toUpperCase().replace(/[^A-Z0-9]+/g, "_")}_CMD`;
+  return process.env[envKey] || "";
 }
 
 function buildPrompt({ task, skillIds }) {
@@ -178,6 +186,11 @@ function findBinary(name) {
     `/mnt/c/Users/admin/AppData/Roaming/npm/${safeName}.cmd`
   ];
   for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  for (const dir of String(process.env.PATH || "").split(path.delimiter)) {
+    if (!dir) continue;
+    const candidate = path.join(dir, safeName);
     if (fs.existsSync(candidate)) return candidate;
   }
   for (const command of [
