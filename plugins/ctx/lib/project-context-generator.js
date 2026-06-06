@@ -254,6 +254,11 @@ function skill({ id, name, description, prompts, files, dependencies, negatives 
 
 function renderSkillMarkdown(skill) {
   return [
+    "---",
+    `name: ${skill.id}`,
+    `description: ${skill.description}`,
+    "---",
+    "",
     `# ${skill.name}`,
     "",
     skill.description,

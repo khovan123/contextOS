@@ -34,7 +34,8 @@ describe("project context generator", () => {
 
     expect(result.skills).toContain("mobile-deployment");
     expect(result.created.some((filePath) => filePath.endsWith(".codex/workflows/primary.md"))).toBe(true);
-    expect(fs.existsSync(path.join(repo, ".codex", "skills", "mobile-deployment", "SKILL.md"))).toBe(true);
+    const skillMarkdown = fs.readFileSync(path.join(repo, ".codex", "skills", "mobile-deployment", "SKILL.md"), "utf8");
+    expect(skillMarkdown).toMatch(/^---\nname: mobile-deployment\ndescription: /);
     expect(fs.existsSync(path.join(repo, ".codex", "skills", "mobile-deployment", "skill.yaml"))).toBe(true);
 
     const after = inspectContextOSReady({ cwd: repo, home: path.join(repo, "home") });
