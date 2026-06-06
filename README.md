@@ -46,7 +46,7 @@ Skill Router internal fixture benchmark:
 | Metric | Result |
 | --- | ---: |
 | Cases | 52 |
-| Top-1 Accuracy | 92.3% |
+| Top-1 Accuracy | 94.2% |
 | Top-3 Recall | 94.2% |
 | False Positive Rate | 0.0% |
 | Confidence Calibration | 100.0% |
@@ -144,6 +144,21 @@ The problem is not that agents cannot read `AGENTS.md`. The problem is that larg
 | Plain `AGENTS.md` | Static repo instructions. | Important rules get buried or ignored when the task changes. |
 | Generic RAG | Semantically related files or snippets. | It usually does not route skills/workflows or prove rule compliance. |
 | ContextOS | Task-routed rules, files, skills, workflows, and evidence. | Requires local setup and warm indexes for best results. |
+
+## Safety Model
+
+ContextOS is designed to be OSS-friendly and low-friction:
+
+| Guarantee | Behavior |
+| --- | --- |
+| Standalone by default | `ctx setup` works without `code-review-graph`, `codegraph`, or `agent-memory`. |
+| Optional adapters | Graph and memory backends add signal when available; missing adapters contribute score `0`. |
+| Fail-open hooks | Prompt hooks return local context or nothing instead of blocking the agent when MCP, embeddings, graph, or memory is unavailable. |
+| Local-only telemetry | Reports, prompt history, evidence, and telemetry stay under `~/.ctx/contextos/`. |
+| No hook network calls | Prompt and stop hooks do not call external services. Install/warm commands may download the local embedding model when explicitly run. |
+| No postinstall surprise | `npm install` only installs the CLI. Setup runs only when you call `ctx setup`. |
+
+Positioning: ContextOS works standalone and gets smarter when graph or memory adapters are available.
 
 ## Quick Commands
 
@@ -543,7 +558,17 @@ These files are local telemetry only. Hooks do not make network calls.
 
 ## Project Understanding
 
-ContextOS does not try to replace `code-review-graph`. It uses it as the project-understanding layer when the target repo has already built a graph database.
+ContextOS works standalone. The core path is local rules, file embeddings, import graph expansion, skill routing, workflow routing, and evidence capture.
+
+Project graph and memory backends are optional adapters:
+
+| Adapter | What it adds | Required? |
+| --- | --- | --- |
+| `code-review-graph` | Blast radius, semantic node search, and test relationships. | No |
+| `codegraph` | Symbol/call graph context once its MCP schema is stable. | No |
+| `agent-memory` / `agentmemory` | Prior task history, decisions, and recurring bug-fix context. | No |
+
+ContextOS does not require `code-review-graph`, `codegraph`, or `agent-memory` to install or run. It gets smarter when those backends are available; when they are missing, the adapter scores stay at zero and the hook continues with local context.
 
 For file suggestions, ContextOS now runs a local RAG-style retrieval pass:
 
@@ -553,12 +578,12 @@ prompt
   -> ctx-mcp reads AGENTS.md and scores rules with local MiniLM
   -> query the persisted file-vector index in embeddings.db for semantic file candidates
   -> expand candidates through relative import graph links
-  -> query code-review-graph semantic_search_nodes with seed entity names
-  -> merge and deduplicate semantic, import-graph, and code-review-graph matches
+  -> optionally query code-review-graph semantic_search_nodes with seed entity names
+  -> merge and deduplicate semantic, import-graph, and optional graph matches
   -> inject top suggested files with graph evidence reasons
 ```
 
-This keeps the hook fast and local while still using graph semantics when available. The graph search path is visible in runtime data through file reasons such as `graph:content-moderation.service`.
+This keeps the hook fast and local while still using graph semantics when available. The graph search path is visible in runtime data through file reasons such as `graph:content-moderation.service`. When no graph adapter is available, file suggestions still use local file vectors and import graph expansion.
 
 Prompt scoring does not walk the repository for file candidates or import expansion. `ctx install` and `ctx embeddings warm` rebuild the persisted file-vector index and one-hop import adjacency index by walking source paths once; prompt hooks query those indexes directly. Rules, files, skills, and workflows are scored concurrently with `Promise.all()`.
 
@@ -576,13 +601,17 @@ Skill ranking uses Skill Router v2. ContextOS still starts with semantic retriev
 
 ```text
 final_score =
-  semantic_score * 0.35
+  semantic_score * 0.30
 + prompt_trigger_score * 0.20
-+ project_evidence_score * 0.25
++ project_evidence_score * 0.20
 + file_config_score * 0.10
-+ graph_score * 0.05
++ import_graph_score * 0.10
++ external_graph_score * 0.05
++ memory_score * 0.05
 - negative_penalty * 0.20
 ```
+
+`external_graph_score` is supplied by optional project graph adapters such as `code-review-graph` or `codegraph`. `memory_score` is reserved for optional memory adapters such as `agent-memory`. Without those adapters, both scores are `0`.
 
 Skill metadata can live beside `SKILL.md` as `skill.yaml`:
 
@@ -625,7 +654,7 @@ Current local benchmark:
 
 ```text
 Cases: 52
-Top-1 Accuracy: 92.3%
+Top-1 Accuracy: 94.2%
 Top-3 Recall: 94.2%
 False Positive Rate: 0.0%
 Confidence Calibration: 100.0%

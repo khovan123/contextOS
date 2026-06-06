@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.53
+
+- **Optional adapter positioning:** Clarified that ContextOS core works standalone and that `code-review-graph`, `codegraph`, and `agent-memory` are optional adapters. Skill Router scoring now exposes separate `importGraphScore`, `externalGraphScore`, and `memoryScore` fields so missing adapters degrade to zero score instead of becoming install/runtime requirements.
+- **Adapter-aware benchmark update:** Updated the Skill Router formula to reserve explicit weights for local import graph, optional external graph, and optional memory adapters. The 52-case internal benchmark now reports Top-1 Accuracy 94.2%, Top-3 Recall 94.2%, False Positive Rate 0.0%, Confidence Calibration 100.0%, and Negative Gate Accuracy 100.0%.
+- **Release safety docs:** Added a README safety model covering standalone install, optional adapters, fail-open hooks, local-only telemetry, no hook network calls, and no postinstall behavior.
+- **Launch roadmap template:** Added a GitHub issue template for release hardening, README polish, benchmarks, optional adapters, setup, and telemetry roadmap work.
+
 ## 0.5.52
 
 - **Release candidate polish:** Updated README positioning around ContextOS as a runtime context router, added npm/CI/license badges, a same-prompt/different-repo demo section, a benchmark table, a 30-second install callout, and an AGENTS.md vs RAG vs ContextOS comparison table.

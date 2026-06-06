@@ -362,5 +362,5 @@ cases:
   - prompt: react native eas submit failed
     fixture: expo-eas
     expected: [eas, mobile-deployment]
-    allowed: [github-actions-ci-cd]
+    allowed: [github-actions-ci-cd, build-log-debugging]
     rejected: [vercel-deployment]

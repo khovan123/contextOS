@@ -679,7 +679,7 @@ async function skillsDoctor(task) {
   }
   for (const skill of result.skills) {
     console.log(`${Number(skill.confidence || skill.score || 0).toFixed(2)}  ${skill.confidenceBand || "low"}  ${skill.name}`);
-    console.log(`      semantic:${Number(skill.semanticScore || 0).toFixed(2)} prompt:${Number(skill.promptTriggerScore || 0).toFixed(2)} project:${Number(skill.projectEvidenceScore || 0).toFixed(2)} files:${Number(skill.fileConfigScore || 0).toFixed(2)} negative:${Number(skill.negativePenalty || 0).toFixed(2)}`);
+    console.log(`      semantic:${Number(skill.semanticScore || 0).toFixed(2)} prompt:${Number(skill.promptTriggerScore || 0).toFixed(2)} project:${Number(skill.projectEvidenceScore || 0).toFixed(2)} files:${Number(skill.fileConfigScore || 0).toFixed(2)} import:${Number(skill.importGraphScore || 0).toFixed(2)} graph:${Number(skill.externalGraphScore || skill.graphScore || 0).toFixed(2)} memory:${Number(skill.memoryScore || 0).toFixed(2)} negative:${Number(skill.negativePenalty || 0).toFixed(2)}`);
     if (skill.evidence?.length) console.log(`      evidence: ${skill.evidence.join(", ")}`);
     if (skill.negativeEvidence?.length) console.log(`      rejected signals: ${skill.negativeEvidence.join(", ")}`);
   }

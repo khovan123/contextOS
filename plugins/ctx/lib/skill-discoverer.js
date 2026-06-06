@@ -565,13 +565,17 @@ function hybridSkillScore(skill, { prompt, projectEvidence }) {
   const negativePenalty = Math.max(negativeDependencies.score, negativeFiles.score, negativePrompts.score);
   const projectEvidenceScore = dependencyEvidence.score;
   const fileConfigScore = fileEvidence.score;
-  const graphScore = 0;
+  const importGraphScore = 0;
+  const externalGraphScore = 0;
+  const memoryScore = 0;
   const hybridScore = Math.max(0, Math.min(1,
-    semanticScore * 0.35
+    semanticScore * 0.30
     + promptMatch.score * 0.20
-    + projectEvidenceScore * 0.25
+    + projectEvidenceScore * 0.20
     + fileConfigScore * 0.10
-    + graphScore * 0.05
+    + importGraphScore * 0.10
+    + externalGraphScore * 0.05
+    + memoryScore * 0.05
     - negativePenalty * 0.20
   ));
   const explicit = (skill.reasons || []).includes("explicit-skill");
@@ -609,7 +613,10 @@ function hybridSkillScore(skill, { prompt, projectEvidence }) {
     promptTriggerScore: promptMatch.score,
     projectEvidenceScore,
     fileConfigScore,
-    graphScore,
+    importGraphScore,
+    externalGraphScore,
+    memoryScore,
+    graphScore: externalGraphScore,
     negativePenalty,
     rankScore,
     explicit,
@@ -639,7 +646,7 @@ function calibrateSkillConfidence(score, {
   if (isAmbiguousPrompt(prompt) && !(hasDependencyEvidence && hasFileEvidence) && !explicit) {
     confidence = Math.min(confidence, 0.64);
   }
-  if (hasPromptEvidence && hasProjectEvidence && confidence >= 0.5) {
+  if (hasPromptEvidence && hasProjectEvidence && confidence >= 0.45) {
     confidence = Math.max(confidence, 0.68);
   }
   if (hasDependencyEvidence && hasFileEvidence) {
