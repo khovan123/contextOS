@@ -198,9 +198,10 @@ ContextOS is not heading toward a dashboard-first product. The next work is focu
 
 | Next | Why |
 | --- | --- |
+| Hallucination Leaderboard | Compare raw agent guesses vs ContextOS evidence-routed recommendations across the same repos and tasks. |
 | Agent Replay | Turn telemetry into a readable post-task narrative: prompt, selected skills, followed rules, suggested files, touched files, efficiency. |
-| ContextOS Hub | Let the community publish ContextOS-ready skill packs with triggers, evidence, negative gates, and workflows. |
-| Hallucination Benchmark | Show raw prompt-only agent guesses vs ContextOS evidence-routed recommendations. |
+| Community Skill Packs | Let contributors PR ContextOS-ready skills with triggers, evidence, negative gates, and workflows before building a larger hub. |
+| ContextOS Ready | Define a repository readiness badge for AGENTS.md, skills, workflows, and evidence quality. |
 
 See [docs/roadmap.md](docs/roadmap.md) for the current roadmap notes.
 

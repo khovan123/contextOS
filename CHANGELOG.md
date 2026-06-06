@@ -4,7 +4,7 @@
 
 - **Launch demo framing:** Added Agent Hallucination Benchmark messaging, same-prompt/same-model/different-context copy, and `docs/launch-demos.md` with three short demo scripts: hallucination benchmark, AGENTS.md lost-in-the-middle, and repo-aware skills.
 - **Roadmap template expansion:** Extended the launch roadmap issue template with Hallucination Benchmark, Agent Replay, and Community Skill Packs areas.
-- **Roadmap docs:** Added `docs/roadmap.md` covering Agent Replay, ContextOS Hub, and Hallucination Benchmark without committing to dashboard/cloud work.
+- **Roadmap docs:** Added `docs/roadmap.md` covering Hallucination Leaderboard, Agent Replay, Community Skill Packs, and ContextOS Ready certification without committing to dashboard/cloud work.
 
 ## 0.5.53
 

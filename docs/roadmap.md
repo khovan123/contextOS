@@ -2,7 +2,63 @@
 
 ContextOS is past the core routing layer. The next work should make the value visible faster and create a community loop.
 
-## P1: Agent Replay
+## P1: Hallucination Leaderboard
+
+The strongest launch artifact is not another feature. It is a leaderboard that shows raw prompt-only agents making plausible guesses while ContextOS routes from repo evidence.
+
+Layout:
+
+```text
+benchmarks/
+  codex/
+  claude-code/
+  cursor/
+  gemini-cli/
+  contextos/
+```
+
+Protocol:
+
+```text
+same repo
+same task
+same model when possible
+same scoring rubric
+```
+
+Example task:
+
+```text
+Task: Fix deployment
+Repo: Expo app
+```
+
+Example result:
+
+```text
+System             Correct Skill
+Raw Agent          ❌
+ContextOS + Codex  ✅
+```
+
+Target public table:
+
+```text
+Hallucination Benchmark
+
+Claude Code:        61%
+Cursor:             58%
+Raw Codex:          63%
+ContextOS + Codex:  89%
+```
+
+Why it matters:
+
+- It is easy to understand in seconds.
+- It turns ContextOS from infrastructure into a visible correctness story.
+- It creates content for GitHub, Hacker News, Reddit, and X/Twitter.
+
+## P2: Agent Replay
 
 ContextOS already records prompt context, suggested files, suggested skills, rule outcomes, telemetry, and reports. Agent Replay should turn that into a compact post-task narrative.
 
@@ -60,7 +116,21 @@ Non-goals for the first version:
 - Cross-user analytics
 - Long-term hosted memory
 
-## P2: ContextOS Hub
+## P3: Community Skill Packs
+
+Do not build a full Hub first. Start with a simple `community-skills/` repository or folder that accepts PRs.
+
+Initial packs:
+
+```text
+community-skills/
+  eas/
+  vercel/
+  prisma/
+  redis/
+  oauth-google/
+  jwt-auth/
+```
 
 The Skill Router becomes more valuable when skill packs are ContextOS-ready instead of plain markdown folders.
 
@@ -92,7 +162,7 @@ workflow:
   - test login redirect
 ```
 
-Possible install flow:
+Possible future install flow:
 
 ```bash
 ctx skills install oauth-google
@@ -118,29 +188,43 @@ Non-goals for the first version:
 - Cloud account system
 - Remote vector database
 
-## P3: Hallucination Benchmark
+## P4: ContextOS Ready
 
-The best public demo remains:
-
-```text
-Same prompt.
-Same model.
-Different context.
-```
-
-The benchmark should compare raw prompt-only recommendations against ContextOS evidence-routed recommendations across controlled fixtures:
-
-- Expo/EAS
-- Next/Vercel
-- Docker
-- Railway/Render
-- Firebase
-- Nest/Prisma
-- Express/JWT
-- static docs negative cases
-
-Goal:
+Certification can help the ecosystem self-organize without a hosted service.
 
 ```text
-Show that context routing prevents plausible-but-wrong agent guesses.
+ContextOS Ready
 ```
+
+Repository requirements:
+
+```text
+AGENTS.md
+skills/
+workflows/
+```
+
+Possible future command:
+
+```bash
+ctx doctor
+```
+
+Target output:
+
+```text
+Repository Score
+
+Rules: 92
+Skills: 88
+Workflows: 84
+
+Overall:
+ContextOS Ready Gold
+```
+
+Why it matters:
+
+- It gives projects a concrete target.
+- It creates a badge people can add to README files.
+- It encourages community contributions without requiring a cloud product.
