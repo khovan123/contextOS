@@ -44,6 +44,7 @@ import { fetchSkillsForAgents, printSkillRecommendations, getAllLibraries, getIn
 import { invalidateCtxMcpSocket } from "../plugins/ctx/lib/ctx-mcp-client.js";
 import { runPrefixedCommand } from "../plugins/ctx/lib/shell-runner.js";
 import { formatContextOSReady, inspectContextOSReady } from "../plugins/ctx/lib/certification.js";
+import { formatProjectContextGeneration, generateProjectContext } from "../plugins/ctx/lib/project-context-generator.js";
 
 /**
  * Run a shell command with all output lines prefixed by │  
@@ -189,11 +190,14 @@ Usage:
   ctx setup                                         Interactive full setup wizard
   ctx setup --yes                                   Auto-confirm all setup prompts
   ctx setup --agents <names>                        Pre-select agents to install
+  ctx setup --generate-project-context              Generate starter project skills/workflow
   ctx setup --no-rules                              Skip AGENTS.md rule sync
   ctx setup --no-skills                             Skip skill sync
   ctx setup --quiet                                 Quiet mode (minimal output)
   ctx debug -- "task"                               Debug a task with ContextOS tracing
   ctx doctor                                       Score repository ContextOS readiness
+  ctx doctor --fix                                 Generate starter project skills/workflow
+  ctx doctor --fix --force                         Regenerate starter project context files
   ctx report                                        Show last ContextOS compliance report
   ctx evidence                                      Show evidence from last report
   ctx stats                                         Show workspace statistics
@@ -880,6 +884,22 @@ async function setup({ args = [], cwd = process.cwd() } = {}) {
     });
   }
 
+  if (interactive && !options.generateProjectContext) {
+    const readiness = inspectContextOSReady({ cwd });
+    if (readiness.skills.score < 50 || readiness.workflows.score < 50) {
+      const rl = readline.createInterface({ input, output });
+      try {
+        options.generateProjectContext = await askSetupYesNo(
+          rl,
+          "Generate starter project skills and workflow?",
+          true
+        );
+      } finally {
+        rl.close();
+      }
+    }
+  }
+
   console.log("");
   console.log("◇ Ready to setup:");
   for (const line of setupSummaryLines({
@@ -891,6 +911,13 @@ async function setup({ args = [], cwd = process.cwd() } = {}) {
   console.log("");
 
   if (!options.agents.length) throw new Error("No agents selected. Use --agents codex,claude,antigravity,copilot.");
+
+  if (options.generateProjectContext) {
+    console.log("◇ Generating starter project context...");
+    const generated = generateProjectContext({ cwd });
+    for (const line of formatProjectContextGeneration(generated).split("\n")) console.log(`│  ${line}`);
+    console.log("");
+  }
 
   for (const agent of options.agents) {
     console.log(`◇ Setting up ${agent}...`);
@@ -1022,7 +1049,14 @@ try {
     if (!task.trim()) throw new Error('Usage: ctx debug -- "task"');
     await debug(task);
   } else if (command === "doctor") {
-    console.log(formatContextOSReady(inspectContextOSReady({ cwd: process.cwd() })));
+    if (args.includes("--fix")) {
+      const generated = generateProjectContext({ cwd: process.cwd(), force: args.includes("--force") });
+      console.log(formatProjectContextGeneration(generated));
+      console.log("");
+      console.log(formatContextOSReady(inspectContextOSReady({ cwd: process.cwd() })));
+    } else {
+      console.log(formatContextOSReady(inspectContextOSReady({ cwd: process.cwd() })));
+    }
   } else if (command === "refresh") {
     await refresh();
   } else if (command === "autowarm") {

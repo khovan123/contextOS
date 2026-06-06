@@ -68,6 +68,9 @@ export function formatContextOSReady(result) {
   if (next.length) {
     lines.push("", "Next:");
     for (const item of [...new Set(next)].slice(0, 5)) lines.push(`- ${item}`);
+    if (result.skills.score < 50 || result.workflows.score < 50) {
+      lines.push("- Run `ctx doctor --fix` to generate starter project skills and workflow.");
+    }
   }
 
   return lines.join("\n");

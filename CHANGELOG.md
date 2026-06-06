@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.4
+
+- **Project context generator:** Added `ctx doctor --fix` and `ctx setup --generate-project-context` to explicitly scaffold starter project skills and a primary workflow when a repository has rules but is missing ContextOS-ready skills/workflows. Generation is repo-scoped, does not run from `npm install`, and does not overwrite existing files unless `--force` is passed to `ctx doctor --fix`.
+
 ## 0.6.3
 
 - **Launch benchmark wording:** Clarified that `ctx leaderboard --hallucination` is an offline deterministic benchmark comparing a raw heuristic baseline with ContextOS evidence-based context selection, while live agent results remain pending external CLI environments.

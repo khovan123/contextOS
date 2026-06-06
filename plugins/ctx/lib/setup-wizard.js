@@ -19,7 +19,8 @@ export function parseSetupArgs(args = []) {
     yes,
     quiet: args.includes("--quiet"),
     syncRules: !args.includes("--no-rules"),
-    syncSkills: !args.includes("--no-skills")
+    syncSkills: !args.includes("--no-skills"),
+    generateProjectContext: args.includes("--generate-project-context")
   };
 }
 
@@ -42,6 +43,7 @@ export function setupSummaryLines({
   agents = DEFAULT_AGENTS,
   syncRules = true,
   syncSkills = true,
+  generateProjectContext = false,
   promptSections = null,
   promptLimits = null
 } = {}) {
@@ -50,7 +52,8 @@ export function setupSummaryLines({
     `Agents: ${agents.join(", ") || "(none)"}`,
     `Prompt context injection: always enabled`,
     `Ruler rule/MCP sync: ${syncRules ? "enabled" : "skipped"}`,
-    `skillshare skill sync: ${syncSkills ? "enabled" : "skipped"}`
+    `skillshare skill sync: ${syncSkills ? "enabled" : "skipped"}`,
+    `Project context generation: ${generateProjectContext ? "enabled" : "skipped"}`
   ];
   if (promptSections !== null) lines.push(`Prompt sections shown: ${promptSections}`);
   if (promptLimits !== null) lines.push(`Prompt suggest limits: ${promptLimits}`);

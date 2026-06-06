@@ -20,6 +20,10 @@ const DEFAULT_ROUTER_THRESHOLD = 0.35;
 
 const scanCache = new Map();
 
+export function clearSkillScanCache() {
+  scanCache.clear();
+}
+
 export function skillSearchRoots({ cwd = process.cwd(), home = os.homedir() } = {}) {
   return [
     path.join(cwd, ".codex", "skills"),

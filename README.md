@@ -150,6 +150,13 @@ Scriptable setup:
 ```bash
 ctx setup --yes
 ctx setup --yes --agents codex,claude,agy
+ctx setup --yes --generate-project-context
+```
+
+If `ctx doctor` reports missing project skills/workflows, generate starter project context explicitly:
+
+```bash
+ctx doctor --fix
 ```
 
 No global install:
@@ -255,6 +262,7 @@ The score checks project `AGENTS.md` rules, project skill packs under `.codex/sk
 | `ctx setup` | Recommended first-run install flow. |
 | `ctx debug -- "Recheck authen flow"` | Preview what ContextOS would inject. |
 | `ctx doctor` | Score repository readiness for the `ContextOS Ready` badge. |
+| `ctx doctor --fix` | Generate starter project skills and workflow when the repo is missing them. |
 | `ctx report` | Show the last task's compliance summary. |
 | `ctx evidence` | Show why each rule was marked followed/ignored/unknown. |
 | `ctx stats` | Show workspace-level usage and effectiveness metrics. |
@@ -576,12 +584,14 @@ This warning comes from a transitive dependency in the local embedding/WASM stac
 | `ctx install --copy` | Copies only the plugin payload to `$CODEX_HOME/plugins/ctx`. | Legacy local development or manual plugin experiments. | Does not sync the active marketplace, rebuild indexes, register MCP, or install global hooks. Prefer `ctx refresh` for active local updates. |
 | `ctx setup` | Runs the first-run setup wizard. | You want the recommended onboarding flow after `npm install -g @minhpnq1807/contextos`. | Installs selected agents, optionally syncs Ruler rules/MCP and skillshare skills, asks which prompt sections to show, then prints next steps. |
 | `ctx setup --yes` | Runs setup with defaults non-interactively. | You want scriptable Codex setup. | Uses `codex`, enables injection, syncs rules, syncs skills, skips interactive community-skill installation when no TTY is available, and passes `--yes` to dependency setup prompts. Use `--agents codex,claude,agy` for multi-agent setup. |
+| `ctx setup --generate-project-context` | Generates starter project skills and workflow during setup. | Your repo has rules but `ctx doctor` reports missing skills/workflows. | Creates `.codex/skills/<detected-skill>/SKILL.md`, matching `skill.yaml`, and `.codex/workflows/primary.md` without overwriting existing files. |
 | `ctx setup --agents <list>` | Runs setup for selected agents. | You want only part of the default set. | Accepts comma-separated `codex`, `claude`, `agy`, or `antigravity`. |
 | `ctx setup --no-rules` | Skips Ruler sync during setup. | You only want hooks/MCP install and maybe skill sync. | Does not run `ctx sync --rules`. |
 | `ctx setup --no-skills` | Skips skillshare sync during setup. | You do not want shared skills configured. | Does not run `ctx sync --skills`. |
 | `ctx setup --quiet` | Runs setup in measurement-only mode. | You want reports/stats without visible injected prompt context. | Installs hooks with prompt context injection disabled. |
 | `ctx debug -- "task"` | Runs the scheduler locally for a fake prompt. | You want to see which AGENTS.md rules and files ContextOS would inject before using Codex. | Prints rule scores, scoring reasons, suggested files, and final `additionalContext`. |
 | `ctx doctor` | Scores repository ContextOS readiness. | You want to add or verify a `ContextOS Ready` badge. | Prints Rules, Skills, Workflows, Overall tier, evidence, and next recommendations. |
+| `ctx doctor --fix` | Generates starter ContextOS project context. | `ctx doctor` says skills/workflows are missing and you want explicit local scaffolding. | Detects package/config evidence, creates up to three starter project skills plus `.codex/workflows/primary.md`, then prints the updated readiness score. |
 | `ctx report` | Shows the last Stop-hook compliance report for the current workspace. | An agent task has finished and you want the summary again. | Prints sectioned tables for summary, rule outcomes, suggested files, and runtime telemetry from `~/.ctx/contextos/workspaces/<workspace-id>/last-report.json`. |
 | `ctx evidence` | Shows detailed evidence behind the last report for the current workspace. | You want to inspect why a rule was marked `followed`, `ignored`, `unknown`, or `unmeasurable`. | Prints a compact evidence table plus per-rule detail tables. |
 | `ctx stats` | Shows aggregate runtime metrics for the current workspace. | You want to know whether ContextOS is active and useful over time. | Prints sectioned tables for prompt/report counts, injection rate, efficiency, rule outcomes, hook events, last prompt, and last report. |

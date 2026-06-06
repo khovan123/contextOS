@@ -15,7 +15,8 @@ describe("setup wizard", () => {
       yes: false,
       quiet: false,
       syncRules: true,
-      syncSkills: true
+      syncSkills: true,
+      generateProjectContext: false
     });
   });
 
@@ -33,6 +34,7 @@ describe("setup wizard", () => {
       "--quiet",
       "--no-rules",
       "--no-skills",
+      "--generate-project-context",
       "--agents",
       "codex,antigravity,agy"
     ])).toEqual({
@@ -41,7 +43,8 @@ describe("setup wizard", () => {
       yes: true,
       quiet: true,
       syncRules: false,
-      syncSkills: false
+      syncSkills: false,
+      generateProjectContext: true
     });
   });
 
@@ -56,6 +59,7 @@ describe("setup wizard", () => {
       agents: ["codex"],
       syncRules: false,
       syncSkills: true,
+      generateProjectContext: true,
       promptSections: "files, skills",
       promptLimits: "files: 5, skills: 5, workflows: 5"
     })).toEqual([
@@ -64,6 +68,7 @@ describe("setup wizard", () => {
       "Prompt context injection: always enabled",
       "Ruler rule/MCP sync: skipped",
       "skillshare skill sync: enabled",
+      "Project context generation: enabled",
       "Prompt sections shown: files, skills",
       "Prompt suggest limits: files: 5, skills: 5, workflows: 5"
     ]);
