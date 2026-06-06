@@ -21,8 +21,7 @@ describe("mcp proxy", () => {
       "--name",
       "code-review-graph",
       "--",
-      process.execPath,
-      "--version"
+      "cat"
     ], {
       cwd,
       env: { ...process.env, PLUGIN_DATA: dataRoot },
@@ -31,9 +30,9 @@ describe("mcp proxy", () => {
 
     const stdout = await writeAndCollect(proxy, `${JSON.stringify(message)}\n`);
 
-    expect(stdout.trim()).toMatch(/^v\d+\.\d+\.\d+/);
+    expect(JSON.parse(stdout.trim())).toMatchObject(message);
     const workspaceDir = path.join(dataRoot, "workspaces");
-    const telemetryFile = findFile(workspaceDir, "telemetry.jsonl");
+    const telemetryFile = await waitForFile(workspaceDir, "telemetry.jsonl");
     const telemetry = fs.readFileSync(telemetryFile, "utf8");
     expect(telemetry).toContain("McpToolCall");
     expect(telemetry).toContain("code-review-graph.detect_changes_tool");
@@ -64,13 +63,26 @@ function writeAndCollect(child, input) {
     });
     child.on("error", (error) => finish(reject, error));
     child.on("close", (code) => {
-      if (!stdout) finish(reject, new Error(`proxy exited ${code}: ${stderr}`));
+      setTimeout(() => {
+        if (!stdout) finish(reject, new Error(`proxy exited ${code}: ${stderr}`));
+      }, 25);
     });
-    setTimeout(() => child.stdin.end(input), 25);
+    child.stdin.end(input);
   });
 }
 
+async function waitForFile(root, name, { timeoutMs = 1000 } = {}) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const found = findFile(root, name);
+    if (found) return found;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(`Timed out waiting for ${name} under ${root}`);
+}
+
 function findFile(root, name) {
+  if (!fs.existsSync(root)) return null;
   for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
     const fullPath = path.join(root, entry.name);
     if (entry.isFile() && entry.name === name) return fullPath;
