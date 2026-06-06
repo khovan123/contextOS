@@ -4,7 +4,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { filterActionableRules, findExplicitPromptFiles, findProjectManifestFiles, findRelevantFiles, isDocumentationOnlyRule, isSystemUserRule, parseRules, scoreRules } from "../plugins/ctx/lib/analyzer.js";
-import { findEmbeddingRelevantFiles } from "../plugins/ctx/lib/file-embedding-retriever.js";
+import { findEmbeddingRelevantFiles, findIndexedFileTextMatches } from "../plugins/ctx/lib/file-embedding-retriever.js";
 import { expandImportGraph, rebuildImportGraphIndex } from "../plugins/ctx/lib/import-graph.js";
 import { buildGraphQueries, findGraphRelevantFiles, mergeRelevantFiles } from "../plugins/ctx/lib/graph-retriever.js";
 import { loadRuntimeEvidence } from "../plugins/ctx/lib/telemetry.js";
@@ -121,6 +121,60 @@ Plain paragraph with enough content to become a standalone rule.
         source: "embedding",
         reasons: ["file-embedding:0.82"]
       }
+    ]);
+  });
+
+  it("uses indexed file text matches when hook fallback disables embeddings", async () => {
+    const cwd = path.join(os.tmpdir(), "ctx-indexed-text-files");
+    const files = await findRelevantFiles({
+      cwd,
+      task: "create forum page with new topic, trending, and chatting everyone",
+      dataDir: fs.mkdtempSync(path.join(os.tmpdir(), "ctx-indexed-text-data-")),
+      limit: 3,
+      fileEmbeddingOptions: { enabled: false },
+      embeddingFileFinder: async () => [],
+      indexedFileTextFinder: async () => [
+        {
+          path: path.join("webapp", "src", "app", "forum", "page.tsx"),
+          score: 12,
+          source: "indexed-file-text",
+          reasons: ["indexed-file-text:forum,page,topic"]
+        },
+        {
+          path: path.join("webapp", "src", "components", "chat", "chat-panel.tsx"),
+          score: 8,
+          source: "indexed-file-text",
+          reasons: ["indexed-file-text:chat"]
+        }
+      ]
+    });
+
+    expect(files.map((file) => file.path)).toEqual([
+      path.join("webapp", "src", "app", "forum", "page.tsx"),
+      path.join("webapp", "src", "components", "chat", "chat-panel.tsx")
+    ]);
+  });
+
+  it("can list text matches from an existing embedding index without loading embeddings", async () => {
+    const cwd = path.join(os.tmpdir(), "ctx-indexed-lister-files");
+    const files = await findIndexedFileTextMatches({
+      cwd,
+      task: "create forum chat page",
+      dataDir: "unused",
+      indexedLister: async ({ kind }) => {
+        expect(kind).toBe(`file:${path.resolve(cwd)}`);
+        return {
+          status: "enabled",
+          items: [
+            { id: path.join("webapp", "src", "app", "forum", "page.tsx"), text: "forum topic trending chat page" },
+            { id: path.join("webapp", "src", "app", "settings", "page.tsx"), text: "settings profile" }
+          ]
+        };
+      }
+    });
+
+    expect(files.map((file) => file.path)).toEqual([
+      path.join("webapp", "src", "app", "forum", "page.tsx")
     ]);
   });
 

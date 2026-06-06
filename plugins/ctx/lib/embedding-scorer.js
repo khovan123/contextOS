@@ -108,6 +108,29 @@ export async function searchIndexedEmbeddings({
   }
 }
 
+export async function listIndexedEmbeddingItems({
+  kind,
+  dataDir = defaultDataRoot()
+} = {}) {
+  if (!kind) return { items: [], status: "disabled" };
+  const cachePath = path.join(dataDir, "embeddings.db");
+  if (!fs.existsSync(cachePath)) return { items: [], status: "cold-cache", cachePath };
+  let cache;
+  try {
+    cache = await openEmbeddingCache(dataDir);
+    const items = cache.listIndexed(kind).map(({ id, text }) => ({ id, text }));
+    cache.close();
+    return { items, status: "enabled", cachePath };
+  } catch (error) {
+    try {
+      cache?.close();
+    } catch {
+      // best-effort close while reporting fallback status
+    }
+    return { items: [], status: "fallback", error: error?.message || String(error), cachePath };
+  }
+}
+
 export async function warmIndexedEmbeddings({
   kind,
   items = [],

@@ -1,7 +1,7 @@
 import { scheduleContext } from "./scheduler.js";
 import { appendJsonLine, writeJsonFile } from "./fs-utils.js";
 import { maybeAutoWarmWorkspace } from "./auto-warm.js";
-import { callCtxHealth, callCtxScoreContext } from "./ctx-mcp-client.js";
+import { callCtxHealth, callCtxScoreContext, ensureCtxMcpDaemon } from "./ctx-mcp-client.js";
 import { resolveHookCwd } from "./hook-io.js";
 import { loadOutputConfig, outputConfigLimits } from "./output-config.js";
 import { scoreContext as scoreContextDirect } from "./score-context.js";
@@ -18,6 +18,7 @@ export async function handlePromptPayload(
     injectContext = process.env.CONTEXTOS_INJECT !== "0",
     scoreContextClient = callCtxScoreContext,
     healthContextClient = callCtxHealth,
+    ensureMcpDaemonClient = ensureCtxMcpDaemon,
     scoreContextDirectClient = scoreContextDirect,
     autoWarmWorkspace = maybeAutoWarmWorkspace,
     mcpDataDir,
@@ -35,8 +36,13 @@ export async function handlePromptPayload(
   const promptLimits = outputConfigLimits(effectiveOutputConfig);
 
   let scored;
+  let mcpDaemon = null;
   try {
     if (requireHotMcp) {
+      mcpDaemon = await ensureMcpDaemonClient({
+        dataDir: mcpDataDir || dataDir,
+        waitMs: Number(process.env.CONTEXTOS_MCP_AUTOSTART_WAIT_MS || 1500)
+      });
       const health = await healthContextClient({
         dataDir: mcpDataDir || dataDir,
         timeoutMs: Number(process.env.CONTEXTOS_MCP_HEALTH_TIMEOUT_MS || 250)
@@ -54,7 +60,7 @@ export async function handlePromptPayload(
       maxWorkflows: promptLimits.workflows
     }, {
       dataDir: mcpDataDir || dataDir,
-      timeoutMs: Number(process.env.CONTEXTOS_MCP_BRIDGE_TIMEOUT_MS || 2000)
+      timeoutMs: Number(process.env.CONTEXTOS_MCP_BRIDGE_TIMEOUT_MS || 5000)
     });
   } catch (error) {
     try {
@@ -74,13 +80,15 @@ export async function handlePromptPayload(
       scored.telemetry = {
         ...(scored.telemetry || {}),
         bridgeStatus: "fallback",
-        bridgeError: error?.message || String(error)
+        bridgeError: error?.message || String(error),
+        mcpDaemon
       };
     } catch (directError) {
       scored = emptyScore({
         bridgeStatus: "fallback-failed",
         bridgeError: error?.message || String(error),
-        directFallbackError: directError?.message || String(directError)
+        directFallbackError: directError?.message || String(directError),
+        mcpDaemon
       });
     }
   }
@@ -114,6 +122,7 @@ export async function handlePromptPayload(
     suggestedWorkflows,
     telemetry: {
       ...(scored.telemetry || {}),
+      retrievalMode: retrievalMode(scored.telemetry || {}),
       rulesInjected: (scheduled.highRules?.length || 0) + (scheduled.midRules?.length || 0),
       filesSuggested: relevantFiles.length,
       skillsSuggested: suggestedSkills.length,
@@ -232,6 +241,19 @@ function emptyScore(telemetry = {}) {
       workflowsSuggested: 0,
       ...telemetry
     }
+  };
+}
+
+export function retrievalMode(telemetry = {}) {
+  const bridge = telemetry.bridgeStatus || "mcp";
+  const embedding = telemetry.modelStatus === "disabled" ? "disabled" : "enabled";
+  const fallback = bridge === "fallback" || bridge === "fallback-failed" || embedding === "disabled";
+  return {
+    bridge,
+    bridgeError: telemetry.bridgeError || null,
+    embedding,
+    fileFallback: fallback ? "indexed-text-match" : null,
+    skillFallback: fallback ? "lightweight-evidence-score" : null
   };
 }
 

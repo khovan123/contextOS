@@ -29,7 +29,11 @@ const keepAlive = setInterval(() => {}, 2 ** 31 - 1);
 
 const server = createContextOSMcpServer({ dataDir, getHealth: bridgeHealth });
 console.error("ctx-mcp ready");
-await server.connect(new StdioServerTransport());
+if (process.env.CONTEXTOS_MCP_DAEMON === "1") {
+  console.error("ctx-mcp daemon mode");
+} else {
+  await server.connect(new StdioServerTransport());
+}
 
 async function ensureModelReady() {
   const modelDir = modelCacheDir(dataDir);

@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { findGraphRelevantFiles, mergeRelevantFiles } from "./graph-retriever.js";
 import { expandImportGraph } from "./import-graph.js";
-import { findEmbeddingRelevantFiles } from "./file-embedding-retriever.js";
+import { findEmbeddingRelevantFiles, findIndexedFileTextMatches } from "./file-embedding-retriever.js";
 import { workspacePackagePaths } from "./project-profiler.js";
 
 const STOP_WORDS = new Set([
@@ -280,7 +280,8 @@ export async function findRelevantFiles({
   limit = 3,
   embeddingFileFinder = findEmbeddingRelevantFiles,
   fileEmbeddingTimeoutMs,
-  fileEmbeddingOptions = {}
+  fileEmbeddingOptions = {},
+  indexedFileTextFinder = findIndexedFileTextMatches
 } = {}) {
   if (!String(task || "").trim()) return [];
 
@@ -295,13 +296,21 @@ export async function findRelevantFiles({
     embeddingOptions: fileEmbeddingOptions,
     limit: Math.max(limit * 2, 6)
   });
+  const indexedTextFiles = fileEmbeddingOptions?.enabled === false
+    ? await indexedFileTextFinder({
+      cwd,
+      task: retrievalTask,
+      dataDir,
+      limit: Math.max(limit * 2, 6)
+    })
+    : [];
   const importGraphFiles = expandImportGraph({
     cwd,
-    seedFiles: [...explicitFiles, ...manifestFiles, ...embeddingFiles].slice(0, limit),
+    seedFiles: [...explicitFiles, ...manifestFiles, ...embeddingFiles, ...indexedTextFiles].slice(0, limit),
     dataDir,
     limit: Math.max(limit * 2, 6)
   });
-  const seedFiles = mergeLocalFileCandidates([...explicitFiles, ...manifestFiles, ...embeddingFiles, ...importGraphFiles])
+  const seedFiles = mergeLocalFileCandidates([...explicitFiles, ...manifestFiles, ...embeddingFiles, ...indexedTextFiles, ...importGraphFiles])
     .slice(0, Math.max(limit * 3, 9));
 
   const graphFiles = findGraphRelevantFiles({

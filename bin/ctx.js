@@ -41,10 +41,11 @@ import { configureOutputSections, enabledOutputSectionsLabel, loadOutputConfig, 
 import { syncWorkflows, warmWorkflowEmbeddings } from "../plugins/ctx/lib/workflow-discoverer.js";
 import { checkForUpdate } from "../plugins/ctx/lib/update-notifier.js";
 import { fetchSkillsForAgents, printSkillRecommendations, getAllLibraries, getInstallCommands } from "../plugins/ctx/lib/skill-library.js";
-import { invalidateCtxMcpSocket } from "../plugins/ctx/lib/ctx-mcp-client.js";
+import { callCtxHealth, ctxMcpSocketPath, invalidateCtxMcpSocket } from "../plugins/ctx/lib/ctx-mcp-client.js";
 import { runPrefixedCommand } from "../plugins/ctx/lib/shell-runner.js";
 import { formatContextOSReady, inspectContextOSReady } from "../plugins/ctx/lib/certification.js";
 import { formatProjectContextGeneration, generateProjectContext } from "../plugins/ctx/lib/project-context-generator.js";
+import { retrievalMode } from "../plugins/ctx/lib/prompt-hook.js";
 
 /**
  * Run a shell command with all output lines prefixed by │  
@@ -195,6 +196,7 @@ Usage:
   ctx setup --no-skills                             Skip skill sync
   ctx setup --quiet                                 Quiet mode (minimal output)
   ctx debug -- "task"                               Debug a task with ContextOS tracing
+  ctx health                                        Show ctx-mcp bridge/model/index health
   ctx doctor                                       Score repository ContextOS readiness
   ctx doctor --fix                                 Generate starter project skills/workflow
   ctx doctor --fix --force                         Regenerate starter project context files
@@ -640,6 +642,7 @@ async function debug(task) {
   console.log(`workspace marker: ${workspaceMarkerPath(cwd)}`);
   console.log(`rules: ${rules.length}`);
   console.log(`mcp scorer: ${scored.telemetry.modelStatus}${scored.telemetry.model ? ` (${scored.telemetry.model})` : ""}`);
+  printRetrievalMode(retrievalMode(scored.telemetry || {}));
   console.log(`elapsed: ${scored.telemetry.elapsedMs}ms`);
   console.log("");
   for (const rule of rules.slice(0, 20)) {
@@ -675,6 +678,45 @@ async function debug(task) {
   console.log("");
   console.log("Final additionalContext:");
   console.log(scheduled.additionalContext || "(empty)");
+}
+
+async function health() {
+  const dataDir = contextOSDataDir();
+  const socketPath = ctxMcpSocketPath(dataDir);
+  const socketPresent = fs.existsSync(socketPath);
+  let bridgeConnected = false;
+  let bridgeHealth = {};
+  let bridgeError = null;
+  try {
+    bridgeHealth = await callCtxHealth({
+      dataDir,
+      timeoutMs: Number(process.env.CONTEXTOS_MCP_HEALTH_TIMEOUT_MS || 500),
+      connectTimeoutMs: Number(process.env.CONTEXTOS_MCP_CONNECT_TIMEOUT_MS || 500)
+    });
+    bridgeConnected = true;
+  } catch (error) {
+    bridgeError = error?.message || String(error);
+  }
+
+  const indexesReady = fs.existsSync(path.join(dataDir, "embeddings.db"));
+  const modelHot = Boolean(bridgeHealth.embedding_pipeline_loaded);
+  console.log("ContextOS health");
+  console.log(`ctx-mcp: ${socketPresent ? "running" : "not running"}`);
+  console.log(`bridge: ${bridgeConnected ? "connected" : "disconnected"}`);
+  console.log(`embedding_pipeline_loaded: ${Boolean(bridgeHealth.embedding_pipeline_loaded)}`);
+  console.log(`model_hot: ${modelHot}`);
+  console.log(`indexes_ready: ${indexesReady}`);
+  if (bridgeHealth.preload_status) console.log(`preload_status: ${bridgeHealth.preload_status}`);
+  if (bridgeHealth.loaded_at) console.log(`loaded_at: ${new Date(bridgeHealth.loaded_at).toISOString()}`);
+  if (bridgeHealth.error || bridgeError) console.log(`error: ${bridgeHealth.error || bridgeError}`);
+}
+
+function printRetrievalMode(mode = {}) {
+  console.log("retrieval mode:");
+  console.log(`- bridge: ${mode.bridge || "mcp"}${mode.bridgeError ? ` (${mode.bridgeError})` : ""}`);
+  console.log(`- embedding: ${mode.embedding || "enabled"}`);
+  console.log(`- file fallback: ${mode.fileFallback || "none"}`);
+  console.log(`- skill fallback: ${mode.skillFallback || "none"}`);
 }
 
 async function skillsDoctor(task) {
@@ -1048,6 +1090,8 @@ try {
     const task = marker >= 0 ? args.slice(marker + 1).join(" ") : args.slice(1).join(" ");
     if (!task.trim()) throw new Error('Usage: ctx debug -- "task"');
     await debug(task);
+  } else if (command === "health") {
+    await health();
   } else if (command === "doctor") {
     if (args.includes("--fix")) {
       const generated = generateProjectContext({ cwd: process.cwd(), force: args.includes("--force") });

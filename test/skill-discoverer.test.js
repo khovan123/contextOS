@@ -970,6 +970,53 @@ describe("skill discoverer", () => {
     expect(names).not.toContain("asana-automation");
   });
 
+  it("suggests global skills with lightweight scoring when embeddings are disabled", async () => {
+    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-skill-lightweight-next-"));
+    fs.mkdirSync(path.join(cwd, "webapp"), { recursive: true });
+    fs.writeFileSync(path.join(cwd, "package.json"), JSON.stringify({
+      workspaces: ["webapp"]
+    }));
+    fs.writeFileSync(path.join(cwd, "webapp", "package.json"), JSON.stringify({
+      dependencies: {
+        next: "^15.0.0",
+        react: "^19.0.0",
+        "socket.io-client": "^4.0.0"
+      }
+    }));
+
+    const suggested = await suggestSkills({
+      cwd,
+      prompt: "create forum page, where to show new topic, trending, and chatting everyone",
+      embeddingsEnabled: false,
+      limit: 5,
+      skills: [
+        {
+          name: "nextjs-app-router-patterns",
+          description: "Build Next.js App Router pages, layouts, route groups, server components, and frontend UI flows.",
+          path: "/home/user/.codex/skills/nextjs-app-router-patterns/SKILL.md"
+        },
+        {
+          name: "realtime-chat",
+          description: "Implement chat, messaging, realtime topics, websocket interactions, and conversation UI.",
+          path: "/home/user/.codex/skills/realtime-chat/SKILL.md"
+        },
+        {
+          name: "metasploit-framework",
+          description: "Security exploitation workflows for penetration testing.",
+          path: "/home/user/.codex/skills/metasploit-framework/SKILL.md"
+        }
+      ]
+    });
+
+    const names = suggested.map((skill) => skill.name);
+    expect(names).toEqual(expect.arrayContaining([
+      "nextjs-app-router-patterns",
+      "realtime-chat"
+    ]));
+    expect(names).not.toContain("metasploit-framework");
+    expect(suggested.every((skill) => skill.reasons.some((reason) => reason.startsWith("lightweight:")))).toBe(true);
+  });
+
   it("reads package metadata across monorepo workspace globs", () => {
     const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-skill-monorepo-hints-"));
     fs.mkdirSync(path.join(cwd, "apps", "mobile"), { recursive: true });

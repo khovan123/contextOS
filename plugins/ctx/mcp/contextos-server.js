@@ -1,10 +1,14 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
 import { scoreContext } from "../lib/score-context.js";
 import { scheduleContext } from "../lib/scheduler.js";
 
-export function createContextOSMcpServer({ dataDir, getHealth = defaultHealth }) {
+const CTX_BIN = fileURLToPath(new URL("../../../bin/ctx.js", import.meta.url));
+
+export function createContextOSMcpServer({ dataDir, getHealth = defaultHealth, runCommand = runCliCommand } = {}) {
   const server = new McpServer({
     name: "ctx-mcp",
     version: "0.1.0"
@@ -107,7 +111,127 @@ export function createContextOSMcpServer({ dataDir, getHealth = defaultHealth })
     };
   });
 
+  registerCliTool(server, {
+    name: "ctx_debug_context",
+    title: "Debug ContextOS routing",
+    description: "Preview rules, files, skills, workflows, and final prompt context for a task.",
+    inputSchema: {
+      cwd: z.string().optional(),
+      prompt: z.string()
+    },
+    args: ({ prompt }) => ["debug", "--", prompt],
+    runCommand
+  });
+
+  registerCliTool(server, {
+    name: "ctx_doctor_repo",
+    title: "Inspect ContextOS repository readiness",
+    description: "Score repository ContextOS readiness without modifying files.",
+    inputSchema: {
+      cwd: z.string().optional()
+    },
+    args: () => ["doctor"],
+    runCommand
+  });
+
+  registerCliTool(server, {
+    name: "ctx_skills_doctor",
+    title: "Explain ContextOS skill routing",
+    description: "Explain which skills ContextOS would select for a prompt and why.",
+    inputSchema: {
+      cwd: z.string().optional(),
+      prompt: z.string()
+    },
+    args: ({ prompt }) => ["skills", "doctor", "--", prompt],
+    runCommand
+  });
+
+  registerCliTool(server, {
+    name: "ctx_report_last_task",
+    title: "Show last ContextOS task report",
+    description: "Read the latest local ContextOS compliance report for the workspace.",
+    inputSchema: {
+      cwd: z.string().optional()
+    },
+    args: () => ["report"],
+    runCommand
+  });
+
+  registerCliTool(server, {
+    name: "ctx_evidence_last_task",
+    title: "Show last ContextOS evidence",
+    description: "Read detailed evidence for the latest local ContextOS compliance report.",
+    inputSchema: {
+      cwd: z.string().optional()
+    },
+    args: () => ["evidence"],
+    runCommand
+  });
+
+  registerCliTool(server, {
+    name: "ctx_stats_workspace",
+    title: "Show ContextOS workspace stats",
+    description: "Summarize local ContextOS prompt, report, hook, and telemetry history.",
+    inputSchema: {
+      cwd: z.string().optional()
+    },
+    args: () => ["stats"],
+    runCommand
+  });
+
   return server;
+}
+
+function registerCliTool(server, { name, title, description, inputSchema, args, runCommand }) {
+  server.registerTool(name, {
+    title,
+    description,
+    inputSchema,
+    outputSchema: {
+      code: z.number(),
+      stdout: z.string(),
+      stderr: z.string()
+    }
+  }, async (toolArgs) => {
+    const result = await runCommand(args(toolArgs), {
+      cwd: toolArgs.cwd || process.cwd()
+    });
+    const text = result.stdout || result.stderr || `(ctx command exited with code ${result.code})`;
+    return {
+      content: [{ type: "text", text }],
+      structuredContent: result
+    };
+  });
+}
+
+function runCliCommand(args, { cwd = process.cwd(), timeoutMs = Number(process.env.CONTEXTOS_MCP_CLI_TOOL_TIMEOUT_MS || 10000) } = {}) {
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, [CTX_BIN, ...args], {
+      cwd,
+      env: process.env,
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    let stdout = "";
+    let stderr = "";
+    const timer = setTimeout(() => {
+      child.kill("SIGTERM");
+      resolve({ code: 124, stdout, stderr: stderr || `ctx command timed out after ${timeoutMs}ms` });
+    }, timeoutMs);
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString("utf8");
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString("utf8");
+    });
+    child.on("error", (error) => {
+      clearTimeout(timer);
+      resolve({ code: 1, stdout, stderr: error?.message || String(error) });
+    });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      resolve({ code: code ?? 0, stdout, stderr });
+    });
+  });
 }
 
 function defaultHealth() {

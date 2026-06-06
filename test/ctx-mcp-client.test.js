@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { callCtxHealth, callCtxScoreContext, ctxMcpSocketPath, invalidateCtxMcpSocket } from "../plugins/ctx/lib/ctx-mcp-client.js";
+import { callCtxHealth, callCtxScoreContext, ctxMcpSocketPath, ensureCtxMcpDaemon, invalidateCtxMcpSocket } from "../plugins/ctx/lib/ctx-mcp-client.js";
 
 describe("ctx mcp client", () => {
   it("fails stale socket connects within the connect timeout", async () => {
@@ -92,6 +92,45 @@ describe("ctx mcp client", () => {
 
     expect(invalidateCtxMcpSocket(dataDir)).toBe(true);
     expect(fs.existsSync(ctxMcpSocketPath(dataDir))).toBe(false);
+  });
+
+  it("does not spawn ctx-mcp daemon when the bridge socket already exists", async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-mcp-daemon-present-"));
+    fs.writeFileSync(ctxMcpSocketPath(dataDir), "");
+
+    const result = await ensureCtxMcpDaemon({
+      dataDir,
+      spawnProcess: () => {
+        throw new Error("should not spawn");
+      }
+    });
+
+    expect(result).toMatchObject({ started: false, status: "socket-present" });
+  });
+
+  it("spawns ctx-mcp daemon and waits briefly for bridge health", async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-mcp-daemon-start-"));
+    const spawns = [];
+    const result = await ensureCtxMcpDaemon({
+      dataDir,
+      waitMs: 50,
+      spawnProcess: (command, args, options) => {
+        spawns.push({ command, args, options });
+        return { unref: () => {} };
+      },
+      healthClient: async () => ({
+        model_cache_ready: true,
+        embedding_pipeline_loaded: true,
+        bridge_ready: true
+      })
+    });
+
+    expect(result).toMatchObject({ started: true, status: "ready" });
+    expect(spawns).toHaveLength(1);
+    expect(spawns[0].command).toBe(process.execPath);
+    expect(spawns[0].options.detached).toBe(true);
+    expect(spawns[0].options.stdio).toBe("ignore");
+    expect(spawns[0].options.env.CONTEXTOS_MCP_DAEMON).toBe("1");
   });
 });
 

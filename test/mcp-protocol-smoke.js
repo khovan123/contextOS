@@ -75,6 +75,7 @@ async function runSemanticSmoke({ cwd, dataDir }) {
   const health = await callHealth(client);
   assert.equal(health.structuredContent.model_cache_ready, hasInstalledModel);
   assert.equal(health.structuredContent.bridge_ready, false);
+  await assertCliTools(client);
 
   const first = await callScore(client, cwd, "kiểm tra flow kiểm duyệt upload");
   assert.equal(first.structuredContent.telemetry.modelStatus, "enabled");
@@ -129,6 +130,7 @@ async function runColdCacheSmoke({ cwd, dataDir }) {
   const health = await callHealth(client);
   assert.equal(health.structuredContent.model_cache_ready, false);
   assert.equal(health.structuredContent.embedding_pipeline_loaded, false);
+  await assertCliTools(client);
   const result = await callScore(client, cwd, "kiểm tra flow kiểm duyệt upload");
   assert.equal(result.structuredContent.telemetry.modelStatus, "cold-cache");
   assert.ok(result.structuredContent.telemetry.rulesParsed > 0);
@@ -148,6 +150,11 @@ async function startInMemoryMcp({ dataDir }) {
       embedding_pipeline_loaded: false,
       bridge_ready: false,
       preload_status: hasInstalledModel ? "not-started" : "missing-model"
+    }),
+    runCommand: async (args, options) => ({
+      code: 0,
+      stdout: `ran ctx ${args.join(" ")} in ${options.cwd}`,
+      stderr: ""
     })
   });
   const nextClient = new Client({ name: "ctx-mcp-smoke", version: "0.1.0" });
@@ -156,6 +163,22 @@ async function startInMemoryMcp({ dataDir }) {
     nextClient.connect(clientTransport)
   ]);
   return { client: nextClient, server: nextServer };
+}
+
+async function assertCliTools(activeClient) {
+  const cwd = process.cwd();
+  for (const [name, args, expected] of [
+    ["ctx_debug_context", { cwd, prompt: "fix deployed" }, "ran ctx debug -- fix deployed"],
+    ["ctx_doctor_repo", { cwd }, "ran ctx doctor"],
+    ["ctx_skills_doctor", { cwd, prompt: "fix deployed" }, "ran ctx skills doctor -- fix deployed"],
+    ["ctx_report_last_task", { cwd }, "ran ctx report"],
+    ["ctx_evidence_last_task", { cwd }, "ran ctx evidence"],
+    ["ctx_stats_workspace", { cwd }, "ran ctx stats"]
+  ]) {
+    const result = await activeClient.callTool({ name, arguments: args });
+    assert.equal(result.structuredContent.code, 0);
+    assert.ok(result.content[0].text.includes(expected), `${name} should return CLI-backed output`);
+  }
 }
 
 async function callHealth(activeClient) {

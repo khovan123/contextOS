@@ -217,7 +217,12 @@ export async function suggestSkills({
   const byId = new Map(catalog.map((skill) => [skillIndexId(skill), skill]));
   const explicitSkills = explicitSkillSuggestions({ prompt, byId });
   const projectEvidence = detectProjectEvidence({ cwd });
-  if (!embeddingsEnabled) return finalizeSkillScores(explicitSkills, limit, { cwd, prompt, projectEvidence });
+  if (!embeddingsEnabled) {
+    return finalizeSkillScores([
+      ...explicitSkills,
+      ...lightweightSkillSuggestions({ catalog, prompt, projectEvidence })
+    ], limit, { cwd, prompt, projectEvidence });
+  }
 
   if (dataDir) {
     const indexed = await searchSkillIndexes({ cwd, query, dataDir, timeoutMs, indexedSearcher });
@@ -262,6 +267,63 @@ function explicitSkillSuggestions({ prompt = "", byId = new Map() } = {}) {
     .map((name, index) => ({ skill: byId.get(normalize(name)), index }))
     .filter(({ skill }) => Boolean(skill))
     .map(({ skill, index }) => skillScoreFromEmbedding(skill, 1 - index * 0.0001, ["explicit-skill"]));
+}
+
+function lightweightSkillSuggestions({ catalog = [], prompt = "", projectEvidence = {} } = {}) {
+  const promptTokens = new Set(meaningfulSkillTokens(prompt));
+  if (!promptTokens.size) return [];
+
+  return catalog
+    .map((skill) => {
+      const enriched = skill.searchTokens ? skill : enrichSkill(skill);
+      const metadata = enriched.metadata || inferSkillMetadata(enriched);
+      const promptMatch = matchTextTriggers(prompt, metadata.positivePrompts);
+      const dependencyEvidence = matchList(projectEvidence.dependencies, metadata.dependencies);
+      const fileEvidence = matchFiles(projectEvidence.files, metadata.files);
+      const negativeDependencies = matchList(projectEvidence.dependencies, metadata.negativeDependencies);
+      const negativeFiles = matchFiles(projectEvidence.files, metadata.negativeFiles);
+      const negativePrompts = matchTextTriggers(prompt, metadata.negativePrompts);
+      const negativePenalty = Math.max(negativeDependencies.score, negativeFiles.score, negativePrompts.score);
+      const nameMatches = meaningfulSkillTokens(enriched.name).filter((token) => promptTokens.has(token));
+      const tokenMatches = meaningfulSkillTokens(`${enriched.name} ${enriched.description}`).filter((token) => promptTokens.has(token));
+      const hasRouterEvidence = Boolean(
+        promptMatch.matches.length
+        || dependencyEvidence.matches.length
+        || fileEvidence.matches.length
+      );
+      const genericPromptOnly = promptMatch.matches.length > 0
+        && promptMatch.matches.every((item) => genericPromptTrigger(normalize(item)))
+        && !nameMatches.length
+        && !tokenMatches.length
+        && !dependencyEvidence.matches.length
+        && !fileEvidence.matches.length;
+      if (!hasRouterEvidence && !nameMatches.length && tokenMatches.length < 2) return null;
+      if (genericPromptOnly) return null;
+
+      const ecosystemPenalty = irrelevantEcosystemPenalty(enriched, { promptTokens, projectEvidence });
+      const lexicalScore = Math.min(1,
+        nameMatches.length * 0.20
+        + Math.min(tokenMatches.length, 5) * 0.08
+        + promptMatch.score * 0.45
+        + dependencyEvidence.score * 0.20
+        + fileEvidence.score * 0.12
+        + skillSourceBoostScore(enriched) * 0.03
+        - negativePenalty * 0.25
+        - ecosystemPenalty
+      );
+      if (lexicalScore < 0.35) return null;
+
+      const reasons = [
+        `lightweight:${lexicalScore.toFixed(2)}`,
+        ...nameMatches.slice(0, 3).map((item) => `name:${item}`),
+        ...tokenMatches.slice(0, 5).map((item) => `token:${item}`)
+      ];
+      return skillScoreFromEmbedding(enriched, lexicalScore, reasons);
+    })
+    .filter(Boolean)
+    .sort((a, b) => Number(b.embeddingScore || 0) - Number(a.embeddingScore || 0)
+      || scopePriority(b.scope) - scopePriority(a.scope)
+      || a.name.localeCompare(b.name));
 }
 
 function extractExplicitSkillNames(prompt = "") {
@@ -557,7 +619,7 @@ function inferSkillMetadata(skill = {}) {
     metadata.dependencies.push("react");
     metadata.positivePrompts.push("frontend", "ui", "component", "page", "layout", "button", "modal");
   }
-  if (/\b(forum|topic|community|chat|message|realtime|websocket|socket|conversation)\b/.test(text)) {
+  if (/\b(forum|chat|realtime|websocket|socket)\b/.test(text)) {
     metadata.positivePrompts.push("forum", "topic", "new topic", "trending", "chat", "chatting", "message", "realtime", "websocket");
     metadata.files.push("package.json", "webapp/package.json", "services/*/package.json");
     metadata.dependencies.push("next", "react", "socket.io", "ws", "@nestjs/websockets");
@@ -708,6 +770,43 @@ function isAmbiguousPrompt(prompt = "") {
   if (tokens.length <= 2) return true;
   const generic = new Set(["fix", "add", "update", "debug", "deploy", "deployed", "auth", "cache", "test", "error"]);
   return tokens.length <= 4 && tokens.every((token) => generic.has(token));
+}
+
+function meaningfulSkillTokens(value) {
+  const stop = new Set([
+    "the", "and", "for", "with", "this", "that", "from", "into", "using", "use",
+    "task", "create", "update", "implement", "build", "fix", "debug", "page",
+    "app", "src", "file", "files", "skill", "skills", "suggested", "suggest", "new"
+  ]);
+  return normalize(value)
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length > 2 && !stop.has(token));
+}
+
+function genericPromptTrigger(trigger) {
+  return new Set(["frontend", "ui", "component", "page", "layout", "button", "modal"]).has(trigger);
+}
+
+function irrelevantEcosystemPenalty(skill = {}, { promptTokens = new Set(), projectEvidence = {} } = {}) {
+  const text = normalize(`${skill.name || ""} ${skill.description || ""}`);
+  const dependencies = new Set((projectEvidence.dependencies || []).map(normalizeDependency));
+  const ecosystems = [
+    { token: "azure", deps: ["@azure", "azure"], prompts: ["azure"] },
+    { token: "aws", deps: ["aws-sdk", "@aws-sdk"], prompts: ["aws"] },
+    { token: "java", deps: ["java"], prompts: ["java"] },
+    { token: "dotnet", deps: ["dotnet", "aspnet"], prompts: ["dotnet", "csharp"] },
+    { token: "python", deps: ["python"], prompts: ["python"] },
+    { token: "angular", deps: ["@angular/core", "angular"], prompts: ["angular"] }
+  ];
+  let penalty = 0;
+  for (const ecosystem of ecosystems) {
+    if (!text.includes(ecosystem.token)) continue;
+    const promptHas = ecosystem.prompts.some((token) => promptTokens.has(token));
+    const projectHas = ecosystem.deps.some((dependency) => [...dependencies].some((value) => value.includes(dependency)));
+    if (!promptHas && !projectHas) penalty += 0.55;
+  }
+  return Math.min(0.7, penalty);
 }
 
 function detectProjectEvidence({ cwd = process.cwd() } = {}) {

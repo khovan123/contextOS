@@ -236,6 +236,54 @@ describe("hook contracts", () => {
     expect(runtime.telemetry.bridgeStatus).toBe("fallback");
   });
 
+  it("records non-empty fallback context from indexed files and lightweight skills", async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-hook-indexed-lightweight-fallback-"));
+    const dataPath = path.join(tmp, ".data", "last-prompt-context.json");
+    const seenDirectPayloads = [];
+
+    const output = await handlePromptPayload(
+      { prompt: "create forum page with new topic, trending, and chatting everyone", cwd: tmp, hook_event_name: "UserPromptSubmit" },
+      {
+        dataPath,
+        mcpDataDir: path.join(tmp, ".ctx-data"),
+        scoreContextClient: async () => {
+          throw new Error("ctx-mcp bridge timed out after 2000ms");
+        },
+        scoreContextDirectClient: async (payload) => {
+          seenDirectPayloads.push(payload);
+          return {
+            scoredRules: [],
+            suggestedFiles: [
+              { path: "webapp/src/features/forum/components/forum-page.tsx", score: 12, source: "indexed-file-text", reasons: ["indexed-file-text:forum,topic"] }
+            ],
+            suggestedSkills: [
+              { name: "realtime-chat", score: 0.78, reasons: ["lightweight:0.78"] }
+            ],
+            suggestedWorkflows: [],
+            telemetry: { elapsedMs: 1, modelStatus: "disabled" }
+          };
+        },
+        outputConfig: defaultOutputConfig()
+      }
+    );
+    const runtime = JSON.parse(fs.readFileSync(dataPath, "utf8"));
+
+    expect(output.continue).toBe(true);
+    expect(output.hookSpecificOutput.additionalContext).toContain("forum-page.tsx");
+    expect(output.hookSpecificOutput.additionalContext).toContain("$realtime-chat");
+    expect(seenDirectPayloads[0]).toMatchObject({ allowEmbeddings: false });
+    expect(runtime.relevantFiles).toHaveLength(1);
+    expect(runtime.suggestedSkills).toHaveLength(1);
+    expect(runtime.telemetry.emptyContextReason).toBeNull();
+    expect(runtime.telemetry.retrievalMode).toEqual({
+      bridge: "fallback",
+      bridgeError: "ctx-mcp bridge timed out after 2000ms",
+      embedding: "disabled",
+      fileFallback: "indexed-text-match",
+      skillFallback: "lightweight-evidence-score"
+    });
+  });
+
   it("skips MCP scoring when bridge health says the model is not hot", async () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-hook-health-fallback-"));
     const dataPath = path.join(tmp, ".data", "last-prompt-context.json");
@@ -247,6 +295,7 @@ describe("hook contracts", () => {
       {
         dataPath,
         requireHotMcp: true,
+        ensureMcpDaemonClient: async () => ({ started: false, status: "socket-present" }),
         healthContextClient: async () => ({
           model_cache_ready: true,
           embedding_pipeline_loaded: false,
@@ -277,6 +326,48 @@ describe("hook contracts", () => {
     expect(seenDirectPayloads[0]).toMatchObject({ allowEmbeddings: false });
     expect(runtime.telemetry.bridgeError).toContain("ctx-mcp scorer not hot");
     expect(runtime.scheduled.additionalContext).toContain("package.json");
+  });
+
+  it("auto-starts ctx-mcp daemon before hot bridge scoring when requested", async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-hook-autostart-mcp-"));
+    const dataPath = path.join(tmp, ".data", "last-prompt-context.json");
+    const events = [];
+
+    const output = await handlePromptPayload(
+      { prompt: "review code changes", cwd: tmp, hook_event_name: "UserPromptSubmit" },
+      {
+        dataPath,
+        mcpDataDir: path.join(tmp, ".ctx-data"),
+        requireHotMcp: true,
+        ensureMcpDaemonClient: async ({ dataDir, waitMs }) => {
+          events.push(["ensure", dataDir, waitMs]);
+          return { started: true, status: "ready" };
+        },
+        healthContextClient: async () => {
+          events.push(["health"]);
+          return {
+            model_cache_ready: true,
+            embedding_pipeline_loaded: true,
+            bridge_ready: true,
+            preload_status: "loaded"
+          };
+        },
+        scoreContextClient: async () => {
+          events.push(["score"]);
+          return {
+            scoredRules: [],
+            suggestedFiles: [{ path: "package.json", score: 10 }],
+            suggestedSkills: [],
+            suggestedWorkflows: [],
+            telemetry: { elapsedMs: 1, modelStatus: "enabled" }
+          };
+        },
+        outputConfig: defaultOutputConfig()
+      }
+    );
+
+    expect(output.continue).toBe(true);
+    expect(events.map((event) => event[0])).toEqual(["ensure", "health", "score"]);
   });
 
   it("fails open when direct fallback scoring exceeds the hook budget", async () => {

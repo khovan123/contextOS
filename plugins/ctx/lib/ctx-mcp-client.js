@@ -1,11 +1,13 @@
 import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
+import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
 import { defaultDataRoot } from "./workspace-data.js";
 
-const DEFAULT_TIMEOUT_MS = 2000;
-const DEFAULT_CONNECT_TIMEOUT_MS = 100;
+const DEFAULT_TIMEOUT_MS = 5000;
+const DEFAULT_CONNECT_TIMEOUT_MS = 500;
 export const CTX_MCP_BRIDGE_REVISION = 2;
 
 export function ctxMcpSocketPath(dataDir = defaultDataDir()) {
@@ -40,6 +42,50 @@ export async function callCtxHealth({
 } = {}) {
   const response = await callBridge({ type: "health" }, { dataDir, timeoutMs, connectTimeoutMs, createConnection });
   return response.health || {};
+}
+
+export async function ensureCtxMcpDaemon({
+  dataDir = defaultDataDir(),
+  waitMs = Number(process.env.CONTEXTOS_MCP_AUTOSTART_WAIT_MS || 1500),
+  enabled = process.env.CONTEXTOS_MCP_AUTOSTART !== "0",
+  socketPath = ctxMcpSocketPath(dataDir),
+  spawnProcess = spawn,
+  healthClient = callCtxHealth
+} = {}) {
+  if (!enabled) return { started: false, status: "disabled" };
+  if (fs.existsSync(socketPath)) return { started: false, status: "socket-present" };
+
+  const serverPath = fileURLToPath(new URL("../mcp/server.js", import.meta.url));
+  const child = spawnProcess(process.execPath, [serverPath], {
+    detached: true,
+    stdio: "ignore",
+    env: {
+      ...process.env,
+      CONTEXTOS_MCP_DAEMON: "1"
+    }
+  });
+  child.unref?.();
+
+  const deadline = Date.now() + Math.max(0, waitMs);
+  let lastError = null;
+  while (Date.now() <= deadline) {
+    try {
+      const health = await healthClient({
+        dataDir,
+        timeoutMs: Math.min(250, Math.max(50, waitMs)),
+        connectTimeoutMs: Math.min(DEFAULT_CONNECT_TIMEOUT_MS, Math.max(50, waitMs))
+      });
+      return { started: true, status: "ready", health };
+    } catch (error) {
+      lastError = error;
+      await sleep(100);
+    }
+  }
+  return {
+    started: true,
+    status: "timeout",
+    error: lastError?.message || String(lastError || "ctx-mcp daemon did not become ready")
+  };
 }
 
 async function callBridge(payload, {
@@ -120,4 +166,8 @@ function statIdentity(filePath) {
 
 function defaultDataDir() {
   return defaultDataRoot();
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

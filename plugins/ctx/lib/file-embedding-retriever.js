@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { isModelCacheReady, searchIndexedEmbeddings, warmIndexedEmbeddings } from "./embedding-scorer.js";
+import { isModelCacheReady, listIndexedEmbeddingItems, searchIndexedEmbeddings, warmIndexedEmbeddings } from "./embedding-scorer.js";
 import { rebuildImportGraphIndex } from "./import-graph.js";
 
 const SOURCE_EXTENSIONS = new Set([
@@ -49,6 +49,37 @@ export async function findEmbeddingRelevantFiles({
     }));
 }
 
+export async function findIndexedFileTextMatches({
+  cwd = process.cwd(),
+  task = "",
+  dataDir,
+  limit = 10,
+  indexedLister = listIndexedEmbeddingItems
+} = {}) {
+  if (!dataDir || !String(task || "").trim()) return [];
+  const result = await indexedLister({ kind: fileIndexKind(cwd), dataDir });
+  if (result.status !== "enabled" || !result.items.length) return [];
+  const queryTokens = meaningfulTokens(task);
+  if (!queryTokens.length) return [];
+  return result.items
+    .map((item) => {
+      const haystack = `${item.id || ""} ${item.text || ""}`.toLowerCase();
+      const matches = queryTokens.filter((token) => haystack.includes(token));
+      const basename = path.basename(String(item.id || "")).toLowerCase();
+      const basenameMatches = queryTokens.filter((token) => basename.includes(token));
+      const score = matches.length * 4 + basenameMatches.length * 3;
+      return {
+        path: item.id,
+        score,
+        source: "indexed-file-text",
+        reasons: matches.length ? [`indexed-file-text:${matches.slice(0, 5).join(",")}`] : []
+      };
+    })
+    .filter((item) => item.path && item.score > 0)
+    .sort((a, b) => b.score - a.score || a.path.localeCompare(b.path))
+    .slice(0, limit);
+}
+
 export async function warmFileEmbeddings({
   cwd = process.cwd(),
   dataDir,
@@ -72,6 +103,17 @@ export async function warmFileEmbeddings({
 
 function fileIndexKind(cwd) {
   return `file:${path.resolve(cwd)}`;
+}
+
+function meaningfulTokens(value) {
+  const stop = new Set(["the", "and", "for", "with", "this", "that", "task", "implement", "create", "update", "fix", "can", "not", "see", "any", "why", "allways", "always", "app", "src", "page"]);
+  return [...new Set(String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9/._-]+/g, " ")
+    .split(/\s+/)
+    .flatMap((token) => token.split(/[\\/._-]+/))
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 3 && !stop.has(token)))];
 }
 
 function listSourceFiles(cwd, { maxFiles }) {

@@ -391,6 +391,21 @@ Hook lightweight fallback: 0.69s
 MCP embedding hot startup: 477ms
 ```
 
+Agents can call read-only ContextOS MCP tools directly:
+
+```text
+ctx_health
+ctx_score_context
+ctx_debug_context
+ctx_doctor_repo
+ctx_skills_doctor
+ctx_report_last_task
+ctx_evidence_last_task
+ctx_stats_workspace
+```
+
+Write commands such as `ctx setup`, `ctx install`, `ctx refresh`, and `ctx sync` are not exposed as MCP tools by default.
+
 During install, ContextOS prints a 0-100 progress indicator. The longest stage is usually embedding warmup; if the model is already cached, install skips the download and only refreshes vectors.
 
 Verify the published package in any project:
@@ -591,6 +606,7 @@ This warning comes from a transitive dependency in the local embedding/WASM stac
 | `ctx setup --no-skills` | Skips skillshare sync during setup. | You do not want shared skills configured. | Does not run `ctx sync --skills`. |
 | `ctx setup --quiet` | Runs setup in measurement-only mode. | You want reports/stats without visible injected prompt context. | Installs hooks with prompt context injection disabled. |
 | `ctx debug -- "task"` | Runs the scheduler locally for a fake prompt. | You want to see which AGENTS.md rules and files ContextOS would inject before using Codex. | Prints rule scores, scoring reasons, suggested files, and final `additionalContext`. |
+| `ctx health` | Checks local ctx-mcp bridge/model/index readiness. | Hooks are falling back or suggestions look stale. | Prints bridge connection, model hot status, and whether local indexes exist. |
 | `ctx doctor` | Scores repository ContextOS readiness. | You want to add or verify a `ContextOS Ready` badge. | Prints Rules, Skills, Workflows, Overall tier, evidence, and next recommendations. |
 | `ctx doctor --fix` | Generates starter ContextOS project context. | `ctx doctor` says skills/workflows are missing and you want explicit local scaffolding. | Detects package/config evidence, creates up to three shared project skills plus `.agents/workflows/primary.md`, then prints the updated readiness score. |
 | `ctx report` | Shows the last Stop-hook compliance report for the current workspace. | An agent task has finished and you want the summary again. | Prints sectioned tables for summary, rule outcomes, suggested files, and runtime telemetry from `~/.ctx/contextos/workspaces/<workspace-id>/last-report.json`. |
@@ -696,6 +712,8 @@ Prompt-time file suggestions do not walk the repository. `ctx install` and `ctx 
 
 If a prompt has no usable context candidates, the hook fails open without emitting an empty `hook context` block, records `emptyContextReason` in the workspace runtime file, and starts a detached `autowarm` rebuild with a cooldown. That background rebuild refreshes prepared indexes for the next prompt while keeping repository walking out of the current prompt path.
 
+If hooks fall back because `ctx-mcp` is unavailable or not hot yet, ContextOS still uses indexed text matches for files and lightweight evidence scoring for skills. It does not cold-load embeddings inside the prompt hook. Run `ctx debug -- "task"` to inspect retrieval mode, including bridge status, embedding status, file fallback, and skill fallback.
+
 Use `ctx --config` to choose which prompt sections ContextOS injects and how many suggestions each section may show. Interactive `ctx setup` includes the same section picker and limit prompts, while `ctx setup --yes` keeps the current saved config for automation. The panel supports multiple selection with `Space` and persists the global choice in `~/.ctx/contextos/output-config.json`. Defaults are five suggested files, five skills, and five workflows; caps are 20 files, 10 skills, and 5 workflows. Disabling rules hides both critical and additional relevant rule sections; compliance metadata remains available for reports.
 
 Injected prompt sections are intentionally compact: rules show only detected rule text, files show a comma-separated inline list of basenames without paths, skills show unique `$skill-name` activations as a comma-separated inline list without descriptions, and workflows show names with their agent chain. Stop hooks persist reports silently; run `ctx report` or `ctx evidence` when you want the detailed compliance output.
@@ -777,8 +795,10 @@ CONTEXTOS_GRAPH_RETRIEVAL=0       disable graph-backed file retrieval
 CONTEXTOS_GRAPH_TIMEOUT_MS=80     graph lookup timeout
 CONTEXTOS_CRG_PYTHON=/path/python Python with code_review_graph installed
 CONTEXTOS_EMBEDDINGS=0            disable embedding rule scoring
-CONTEXTOS_MCP_CONNECT_TIMEOUT_MS=100 stale ctx-mcp socket connect timeout
-CONTEXTOS_MCP_BRIDGE_TIMEOUT_MS=2000 ctx-mcp hook bridge timeout
+CONTEXTOS_MCP_CONNECT_TIMEOUT_MS=500 stale ctx-mcp socket connect timeout
+CONTEXTOS_MCP_BRIDGE_TIMEOUT_MS=5000 ctx-mcp hook bridge timeout
+CONTEXTOS_MCP_AUTOSTART=1        auto-start ctx-mcp daemon when the private bridge socket is missing
+CONTEXTOS_MCP_AUTOSTART_WAIT_MS=1500 max hook wait for auto-started ctx-mcp before fallback
 CONTEXTOS_HOOK_DEADLINE_MS=8500 hard fail-open deadline for prompt hooks
 CONTEXTOS_DIRECT_FALLBACK_TIMEOUT_MS=2500 direct scoring timeout when the bridge is unavailable
 CONTEXTOS_HOOK_EMBEDDING_TIMEOUT_MS=500 rule embedding timeout during hook direct fallback
@@ -795,6 +815,7 @@ CONTEXTOS_FILE_EMBEDDING_TIMEOUT_MS=1000 file-path embedding retrieval timeout
 ```text
 Codex prompt
   -> UserPromptSubmit hook
+  -> auto-start ctx-mcp daemon if the private bridge socket is missing
   -> call ctx-mcp through private bridge
   -> ctx-mcp scores rules and relevant files
   -> write last-prompt-context.json

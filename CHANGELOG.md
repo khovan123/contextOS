@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.8
+
+- **Fallback context recovery:** Prompt-hook direct fallback now keeps ContextOS useful when `ctx-mcp` is unavailable by using indexed file text matches and lightweight evidence-based skill scoring instead of returning only workflows or an empty context.
+- **MCP bridge hardening:** Increased default bridge/connect timeouts, added `ctx health`, added bounded ctx-mcp daemon auto-start when the private socket is missing, and records retrieval mode in runtime telemetry/debug output.
+- **Agent-callable read-only MCP tools:** Added safe MCP tools for `ctx debug`, `ctx doctor`, `ctx skills doctor`, `ctx report`, `ctx evidence`, and `ctx stats` so agents can inspect ContextOS state without shelling out or exposing setup/install/sync write commands.
+
 ## 0.6.7
 
 - **MCP proxy test stability:** Fixed the MCP proxy telemetry smoke test so it waits for the telemetry file before reading it and uses a stable stdin/stdout echo child. This removes the CI race where `telemetry.jsonl` could be read before it existed.
