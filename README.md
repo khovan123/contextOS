@@ -29,7 +29,7 @@ Published package: [`@minhpnq1807/contextos`](https://www.npmjs.com/package/@min
 
 ![ContextOS demo: same prompt, different repo, correct skills](docs/demo/contextos-demo.gif)
 
-Same prompt. Different repo. Correct skills.
+Same prompt. Same model. Different context.
 
 ```bash
 ctx skills doctor -- "fix deployed"
@@ -40,6 +40,31 @@ ctx skills doctor -- "fix deployed"
 | `eas.json`, `expo`, `react-native` | `eas`, `mobile-deployment`, `github-actions-ci-cd` |
 | `vercel.json`, `next`, GitHub workflow | `vercel-deployment`, `github-actions-ci-cd`, `env-secret-management` |
 | ContextOS repo with no app deploy evidence | no deployment skill selected |
+
+## Agent Hallucination Benchmark
+
+Generic agents often guess deployment tooling from the prompt alone:
+
+```text
+Prompt: Fix deployment
+Raw agent guess: Vercel, Docker, Railway
+```
+
+ContextOS routes from project evidence instead:
+
+```text
+Detected evidence:
+- eas.json
+- expo dependency
+- GitHub workflow
+
+Selected skills:
+- eas
+- mobile-deployment
+- github-actions-ci-cd
+```
+
+That is the core launch demo: same prompt, same model, different repo context, correct skills.
 
 Skill Router internal fixture benchmark:
 
@@ -125,6 +150,13 @@ Restart the agent after setup. Then use the agent normally.
 Developers put real operating instructions in `AGENTS.md`: use this graph tool before reading files, run these tests, follow this architecture boundary, avoid this migration path.
 
 The problem is not that agents cannot read `AGENTS.md`. The problem is that large context windows bury the important rule in the middle, where attention is weak. ContextOS turns a static rules file into task-aware runtime context.
+
+The next visible demo is not another feature. It is showing the pain in a few seconds:
+
+```text
+Raw agent: guesses from the prompt.
+ContextOS: routes from repo evidence.
+```
 
 ## What ContextOS Does
 

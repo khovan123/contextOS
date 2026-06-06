@@ -49,6 +49,9 @@ body:
         - Release hardening
         - README / docs
         - Skill Router benchmark
+        - Hallucination Benchmark
+        - Agent Replay
+        - Community Skill Packs
         - Optional graph adapter
         - Optional memory adapter
         - Installer / setup
