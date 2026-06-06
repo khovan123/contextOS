@@ -25,7 +25,7 @@ export function scheduleContext({
     sections.push(commaSection("Suggested files to check", formatFiles(relevantFiles)));
   }
   if (outputConfig.sections.skills && suggestedSkills.length) {
-    sections.push(inlineSection("Skills to activate for this task", suggestedSkills.map(formatSkill)));
+    sections.push(inlineSection("Suggested skills for this task", suggestedSkills.map(formatSkill)));
   }
   if (outputConfig.sections.workflows && suggestedWorkflows.length) {
     sections.push(section("Suggested workflow for this task", suggestedWorkflows.map(formatWorkflow)));
@@ -98,7 +98,9 @@ function formatFile(file, basenameCounts) {
 
 function formatSkill(skill) {
   const name = String(skill.name || "").trim();
-  return name.startsWith("$") ? name : `$${name}`;
+  if (!name) return "";
+  if (name.startsWith("$")) return name;
+  return skill.explicit ? `$${name}` : name;
 }
 
 function formatWorkflow(workflow) {

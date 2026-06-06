@@ -127,7 +127,7 @@ describe("hook contracts", () => {
     expect(runtime.relevantFiles).toHaveLength(5);
     expect(runtime.suggestedSkills).toHaveLength(5);
     expect(runtime.scheduled.additionalContext).toContain("## Suggested files to check, file-0.ts, file-1.ts");
-    expect(runtime.scheduled.additionalContext).toContain("## Skills to activate for this task: $skill-0, $skill-1");
+    expect(runtime.scheduled.additionalContext).toContain("## Suggested skills for this task: skill-0, skill-1");
   });
 
   it("uses configured prompt suggestion limits", async () => {
@@ -270,7 +270,8 @@ describe("hook contracts", () => {
 
     expect(output.continue).toBe(true);
     expect(output.hookSpecificOutput.additionalContext).toContain("forum-page.tsx");
-    expect(output.hookSpecificOutput.additionalContext).toContain("$realtime-chat");
+    expect(output.hookSpecificOutput.additionalContext).toContain("## Suggested skills for this task: realtime-chat");
+    expect(output.hookSpecificOutput.additionalContext).not.toContain("$realtime-chat");
     expect(seenDirectPayloads[0]).toMatchObject({ allowEmbeddings: false });
     expect(runtime.relevantFiles).toHaveLength(1);
     expect(runtime.suggestedSkills).toHaveLength(1);

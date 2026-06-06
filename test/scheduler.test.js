@@ -36,7 +36,7 @@ describe("scheduler", () => {
     expect(scheduled.additionalContext).not.toContain("/repo/AGENTS.md");
     expect(scheduled.additionalContext).toContain("## Suggested files to check, login.ts");
     expect(scheduled.additionalContext).not.toContain("src/auth/login.ts");
-    expect(scheduled.additionalContext).toContain("## Skills to activate for this task: $zod-validator");
+    expect(scheduled.additionalContext).toContain("## Suggested skills for this task: zod-validator");
     expect(scheduled.additionalContext.match(/zod-validator/g)).toHaveLength(1);
     expect(scheduled.additionalContext).not.toContain("Use for validation tasks.");
     // No absolute paths in skill output
@@ -58,6 +58,19 @@ describe("scheduler", () => {
 
     expect(scheduled.additionalContext.length).toBeLessThanOrEqual(140);
     expect(scheduled.additionalContext).toContain("truncated");
+  });
+
+  it("only renders dollar-prefixed skills for explicit user-requested skills", () => {
+    const scheduled = scheduleContext({
+      suggestedSkills: [
+        { name: "chat-widget" },
+        { name: "realtime-chat", explicit: true },
+        { name: "$user-named-skill" }
+      ],
+      outputConfig: defaultOutputConfig()
+    });
+
+    expect(scheduled.additionalContext).toBe("## Suggested skills for this task: chat-widget, $realtime-chat, $user-named-skill");
   });
 
   it("hides disabled prompt sections without dropping scheduled metadata", () => {
