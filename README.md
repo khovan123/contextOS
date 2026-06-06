@@ -1,108 +1,44 @@
 # ContextOS
 
-Stop coding agents from ignoring repo rules, guessing the wrong path, and reading random files.
+Same prompt. Same model. Different context.
 
-ContextOS gives the agent the right rules, files, skills, workflows, and evidence before it writes code.
+ContextOS stops coding agents from ignoring repo rules, guessing the wrong path, and reading random files.
 
 [![npm version](https://img.shields.io/npm/v/@minhpnq1807/contextos.svg)](https://www.npmjs.com/package/@minhpnq1807/contextos)
 [![CI](https://github.com/khovan123/contextOS/actions/workflows/ci.yml/badge.svg)](https://github.com/khovan123/contextOS/actions/workflows/ci.yml)
-[![ContextOS Ready](https://img.shields.io/badge/ContextOS-Ready_Gold-2ea44f)](#contextos-ready)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 ```text
-Problem: Agents ignore project rules.
-Fix: ContextOS puts the relevant AGENTS.md rules in front of the agent for this task.
+Prompt:
+Fix deployment
 
-Problem: Agents choose the wrong deployment path.
-Fix: ContextOS checks repo evidence before suggesting skills like EAS, Vercel, Docker, or CI/CD.
+Raw Agent:
+❌ Vercel
+❌ Docker
+❌ Railway
 
-Problem: Agents grep random files.
-Fix: ContextOS suggests the files and workflows to check first.
+ContextOS:
+✅ EAS
+✅ Mobile Deployment
+✅ GitHub Actions
 ```
 
-ContextOS is not another `AGENTS.md` loader. It is a pre-flight context layer for coding agents: it turns repo rules, project signals, skills, workflows, and evidence into a compact task brief before the agent starts editing.
+ContextOS reads the repo before the agent starts: project rules, repo evidence, suggested files, skills, workflows, and post-task proof.
 
 Published package: [`@minhpnq1807/contextos`](https://www.npmjs.com/package/@minhpnq1807/contextos)
 
-## Demo
+## Hallucination Leaderboard
 
-![ContextOS demo: same prompt, different repo, correct skills](docs/demo/same-prompt-different-context.gif)
-
-Same prompt. Same model. Different context.
-
-```bash
-ctx skills doctor -- "fix deployed"
-```
-
-| Repo evidence | What ContextOS tells the agent |
-| --- | --- |
-| `eas.json`, `expo`, `react-native` | `eas`, `mobile-deployment`, `github-actions-ci-cd` |
-| `vercel.json`, `next`, GitHub workflow | `vercel-deployment`, `github-actions-ci-cd`, `env-secret-management` |
-| ContextOS repo with no app deploy evidence | no deployment skill selected |
-
-More 10-second demos:
-
-| Demo | GIF |
-| --- | --- |
-| AGENTS.md Lost In The Middle | [docs/demo/agents-lost-middle.gif](docs/demo/agents-lost-middle.gif) |
-| ContextOS Ready Gold | [docs/demo/contextos-ready.gif](docs/demo/contextos-ready.gif) |
-
-Regenerate the GIFs from real local `ctx` command output:
-
-```bash
-npm run demo:capture
-```
-
-## Wrong Path Benchmark
-
-Generic agents often guess deployment tooling from the prompt alone:
-
-```text
-Prompt: Fix deployment
-Raw agent guess: Vercel, Docker, Railway
-```
-
-ContextOS checks the repo first:
-
-```text
-Detected evidence:
-- eas.json
-- expo dependency
-- GitHub workflow
-
-Selected skills:
-- eas
-- mobile-deployment
-- github-actions-ci-cd
-```
-
-That is the core launch demo: same prompt, same model, different repo, correct next step.
-
-Internal fixture benchmark:
-
-| Metric | Result |
-| --- | ---: |
-| Cases | 52 |
-| Top-1 Accuracy | 94.2% |
-| Top-3 Recall | 94.2% |
-| False Positive Rate | 0.0% |
-| Confidence Calibration | 100.0% |
-| Negative Gate Accuracy | 100.0% |
-
-This is an internal fixture benchmark, not an external real-world benchmark. It is designed to prove that ContextOS changes its suggestions from repo evidence across controlled Expo/EAS, Next/Vercel, Docker, Railway/Render, Firebase, auth, database, testing, mobile, and adversarial negative cases.
-
-Offline hallucination leaderboard:
-
-```bash
-ctx leaderboard --hallucination
-```
-
-Current deterministic result across 20 fixture tasks and 12 repo contexts:
+Offline deterministic benchmark:
 
 | System | Correct context choice |
 | --- | ---: |
 | Raw heuristic baseline | 10.0% |
 | ContextOS evidence benchmark | 80.0% |
+
+```bash
+ctx leaderboard --hallucination
+```
 
 This means ContextOS improves deterministic context routing from 10% to 80% on the offline hallucination task set. It does not claim ContextOS beats Codex, Gemini, Claude Code, or Cursor in live runs.
 
@@ -122,7 +58,36 @@ Live benchmark tracking:
 - [Run Gemini CLI live benchmark](https://github.com/khovan123/contextOS/issues/4)
 - [Run Cursor live benchmark](https://github.com/khovan123/contextOS/issues/2)
 
-Example hook context injected before the agent works:
+## Why People Star ContextOS
+
+- Agents ignore `AGENTS.md`.
+- Agents choose the wrong deployment path.
+- Agents grep random files before understanding the repo.
+- ContextOS fixes all three before coding starts.
+
+## Demo
+
+![ContextOS demo: same prompt, different repo, correct skills](docs/demo/same-prompt-different-context.gif)
+
+```bash
+ctx skills doctor -- "fix deployed"
+```
+
+| Repo evidence | What ContextOS tells the agent |
+| --- | --- |
+| `eas.json`, `expo`, `react-native` | `eas`, `mobile-deployment`, `github-actions-ci-cd` |
+| `vercel.json`, `next`, GitHub workflow | `vercel-deployment`, `github-actions-ci-cd`, `env-secret-management` |
+| ContextOS repo with no app deploy evidence | no deployment skill selected |
+
+More 10-second demo:
+
+| Demo | GIF |
+| --- | --- |
+| AGENTS.md Lost In The Middle | [docs/demo/agents-lost-middle.gif](docs/demo/agents-lost-middle.gif) |
+
+## What The Agent Sees
+
+ContextOS injects a compact brief before the agent works:
 
 ```text
 ## Critical ContextOS rules
@@ -147,6 +112,27 @@ Injected rules: 8
 Rule outcomes: 8 followed, 0 ignored, 0 unknown
 Runtime evidence: project graph was used before file search
 ```
+
+Regenerate the GIFs from real local `ctx` command output:
+
+```bash
+npm run demo:capture
+```
+
+## Internal Benchmark
+
+Skill selection fixture benchmark:
+
+| Metric | Result |
+| --- | ---: |
+| Cases | 52 |
+| Top-1 Accuracy | 94.2% |
+| Top-3 Recall | 94.2% |
+| False Positive Rate | 0.0% |
+| Confidence Calibration | 100.0% |
+| Negative Gate Accuracy | 100.0% |
+
+This is an internal fixture benchmark, not an external real-world benchmark. It is designed to prove that ContextOS changes its suggestions from repo evidence across controlled Expo/EAS, Next/Vercel, Docker, Railway/Render, Firebase, auth, database, testing, mobile, and adversarial negative cases.
 
 ## Quick Install
 
@@ -187,27 +173,6 @@ ctx install agy
 ```
 
 Restart the agent after setup. Then use the agent normally.
-
-## Why ContextOS Exists
-
-Developers put real operating instructions in `AGENTS.md`: use this graph tool before reading files, run these tests, follow this architecture boundary, avoid this migration path.
-
-The problem is not that agents cannot read `AGENTS.md`. The problem is that large context windows bury the important rule in the middle, where attention is weak.
-
-The same thing happens with project structure:
-
-- A deployment prompt says "fix deploy", and the agent guesses Vercel in an Expo repo.
-- A backend error mentions Fastify, and the agent loads frontend skills.
-- A feature request names one route, and the agent starts with broad grep instead of the files that matter.
-
-ContextOS fixes those three failures before the agent starts work.
-
-The next visible demo is not another feature. It is showing the pain in a few seconds:
-
-```text
-Raw agent: guesses from the prompt.
-ContextOS: checks repo evidence first.
-```
 
 ## What ContextOS Does
 
