@@ -631,10 +631,18 @@ async function debug(task) {
     embeddingTimeoutMs: Number(process.env.CONTEXTOS_EMBEDDING_DEBUG_TIMEOUT_MS || 5000)
   });
   const rules = scored.scoredRules;
-  const relevantFiles = scored.suggestedFiles.slice(0, limits.files);
-  const suggestedSkills = (scored.suggestedSkills || []).slice(0, limits.skills);
-  const suggestedWorkflows = (scored.suggestedWorkflows || []).slice(0, limits.workflows);
-  const scheduled = scheduleContext({ rules, relevantFiles, suggestedSkills, suggestedWorkflows });
+  const outputConfig = loadOutputConfig({ dataRoot: contextOSDataDir() });
+  const scheduled = scheduleContext({
+    rules,
+    relevantFiles: scored.suggestedFiles || [],
+    suggestedSkills: scored.suggestedSkills || [],
+    suggestedWorkflows: scored.suggestedWorkflows || [],
+    prompt: task,
+    outputConfig
+  });
+  const relevantFiles = scheduled.relevantFiles || [];
+  const suggestedSkills = scheduled.suggestedSkills || [];
+  const suggestedWorkflows = scheduled.suggestedWorkflows || [];
 
   console.log("ContextOS debug");
   console.log(`cwd: ${cwd}`);
@@ -861,12 +869,13 @@ async function askOutputLimit({ option, currentValue }) {
   if (!process.stdin.isTTY) return currentValue;
   const rl = readline.createInterface({ input, output });
   try {
-    const answer = await rl.question(`◇ ${option.label} limit (0-${option.max}, current ${currentValue}): `);
+    const answer = await rl.question(`◇ ${option.label} limit (auto or 0-${option.cap || option.max}, current ${currentValue}): `);
     const trimmed = answer.trim();
     if (!trimmed) return currentValue;
+    if (trimmed.toLowerCase() === "auto") return "auto";
     const value = Number(trimmed);
     if (!Number.isFinite(value)) return currentValue;
-    return Math.max(0, Math.min(option.max, Math.trunc(value)));
+    return Math.max(0, Math.min(option.cap || option.max, Math.trunc(value)));
   } finally {
     rl.close();
   }

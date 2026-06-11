@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.10
+
+- **Adaptive prompt budgets:** `ctx --config` now defaults files, skills, and workflows to `auto` instead of fixed counts. ContextOS uses task complexity, confidence drop-off, and file path diversity to keep small fixes compact while giving larger feature prompts more relevant files and skills. Manual fixed limits still work for advanced users.
+- **Skill schema from markdown:** Skill discovery now parses common `SKILL.md` sections such as `Triggers`, `Evidence`, `Files`, `Related Skills`, `Provides`, and `Requires` into structured router metadata when `skill.yaml` is absent or incomplete.
+- **Skill Graph routing:** Skill Router now builds a graph from `skill.yaml`/markdown metadata relationships such as `related_skills`, `depends_on`, `provides`, and `requires`, expands selected skills one hop through that graph, and still runs the expanded candidates through evidence and negative-trigger scoring.
+- **Focused skill embeddings:** Skill embedding text now uses normalized skill schema fields such as intent, triggers, dependencies, files, provides, requires, and related skills instead of relying only on raw markdown descriptions.
+
 ## 0.6.9
 
 - **Skill suggestion formatting:** ContextOS now renders automatic skill suggestions as plain skill names instead of `$skill-name`, preventing Codex from treating suggested skills as native skill activation requests. Explicit user-requested skills still preserve `$skill-name` syntax.

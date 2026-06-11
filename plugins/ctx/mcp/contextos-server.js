@@ -82,7 +82,8 @@ export function createContextOSMcpServer({ dataDir, getHealth = defaultHealth, r
       rules: result.scoredRules,
       relevantFiles: result.suggestedFiles,
       suggestedSkills: result.suggestedSkills,
-      suggestedWorkflows: result.suggestedWorkflows
+      suggestedWorkflows: result.suggestedWorkflows,
+      prompt: args.prompt || ""
     });
 
     const contextText = scheduled.additionalContext || "";

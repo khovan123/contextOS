@@ -633,7 +633,7 @@ This warning comes from a transitive dependency in the local embedding/WASM stac
 | `ctx sync --workflows --dry-run` | Previews workflow sync without writing files. | You want to inspect source workflows and target roots first. | Prints planned sync/index output and skips copying target files. |
 | `ctx skills` | Installs community skill libraries. | You want curated skills without running the full setup wizard. | Opens the community installer, uses a portable shell on Windows/Linux/macOS, repairs unsafe skill symlinks, and syncs installed skills to selected agents. |
 | `ctx embeddings warm -- "task"` | Prepares local semantic embedding caches. | First install, CI smoke checks, or after changing AGENTS.md/project files/skills/workflows. | Loads/downloads `Xenova/all-MiniLM-L6-v2` and writes rule, file-path, skill, and workflow vectors to `~/.ctx/contextos/embeddings.db`. |
-| `ctx --config` | Opens an interactive panel for prompt sections and suggestion limits. | You want to reduce ContextOS prompt output noise. | Toggles critical rules, suggested files, suggested skills, and suggested workflows globally under `~/.ctx/contextos/output-config.json`, then lets you set suggestion counts for files, skills, and workflows. |
+| `ctx --config` | Opens an interactive panel for prompt sections and suggestion budgets. | You want to reduce ContextOS prompt output noise. | Toggles critical rules, suggested files, suggested skills, and suggested workflows globally under `~/.ctx/contextos/output-config.json`, then lets you keep adaptive `auto` budgets or set fixed counts for files, skills, and workflows. |
 | `ctx refresh` | Refreshes the active Codex marketplace plugin and rebuilds local indexes. | Local development updates or stale file/skill retrieval indexes. | Copies the current package to `$CODEX_HOME/marketplaces/contextos`, rebuilds file-path embeddings, skill embeddings, import adjacency, and refreshes code-review-graph embeddings when available. |
 | `ctx ruler -- <args>` | Forwards args to the installed `ruler` CLI. | You need native Ruler commands such as `init`, `apply`, or `revert`. | Preserves Ruler stdout/stderr and exit status. |
 | `ctx skillshare -- <args>` | Forwards args to the installed `skillshare` CLI. | You need native skillshare commands such as `status`, `target list`, `doctor`, `push`, or `pull`. | Preserves skillshare stdout/stderr and exit status. |
@@ -714,33 +714,49 @@ If a prompt has no usable context candidates, the hook fails open without emitti
 
 If hooks fall back because `ctx-mcp` is unavailable or not hot yet, ContextOS still uses indexed text matches for files and lightweight evidence scoring for skills. It does not cold-load embeddings inside the prompt hook. Run `ctx debug -- "task"` to inspect retrieval mode, including bridge status, embedding status, file fallback, and skill fallback.
 
-Use `ctx --config` to choose which prompt sections ContextOS injects and how many suggestions each section may show. Interactive `ctx setup` includes the same section picker and limit prompts, while `ctx setup --yes` keeps the current saved config for automation. The panel supports multiple selection with `Space` and persists the global choice in `~/.ctx/contextos/output-config.json`. Defaults are five suggested files, five skills, and five workflows; caps are 20 files, 10 skills, and 5 workflows. Disabling rules hides both critical and additional relevant rule sections; compliance metadata remains available for reports.
+Use `ctx --config` to choose which prompt sections ContextOS injects and how many suggestions each section may show. Interactive `ctx setup` includes the same section picker and limit prompts, while `ctx setup --yes` keeps the current saved config for automation. The panel supports multiple selection with `Space` and persists the global choice in `~/.ctx/contextos/output-config.json`. Defaults use adaptive `auto` budgets: up to 15 files, 8 skills, and 3 workflows, with confidence drop-off and task complexity deciding the final count. Advanced users can still set fixed counts; hard caps are 20 files, 10 skills, and 5 workflows. Disabling rules hides both critical and additional relevant rule sections; compliance metadata remains available for reports.
+
+Adaptive budgets keep small fixes compact and give larger feature prompts more context. Files are selected by task complexity plus path diversity, so a feature task can include route, component, service, test, and config candidates instead of five files from the same folder. Skills and workflows use confidence drop-off, so ContextOS may show only two strong skills or seven relevant skills instead of filling a fixed quota.
 
 Injected prompt sections are intentionally compact: rules show only detected rule text, files show a comma-separated inline list of basenames without paths, skills show unique plain skill names as a comma-separated inline list without descriptions, and workflows show names with their agent chain. ContextOS only keeps `$skill-name` syntax for skills the user explicitly requested, so automatic suggestions do not collide with native agent skill activation. Stop hooks persist reports silently; run `ctx report` or `ctx evidence` when you want the detailed compliance output.
 
 Codex may flatten newlines in its `UserPromptSubmit hook (completed)` preview. The injected `additionalContext` payload remains multiline; this is a Codex preview display limitation.
 
-Skill ranking uses Skill Router v2. ContextOS still starts with semantic retrieval, but final confidence is evidence-based:
+Skill ranking uses Skill Router v2. ContextOS no longer treats `SKILL.md` as only unstructured text. It parses markdown sections into a lightweight MDAST-style tree, normalizes that into router schema, builds a skill graph from schema relationships, then uses embeddings as the final retrieval layer:
+
+```text
+SKILL.md / skill.yaml
+  -> markdown sections
+  -> Skill JSON schema
+  -> Skill Graph
+  -> focused embedding text
+  -> evidence-based Skill Router
+```
+
+Final confidence is evidence-based:
 
 ```text
 final_score =
-  semantic_score * 0.30
+  semantic_score * 0.25
 + prompt_trigger_score * 0.20
-+ project_evidence_score * 0.20
++ project_evidence_score * 0.25
 + file_config_score * 0.10
 + import_graph_score * 0.10
-+ external_graph_score * 0.05
-+ memory_score * 0.05
++ skill_graph_score * 0.10
++ source_boost_score * 0.05
++ external_graph_score * 0.03
++ memory_score * 0.02
 - negative_penalty * 0.20
 ```
 
-`external_graph_score` is supplied by optional project graph adapters such as `code-review-graph` or `codegraph`. `memory_score` is reserved for optional memory adapters such as `agent-memory`. Without those adapters, both scores are `0`.
+`skill_graph_score` comes from relationships such as `related_skills`, `depends_on`, `provides`, and `requires`. `external_graph_score` is supplied by optional project graph adapters such as `code-review-graph` or `codegraph`. `memory_score` is reserved for optional memory adapters such as `agent-memory`. Without those adapters, both adapter scores are `0`.
 
 Skill metadata can live beside `SKILL.md` as `skill.yaml`:
 
 ```yaml
 id: eas
 name: Expo EAS Deployment
+intent: [deployment, mobile]
 positive_triggers:
   prompts: [eas, expo build, deployed, android, ios]
   files: [eas.json, app.json, app.config.ts]
@@ -748,11 +764,21 @@ positive_triggers:
 negative_triggers:
   dependencies: [next, vite]
   files: [vercel.json]
+provides:
+  - mobile-deployment
+requires:
+  - app-config
+depends_on:
+  - github-actions-ci-cd
 related_skills:
   - mobile-deployment
   - github-actions-ci-cd
   - env-secret-management
+workflow:
+  - Inspect EAS profiles, app config, package scripts, and CI workflow files.
 ```
+
+If a skill has no `skill.yaml`, ContextOS still extracts useful schema from common markdown sections such as `## Triggers`, `## Evidence`, `## Files`, `## Related Skills`, `## Provides`, and `## Requires`.
 
 The project profile is built from bounded root/workspace `package.json` metadata, dependencies, scripts, detected languages, recent git files, and config files such as `eas.json`, `app.json`, `vercel.json`, and `.github/workflows/*`. ContextOS only gives high confidence to domain-specific skills when project evidence supports them. For example, `fix deployed` can rank `eas` highly in an Expo project with `eas.json` and `expo`, but a Next.js/Vercel project should route to Vercel and CI/CD deployment skills instead. Skill catalogs are deduplicated by normalized skill name before indexing and rendering.
 

@@ -14,9 +14,9 @@ export const OUTPUT_SECTION_OPTIONS = [
 ];
 
 export const OUTPUT_LIMIT_OPTIONS = [
-  { value: "files", label: "Suggested files", defaultValue: 5, max: 20 },
-  { value: "skills", label: "Suggested skills", defaultValue: 5, max: 10 },
-  { value: "workflows", label: "Suggested workflows", defaultValue: 5, max: 5 }
+  { value: "files", label: "Suggested files", defaultValue: "auto", min: 3, max: 15, cap: 20 },
+  { value: "skills", label: "Suggested skills", defaultValue: "auto", min: 1, max: 8, cap: 10 },
+  { value: "workflows", label: "Suggested workflows", defaultValue: "auto", min: 1, max: 3, cap: 5 }
 ];
 
 export function defaultOutputConfig() {
@@ -57,11 +57,15 @@ export function enabledOutputSectionsLabel(config = loadOutputConfig()) {
 }
 
 export function outputConfigLimits(config = loadOutputConfig()) {
-  return normalizeOutputConfig(config).limits;
+  const normalized = normalizeOutputConfig(config);
+  return Object.fromEntries(OUTPUT_LIMIT_OPTIONS.map((option) => [
+    option.value,
+    numericLimitForRetrieval(normalized.limits[option.value], option)
+  ]));
 }
 
 export function outputConfigLimitsLabel(config = loadOutputConfig()) {
-  const limits = outputConfigLimits(config);
+  const limits = normalizeOutputConfig(config).limits;
   return OUTPUT_LIMIT_OPTIONS.map((option) => `${option.value}: ${limits[option.value]}`).join(", ");
 }
 
@@ -99,22 +103,33 @@ export async function configureOutputSections({
 
 function normalizeOutputConfig(config = {}) {
   const defaults = defaultOutputConfig();
+  const nestedOutput = config.output || {};
   return {
     sections: Object.fromEntries(OUTPUT_SECTION_OPTIONS.map((option) => [
       option.value,
       typeof config.sections?.[option.value] === "boolean"
         ? config.sections[option.value]
+        : typeof nestedOutput[option.value]?.enabled === "boolean"
+          ? nestedOutput[option.value].enabled
         : defaults.sections[option.value]
     ])),
     limits: Object.fromEntries(OUTPUT_LIMIT_OPTIONS.map((option) => [
       option.value,
-      normalizeLimit(config.limits?.[option.value], option)
+      normalizeLimit(config.limits?.[option.value] ?? nestedOutput[option.value]?.limit, option)
     ]))
   };
 }
 
 function normalizeLimit(value, option) {
+  if (String(value || "").toLowerCase() === "auto") return "auto";
   const number = Number(value);
   if (!Number.isFinite(number)) return option.defaultValue;
-  return Math.max(0, Math.min(option.max, Math.trunc(number)));
+  return Math.max(0, Math.min(option.cap || option.max, Math.trunc(number)));
+}
+
+function numericLimitForRetrieval(value, option) {
+  if (value === "auto") return option.max;
+  const number = Number(value);
+  if (!Number.isFinite(number)) return option.max;
+  return Math.max(0, Math.min(option.cap || option.max, Math.trunc(number)));
 }

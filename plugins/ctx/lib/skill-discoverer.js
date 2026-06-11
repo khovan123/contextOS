@@ -55,6 +55,129 @@ export function parseSkillFrontmatter(content = "", { fallbackName = "", skillPa
   };
 }
 
+export function parseSkillMarkdownAst(content = "") {
+  const root = { type: "root", children: [] };
+  let currentSection = null;
+  for (const rawLine of String(content || "").split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    const heading = line.match(/^(#{1,6})\s+(.+)$/);
+    if (heading) {
+      const node = {
+        type: "heading",
+        depth: heading[1].length,
+        title: heading[2].trim(),
+        items: [],
+        paragraphs: []
+      };
+      root.children.push(node);
+      currentSection = node;
+      continue;
+    }
+    const bullet = line.match(/^[-*]\s+(.+)$/);
+    if (bullet && currentSection) {
+      currentSection.items.push(bullet[1].trim());
+      continue;
+    }
+    if (currentSection) currentSection.paragraphs.push(line);
+  }
+  return root;
+}
+
+export function skillSchemaFromMarkdownAst(ast = {}) {
+  const schema = {
+    intent: [],
+    positivePrompts: [],
+    files: [],
+    dependencies: [],
+    workflows: [],
+    relatedSkills: [],
+    dependsOn: [],
+    provides: [],
+    requires: [],
+    suggestedFiles: []
+  };
+  for (const section of ast.children || []) {
+    const title = normalize(section.title || "");
+    const items = [...(section.items || []), ...(section.paragraphs || [])].map(cleanMarkdownListItem).filter(Boolean);
+    if (!items.length) continue;
+    if (/\b(intent|intents|domain|domains)\b/.test(title)) schema.intent.push(...items);
+    else if (/\b(trigger|triggers|prompt|prompts|keyword|keywords)\b/.test(title)) schema.positivePrompts.push(...items);
+    else if (/\b(evidence|dependency|dependencies|package|packages)\b/.test(title)) {
+      for (const item of items) {
+        if (looksLikeFilePattern(item)) schema.files.push(item);
+        else schema.dependencies.push(item);
+      }
+    } else if (/\b(file|files|suggested file|suggested files)\b/.test(title)) {
+      schema.files.push(...items);
+      schema.suggestedFiles.push(...items);
+    } else if (/\b(workflow|workflows|steps|checklist)\b/.test(title)) schema.workflows.push(...items);
+    else if (/\b(related|related skills)\b/.test(title)) schema.relatedSkills.push(...items);
+    else if (/\b(depends on|depends|dependency skills)\b/.test(title)) schema.dependsOn.push(...items);
+    else if (/\b(provides|capabilities)\b/.test(title)) schema.provides.push(...items);
+    else if (/\b(requires|requirements)\b/.test(title)) schema.requires.push(...items);
+  }
+  return normalizeSkillMetadata(schema);
+}
+
+export function buildSkillGraph(skills = []) {
+  const nodes = [];
+  const edges = [];
+  const seenEdges = new Set();
+  for (const skill of skills || []) {
+    const id = skillGraphId(skill);
+    if (!id) continue;
+    const metadata = skill.metadata || {};
+    nodes.push({
+      id,
+      name: skill.name,
+      intent: metadata.intent || [],
+      provides: metadata.provides || [],
+      requires: metadata.requires || []
+    });
+    for (const target of metadata.relatedSkills || []) {
+      addSkillGraphEdge(edges, seenEdges, id, target, "related_to");
+    }
+    for (const target of metadata.dependsOn || []) {
+      addSkillGraphEdge(edges, seenEdges, id, target, "depends_on");
+    }
+    for (const target of metadata.requires || []) {
+      addSkillGraphEdge(edges, seenEdges, id, target, "requires");
+    }
+  }
+  return { nodes, edges };
+}
+
+export function expandSkillGraphSuggestions({ seeds = [], catalog = [], maxDepth = 1, maxRelated = 6 } = {}) {
+  if (!seeds.length || !catalog.length || maxDepth < 1) return [];
+  const graph = buildSkillGraph(catalog);
+  const byId = new Map(catalog.map((skill) => [skillGraphId(skill), skill]));
+  const queued = seeds.map(skillGraphId).filter(Boolean);
+  const visited = new Set(queued);
+  const expanded = [];
+  let depth = 0;
+  while (queued.length && depth < maxDepth && expanded.length < maxRelated) {
+    const levelSize = queued.length;
+    for (let index = 0; index < levelSize; index += 1) {
+      const current = queued.shift();
+      for (const edge of graph.edges.filter((candidate) => candidate.from === current)) {
+        const target = skillGraphId({ name: edge.to });
+        if (!target || visited.has(target)) continue;
+        visited.add(target);
+        queued.push(target);
+        const skill = byId.get(target);
+        if (skill) {
+          expanded.push(skillScoreFromGraph(skill, current, edge.type));
+          if (expanded.length >= maxRelated) break;
+        }
+      }
+      if (expanded.length >= maxRelated) break;
+    }
+    depth += 1;
+  }
+  return expanded;
+}
+
 export function parseSkillMetadata(content = "") {
   const lines = String(content || "").split(/\r?\n/);
   const root = {};
@@ -140,7 +263,7 @@ export function scanSkills({ cwd = process.cwd(), roots = skillSearchRoots({ cwd
         skillPath
       });
       if (!skill.name || !skill.description) continue;
-      const metadata = readSkillMetadata({ skillPath, skill });
+      const metadata = readSkillMetadata({ skillPath, skill, content });
       skills.push(enrichSkill({
         ...skill,
         metadata,
@@ -218,16 +341,17 @@ export async function suggestSkills({
   const explicitSkills = explicitSkillSuggestions({ prompt, byId });
   const projectEvidence = detectProjectEvidence({ cwd });
   if (!embeddingsEnabled) {
-    return finalizeSkillScores([
+    const candidates = [
       ...explicitSkills,
       ...lightweightSkillSuggestions({ catalog, prompt, projectEvidence })
-    ], limit, { cwd, prompt, projectEvidence });
+    ];
+    return finalizeSkillScores(withGraphExpansion({ candidates, catalog }), limit, { cwd, prompt, projectEvidence });
   }
 
   if (dataDir) {
     const indexed = await searchSkillIndexes({ cwd, query, dataDir, timeoutMs, indexedSearcher });
     if (indexed.status === "enabled" && indexed.items.length) {
-      return finalizeSkillScores([
+      const candidates = [
         ...explicitSkills,
         ...indexed.items
         .map((item) => {
@@ -236,11 +360,14 @@ export async function suggestSkills({
           return skillScoreFromEmbedding(skill, item.embeddingScore, [`embedding:${Number(item.embeddingScore || 0).toFixed(2)}`]);
         })
         .filter(Boolean)
-      ], limit, { cwd, prompt, projectEvidence });
+      ];
+      return finalizeSkillScores(withGraphExpansion({ candidates, catalog }), limit, { cwd, prompt, projectEvidence });
     }
   }
 
-  if (catalog.length > DEFAULT_EMBEDDING_CANDIDATES) return finalizeSkillScores(explicitSkills, limit, { cwd, prompt, projectEvidence });
+  if (catalog.length > DEFAULT_EMBEDDING_CANDIDATES) {
+    return finalizeSkillScores(withGraphExpansion({ candidates: explicitSkills, catalog }), limit, { cwd, prompt, projectEvidence });
+  }
 
   const embeddingCandidates = catalog.map((skill, index) => skillRule({ skill, index }));
   if (!embeddingCandidates.length) return finalizeSkillScores(explicitSkills, limit, { cwd, prompt, projectEvidence });
@@ -252,7 +379,7 @@ export async function suggestSkills({
     allowRemote: false
   });
 
-  return finalizeSkillScores([...explicitSkills, ...embedding.rules], limit, { cwd, prompt, projectEvidence });
+  return finalizeSkillScores(withGraphExpansion({ candidates: [...explicitSkills, ...embedding.rules], catalog }), limit, { cwd, prompt, projectEvidence });
 }
 
 function skillQuery({ prompt = "", cwd = process.cwd(), dataDir } = {}) {
@@ -324,6 +451,18 @@ function lightweightSkillSuggestions({ catalog = [], prompt = "", projectEvidenc
     .sort((a, b) => Number(b.embeddingScore || 0) - Number(a.embeddingScore || 0)
       || scopePriority(b.scope) - scopePriority(a.scope)
       || a.name.localeCompare(b.name));
+}
+
+function cleanMarkdownListItem(value) {
+  return String(value || "")
+    .replace(/^\[[ xX]\]\s+/, "")
+    .replace(/^`|`$/g, "")
+    .trim();
+}
+
+function looksLikeFilePattern(value) {
+  const text = String(value || "");
+  return /[./*\\]|package\.json|dockerfile|config|controller|service|route|page|component|\.tsx?$|\.jsx?$|\.ya?ml$|\.json$/i.test(text);
 }
 
 function extractExplicitSkillNames(prompt = "") {
@@ -444,6 +583,25 @@ function skillScoreFromEmbedding(skill, embeddingScore, reasons = []) {
   };
 }
 
+function skillScoreFromGraph(skill, source, type) {
+  return {
+    name: skill.name,
+    description: skill.description,
+    path: skill.path,
+    scope: skill.scope,
+    metadata: skill.metadata,
+    score: 0.62,
+    embeddingScore: 0.62,
+    graphRelationshipScore: 1,
+    reasons: [`skill-graph:${type}:${source}`]
+  };
+}
+
+function withGraphExpansion({ candidates = [], catalog = [] } = {}) {
+  const expanded = expandSkillGraphSuggestions({ seeds: candidates, catalog });
+  return [...candidates, ...expanded];
+}
+
 function dedupeSkills(skills) {
   const byName = new Map();
   for (const skill of skills || []) {
@@ -505,9 +663,13 @@ function skillEmbeddingText(skill) {
   return [
     skill.name,
     skill.description,
+    ...(metadata.intent || []),
     ...(metadata.positivePrompts || []),
     ...(metadata.dependencies || []),
-    ...(metadata.files || [])
+    ...(metadata.files || []),
+    ...(metadata.provides || []),
+    ...(metadata.requires || []),
+    ...(metadata.relatedSkills || [])
   ].filter(Boolean).join("\n");
 }
 
@@ -541,37 +703,52 @@ function readJson(filePath) {
   }
 }
 
-function readSkillMetadata({ skillPath, skill }) {
+function readSkillMetadata({ skillPath, skill, content = "" }) {
   const skillDir = path.dirname(skillPath);
+  const inferredMetadata = inferSkillMetadata(skill);
+  const markdownMetadata = skillSchemaFromMarkdownAst(parseSkillMarkdownAst(stripFrontmatter(content)));
   for (const fileName of ["skill.yaml", "skill.yml"]) {
     const metadataPath = path.join(skillDir, fileName);
     if (!fs.existsSync(metadataPath)) continue;
     try {
       return {
-        ...inferSkillMetadata(skill),
-        ...parseSkillMetadata(fs.readFileSync(metadataPath, "utf8")),
+        ...mergeSkillMetadata(inferredMetadata, markdownMetadata, parseSkillMetadata(fs.readFileSync(metadataPath, "utf8"))),
         sourcePath: metadataPath
       };
     } catch {
-      return inferSkillMetadata(skill);
+      return mergeSkillMetadata(inferredMetadata, markdownMetadata);
     }
   }
-  return inferSkillMetadata(skill);
+  return mergeSkillMetadata(inferredMetadata, markdownMetadata);
 }
 
 function normalizeSkillMetadata(metadata = {}) {
   const positive = metadata.positive_triggers || metadata.triggers || {};
   const negative = metadata.negative_triggers || {};
+  const evidence = metadata.evidence || {};
   return {
     id: metadata.id,
     name: metadata.name,
-    positivePrompts: asArray(positive.prompts || positive.keywords || metadata.keywords),
-    files: asArray(positive.files || metadata.files),
-    dependencies: asArray(positive.dependencies || metadata.dependencies),
+    intent: asArray(metadata.intent),
+    positivePrompts: uniqueValues(positive.prompts || positive.keywords || metadata.positivePrompts || metadata.keywords),
+    files: uniqueValues([
+      ...asArray(positive.files || metadata.files),
+      ...asArray(evidence.files),
+      ...asArray(metadata.suggested_files || metadata.suggestedFiles)
+    ]),
+    dependencies: uniqueValues([
+      ...asArray(positive.dependencies || metadata.dependencies),
+      ...asArray(evidence.dependencies)
+    ]),
     negativePrompts: asArray(negative.prompts || negative.keywords),
     negativeFiles: asArray(negative.files),
     negativeDependencies: asArray(negative.dependencies),
-    relatedSkills: asArray(metadata.related_skills)
+    workflows: asArray(metadata.workflow || metadata.workflows),
+    relatedSkills: uniqueValues(metadata.related_skills || metadata.relatedSkills || metadata.related),
+    dependsOn: uniqueValues(metadata.depends_on || metadata.dependsOn),
+    provides: uniqueValues(metadata.provides),
+    requires: uniqueValues(metadata.requires),
+    suggestedFiles: uniqueValues(metadata.suggested_files || metadata.suggestedFiles)
   };
 }
 
@@ -627,6 +804,33 @@ function inferSkillMetadata(skill = {}) {
   return metadata;
 }
 
+function mergeSkillMetadata(...metadataList) {
+  const merged = {};
+  for (const metadata of metadataList) {
+    if (!metadata) continue;
+    if (!merged.id && metadata.id) merged.id = metadata.id;
+    if (!merged.name && metadata.name) merged.name = metadata.name;
+    for (const key of [
+      "intent",
+      "positivePrompts",
+      "files",
+      "dependencies",
+      "negativePrompts",
+      "negativeFiles",
+      "negativeDependencies",
+      "workflows",
+      "relatedSkills",
+      "dependsOn",
+      "provides",
+      "requires",
+      "suggestedFiles"
+    ]) {
+      merged[key] = uniqueValues([...(merged[key] || []), ...asArray(metadata[key])]);
+    }
+  }
+  return merged;
+}
+
 function hybridSkillScore(skill, { prompt, projectEvidence }) {
   const semanticScore = Math.min(1, Number(skill.embeddingScore || skill.score || 0));
   const metadata = skill.metadata || inferSkillMetadata(skill);
@@ -642,6 +846,7 @@ function hybridSkillScore(skill, { prompt, projectEvidence }) {
   const fileConfigScore = fileEvidence.score;
   const importGraphScore = 0;
   const sourceBoostScore = skillSourceBoostScore(skill);
+  const skillGraphScore = Math.max(0, Math.min(1, Number(skill.graphRelationshipScore || 0)));
   const externalGraphScore = 0;
   const memoryScore = 0;
   const hybridScore = Math.max(0, Math.min(1,
@@ -650,6 +855,7 @@ function hybridSkillScore(skill, { prompt, projectEvidence }) {
     + projectEvidenceScore * 0.25
     + fileConfigScore * 0.10
     + importGraphScore * 0.10
+    + skillGraphScore * 0.10
     + sourceBoostScore * 0.05
     + externalGraphScore * 0.03
     + memoryScore * 0.02
@@ -671,6 +877,7 @@ function hybridSkillScore(skill, { prompt, projectEvidence }) {
     ...promptMatch.matches.map((item) => `prompt:${item}`),
     ...dependencyEvidence.matches.map((item) => `dependency:${item}`),
     ...fileEvidence.matches.map((item) => `file:${item}`),
+    ...(skillGraphScore ? [`skill-graph:${skillGraphScore.toFixed(2)}`] : []),
     ...(sourceBoostScore ? [`source:${skillSourceLabel(skill)}`] : [])
   ])];
   const negativeEvidence = [
@@ -693,6 +900,7 @@ function hybridSkillScore(skill, { prompt, projectEvidence }) {
     projectEvidenceScore,
     fileConfigScore,
     importGraphScore,
+    skillGraphScore,
     sourceBoostScore,
     externalGraphScore,
     memoryScore,
@@ -943,8 +1151,17 @@ function metadataHasSignals(metadata = {}) {
     metadata.dependencies,
     metadata.negativePrompts,
     metadata.negativeFiles,
-    metadata.negativeDependencies
+    metadata.negativeDependencies,
+    metadata.intent,
+    metadata.relatedSkills,
+    metadata.dependsOn,
+    metadata.provides,
+    metadata.requires
   ].some((items) => Array.isArray(items) && items.length > 0);
+}
+
+function uniqueValues(value) {
+  return [...new Set(asArray(value).map(String).map((item) => item.trim()).filter(Boolean))];
 }
 
 function asArray(value) {
@@ -968,6 +1185,27 @@ function nextMeaningfulLine(lines, currentRawLine) {
     if (line.trim() && !line.trimStart().startsWith("#")) return line;
   }
   return null;
+}
+
+function stripFrontmatter(content = "") {
+  return String(content || "").replace(/^---\s*\r?\n[\s\S]*?\r?\n---\s*(?:\r?\n|$)/, "");
+}
+
+function skillGraphId(skill = {}) {
+  return String(skill.metadata?.id || skill.name || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_.:-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function addSkillGraphEdge(edges, seenEdges, from, to, type) {
+  const target = skillGraphId({ name: to });
+  if (!from || !target) return;
+  const key = `${from}\0${target}\0${type}`;
+  if (seenEdges.has(key)) return;
+  seenEdges.add(key);
+  edges.push({ from, to: target, type });
 }
 
 function normalizeFile(value) {

@@ -99,7 +99,7 @@ describe("hook contracts", () => {
     expect(JSON.parse(fs.readFileSync(dataPath, "utf8")).suggestedWorkflows).toHaveLength(1);
   });
 
-  it("requests and keeps the default five files and skills for prompt context", async () => {
+  it("requests auto candidate caps and adapts final files and skills for prompt context", async () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-hook-limits-"));
     const dataPath = path.join(tmp, ".data", "last-prompt-context.json");
     const seen = [];
@@ -123,11 +123,12 @@ describe("hook contracts", () => {
     );
     const runtime = JSON.parse(fs.readFileSync(dataPath, "utf8"));
 
-    expect(seen[0]).toMatchObject({ maxFiles: 5, maxSkills: 5, maxWorkflows: 5 });
-    expect(runtime.relevantFiles).toHaveLength(5);
+    expect(seen[0]).toMatchObject({ maxFiles: 15, maxSkills: 8, maxWorkflows: 3 });
+    expect(runtime.relevantFiles).toHaveLength(9);
     expect(runtime.suggestedSkills).toHaveLength(5);
-    expect(runtime.scheduled.additionalContext).toContain("## Suggested files to check, file-0.ts, file-1.ts");
-    expect(runtime.scheduled.additionalContext).toContain("## Suggested skills for this task: skill-0, skill-1");
+    expect(runtime.scheduled.additionalContext).toContain("## Suggested files to check (9 auto:");
+    expect(runtime.scheduled.additionalContext).toContain("file-0.ts");
+    expect(runtime.scheduled.additionalContext).toContain("## Suggested skills for this task (5 auto: confidence elbow): skill-0, skill-1");
   });
 
   it("uses configured prompt suggestion limits", async () => {
@@ -270,7 +271,8 @@ describe("hook contracts", () => {
 
     expect(output.continue).toBe(true);
     expect(output.hookSpecificOutput.additionalContext).toContain("forum-page.tsx");
-    expect(output.hookSpecificOutput.additionalContext).toContain("## Suggested skills for this task: realtime-chat");
+    expect(output.hookSpecificOutput.additionalContext).toContain("## Suggested skills for this task");
+    expect(output.hookSpecificOutput.additionalContext).toContain("realtime-chat");
     expect(output.hookSpecificOutput.additionalContext).not.toContain("$realtime-chat");
     expect(seenDirectPayloads[0]).toMatchObject({ allowEmbeddings: false });
     expect(runtime.relevantFiles).toHaveLength(1);

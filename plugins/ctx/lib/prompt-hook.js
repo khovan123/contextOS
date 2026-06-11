@@ -95,10 +95,17 @@ export async function handlePromptPayload(
 
   if (scored.error) throw new Error(scored.error);
   const scoredRules = scored.scoredRules || [];
-  const relevantFiles = (scored.suggestedFiles || []).slice(0, promptLimits.files);
-  const suggestedSkills = (scored.suggestedSkills || []).slice(0, promptLimits.skills);
-  const suggestedWorkflows = (scored.suggestedWorkflows || []).slice(0, promptLimits.workflows);
-  const scheduled = scheduleContext({ rules: scoredRules, relevantFiles, suggestedSkills, suggestedWorkflows, outputConfig: effectiveOutputConfig });
+  const scheduled = scheduleContext({
+    rules: scoredRules,
+    relevantFiles: scored.suggestedFiles || [],
+    suggestedSkills: scored.suggestedSkills || [],
+    suggestedWorkflows: scored.suggestedWorkflows || [],
+    prompt,
+    outputConfig: effectiveOutputConfig
+  });
+  const relevantFiles = scheduled.relevantFiles || [];
+  const suggestedSkills = scheduled.suggestedSkills || [];
+  const suggestedWorkflows = scheduled.suggestedWorkflows || [];
   const contextEmptyReason = emptyContextReason({ scheduled, outputConfig: effectiveOutputConfig, injectContext });
   const autoWarm = autoWarmWorkspace({
     cwd,

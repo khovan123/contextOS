@@ -13,15 +13,16 @@ describe("scheduler", () => {
       ],
       relevantFiles: [{ path: "src/auth/login.ts" }],
       suggestedSkills: [
-        { name: "zod-validator", description: "Use for validation tasks.", path: ".codex/skills/zod-validator/SKILL.md" },
-        { name: "zod-validator", description: "Duplicate catalog entry.", path: ".claude/skills/zod-validator/SKILL.md" }
+        { name: "zod-validator", description: "Use for validation tasks.", path: ".codex/skills/zod-validator/SKILL.md", confidence: 0.9 },
+        { name: "zod-validator", description: "Duplicate catalog entry.", path: ".claude/skills/zod-validator/SKILL.md", confidence: 0.8 }
       ],
       suggestedWorkflows: [{
         name: "primary-workflow",
         title: "Primary Workflow",
         hint: "use for feature implementation, testing, review, and debugging",
         chain: ["planner", "tester", "code-reviewer"],
-        relativePath: ".claude/workflows/primary-workflow.md"
+        relativePath: ".claude/workflows/primary-workflow.md",
+        score: 0.8
       }],
       outputConfig: defaultOutputConfig()
     });
@@ -34,9 +35,9 @@ describe("scheduler", () => {
     expect(scheduled.additionalContext.match(/Always use zod/g)).toHaveLength(1);
     // No absolute paths in rule output
     expect(scheduled.additionalContext).not.toContain("/repo/AGENTS.md");
-    expect(scheduled.additionalContext).toContain("## Suggested files to check, login.ts");
+    expect(scheduled.additionalContext).toContain("## Suggested files to check (1 auto:");
     expect(scheduled.additionalContext).not.toContain("src/auth/login.ts");
-    expect(scheduled.additionalContext).toContain("## Suggested skills for this task: zod-validator");
+    expect(scheduled.additionalContext).toContain("## Suggested skills for this task (2 auto: confidence elbow): zod-validator");
     expect(scheduled.additionalContext.match(/zod-validator/g)).toHaveLength(1);
     expect(scheduled.additionalContext).not.toContain("Use for validation tasks.");
     // No absolute paths in skill output
@@ -63,14 +64,14 @@ describe("scheduler", () => {
   it("only renders dollar-prefixed skills for explicit user-requested skills", () => {
     const scheduled = scheduleContext({
       suggestedSkills: [
-        { name: "chat-widget" },
-        { name: "realtime-chat", explicit: true },
-        { name: "$user-named-skill" }
+        { name: "chat-widget", confidence: 0.95 },
+        { name: "realtime-chat", explicit: true, confidence: 0.9 },
+        { name: "$user-named-skill", confidence: 0.8 }
       ],
       outputConfig: defaultOutputConfig()
     });
 
-    expect(scheduled.additionalContext).toBe("## Suggested skills for this task: chat-widget, $realtime-chat, $user-named-skill");
+    expect(scheduled.additionalContext).toBe("## Suggested skills for this task (3 auto: confidence elbow): chat-widget, $realtime-chat, $user-named-skill");
   });
 
   it("hides disabled prompt sections without dropping scheduled metadata", () => {
@@ -92,7 +93,7 @@ describe("scheduler", () => {
       }
     });
 
-    expect(scheduled.additionalContext).toBe("## Suggested files to check, input.ts");
+    expect(scheduled.additionalContext).toBe("## Suggested files to check (1 auto: feature task, 1 bucket), input.ts");
     expect(scheduled.highRules).toHaveLength(1);
     expect(scheduled.midRules).toHaveLength(1);
     expect(scheduled.suggestedSkills).toHaveLength(1);

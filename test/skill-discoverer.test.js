@@ -3,7 +3,19 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { diagnoseSkills, parseSkillFrontmatter, parseSkillMetadata, projectSkillHints, scanSkills, skillSearchRoots, suggestSkills } from "../plugins/ctx/lib/skill-discoverer.js";
+import {
+  buildSkillGraph,
+  diagnoseSkills,
+  expandSkillGraphSuggestions,
+  parseSkillFrontmatter,
+  parseSkillMarkdownAst,
+  parseSkillMetadata,
+  projectSkillHints,
+  scanSkills,
+  skillSchemaFromMarkdownAst,
+  skillSearchRoots,
+  suggestSkills
+} from "../plugins/ctx/lib/skill-discoverer.js";
 
 describe("skill discoverer", () => {
   it("parses SKILL.md YAML frontmatter", () => {
@@ -51,6 +63,8 @@ describe("skill discoverer", () => {
   it("parses skill.yaml trigger metadata", () => {
     expect(parseSkillMetadata([
       "id: eas",
+      "intent:",
+      "  - deployment",
       "positive_triggers:",
       "  prompts:",
       "    - deployed",
@@ -61,14 +75,81 @@ describe("skill discoverer", () => {
       "    - expo",
       "negative_triggers:",
       "  dependencies:",
-      "    - next"
+      "    - next",
+      "depends_on:",
+      "  - github-actions-ci-cd",
+      "provides:",
+      "  - mobile-deployment"
     ].join("\n"))).toMatchObject({
       id: "eas",
+      intent: ["deployment"],
       positivePrompts: ["deployed", "eas"],
       files: ["eas.json"],
       dependencies: ["expo"],
-      negativeDependencies: ["next"]
+      negativeDependencies: ["next"],
+      dependsOn: ["github-actions-ci-cd"],
+      provides: ["mobile-deployment"]
     });
+  });
+
+  it("normalizes markdown skill sections into router schema", () => {
+    const ast = parseSkillMarkdownAst([
+      "# OAuth Google",
+      "",
+      "## Triggers",
+      "- oauth",
+      "- google login",
+      "",
+      "## Evidence",
+      "- passport-google-oauth20",
+      "- auth.service.ts",
+      "",
+      "## Related Skills",
+      "- jwt-auth",
+      "",
+      "## Provides",
+      "- social-login"
+    ].join("\n"));
+    const schema = skillSchemaFromMarkdownAst(ast);
+
+    expect(schema).toMatchObject({
+      positivePrompts: ["oauth", "google login"],
+      dependencies: ["passport-google-oauth20"],
+      files: ["auth.service.ts"],
+      relatedSkills: ["jwt-auth"],
+      provides: ["social-login"]
+    });
+  });
+
+  it("builds and expands skill graph relationships from metadata", () => {
+    const oauth = {
+      name: "oauth-google",
+      description: "Google OAuth login.",
+      metadata: {
+        id: "oauth-google",
+        relatedSkills: ["jwt-auth"],
+        dependsOn: ["passport"]
+      }
+    };
+    const jwt = {
+      name: "jwt-auth",
+      description: "JWT auth.",
+      metadata: { id: "jwt-auth" }
+    };
+    const passport = {
+      name: "passport",
+      description: "Passport providers.",
+      metadata: { id: "passport" }
+    };
+
+    expect(buildSkillGraph([oauth, jwt, passport]).edges).toEqual(expect.arrayContaining([
+      { from: "oauth-google", to: "jwt-auth", type: "related_to" },
+      { from: "oauth-google", to: "passport", type: "depends_on" }
+    ]));
+    expect(expandSkillGraphSuggestions({ seeds: [oauth], catalog: [oauth, jwt, passport] }).map((skill) => skill.name)).toEqual([
+      "jwt-auth",
+      "passport"
+    ]);
   });
 
 

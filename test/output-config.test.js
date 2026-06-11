@@ -25,9 +25,9 @@ describe("output config", () => {
         workflows: true
       },
       limits: {
-        files: 5,
-        skills: 5,
-        workflows: 5
+        files: "auto",
+        skills: "auto",
+        workflows: "auto"
       }
     });
   });
@@ -61,14 +61,14 @@ describe("output config", () => {
     expect(saved.limits).toEqual({
       files: 12,
       skills: 6,
-      workflows: 5
+      workflows: "auto"
     });
     expect(loadOutputConfig({ dataRoot })).toEqual(saved);
     expect(fs.existsSync(outputConfigPath(dataRoot))).toBe(true);
     expect(logs).toEqual([
       `│  Saved ContextOS prompt section config: ${outputConfigPath(dataRoot)}`,
       "│  Enabled sections: files, workflows",
-      "│  Suggest limits: files: 12, skills: 6, workflows: 5"
+      "│  Suggest limits: files: 12, skills: 6, workflows: auto"
     ]);
   });
 
@@ -83,13 +83,13 @@ describe("output config", () => {
       workflows: true
     });
     expect(loadOutputConfig({ dataRoot }).limits).toEqual({
-      files: 5,
-      skills: 5,
-      workflows: 5
+      files: "auto",
+      skills: "auto",
+      workflows: "auto"
     });
   });
 
-  it("clamps configured suggest limits to section maximums", () => {
+  it("converts auto limits to retrieval caps and clamps manual limits", () => {
     const config = {
       sections: {},
       limits: {
@@ -105,6 +105,24 @@ describe("output config", () => {
       workflows: 5
     });
     expect(outputConfigLimitsLabel(config)).toBe("files: 20, skills: 10, workflows: 5");
+  });
+
+  it("loads nested output config with auto and manual limits", () => {
+    const config = {
+      output: {
+        files: { enabled: true, limit: "auto" },
+        skills: { enabled: false, limit: 7 },
+        workflows: { enabled: true, limit: "auto" }
+      }
+    };
+
+    expect(enabledOutputSections(config)).toEqual(["rules", "files", "workflows"]);
+    expect(outputConfigLimits(config)).toEqual({
+      files: 15,
+      skills: 7,
+      workflows: 3
+    });
+    expect(outputConfigLimitsLabel(config)).toBe("files: auto, skills: 7, workflows: auto");
   });
 
   it("summarizes enabled output sections", () => {
