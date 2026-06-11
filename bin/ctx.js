@@ -651,6 +651,7 @@ async function debug(task) {
   console.log(`rules: ${rules.length}`);
   console.log(`mcp scorer: ${scored.telemetry.modelStatus}${scored.telemetry.model ? ` (${scored.telemetry.model})` : ""}`);
   printRetrievalMode(retrievalMode(scored.telemetry || {}));
+  printRuleRetrievalDebug({ telemetry: scored.telemetry || {}, scheduled, outputConfig });
   console.log(`elapsed: ${scored.telemetry.elapsedMs}ms`);
   console.log("");
   for (const rule of rules.slice(0, 20)) {
@@ -686,6 +687,26 @@ async function debug(task) {
   console.log("");
   console.log("Final additionalContext:");
   console.log(scheduled.additionalContext || "(empty)");
+}
+
+function printRuleRetrievalDebug({ telemetry = {}, scheduled = {}, outputConfig = {} } = {}) {
+  const parsed = Number(telemetry.rulesParsed || 0);
+  const candidates = Array.isArray(scheduled.highRules) || Array.isArray(scheduled.midRules) || Array.isArray(scheduled.droppedRules)
+    ? (scheduled.highRules?.length || 0) + (scheduled.midRules?.length || 0) + (scheduled.droppedRules?.length || 0)
+    : Number(telemetry.rulesInjected || 0);
+  const selected = (scheduled.highRules?.length || 0) + (scheduled.midRules?.length || 0);
+  const disabledByConfig = outputConfig?.sections?.rules === false;
+  let emptyReason = null;
+  if (disabledByConfig) emptyReason = "rules_disabled";
+  else if (!parsed) emptyReason = "no_rule_candidates";
+  else if (!selected) emptyReason = "score_below_threshold";
+  console.log("Rule retrieval:");
+  console.log(`  enabled: ${!disabledByConfig}`);
+  console.log(`  parsed rules: ${parsed}`);
+  console.log(`  candidates: ${candidates}`);
+  console.log(`  selected: ${selected}`);
+  console.log(`  disabled_by_config: ${disabledByConfig}`);
+  console.log(`  empty_reason: ${emptyReason || "none"}`);
 }
 
 async function health() {

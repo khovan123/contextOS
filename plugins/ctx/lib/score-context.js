@@ -19,10 +19,12 @@ export async function scoreContext({
   embeddingTimeoutMs = 5000,
   fileEmbeddingTimeoutMs = Number(process.env.CONTEXTOS_FILE_EMBEDDING_TIMEOUT_MS || 1000),
   skillEmbeddingTimeoutMs = Number(process.env.CONTEXTOS_SKILL_EMBEDDING_TIMEOUT_MS || embeddingTimeoutMs),
+  sectionTimeoutMs = Number(process.env.CONTEXTOS_SECTION_TIMEOUT_MS || 0),
   skillSearchOptions = {},
   allowEmbeddings = true
 } = {}) {
   const started = Date.now();
+  const warnings = [];
   const ruleInputsPromise = Promise.resolve().then(() => {
     const merged = readAgentsChain({ cwd });
     const rawRules = parseRules(merged.content);
@@ -35,7 +37,7 @@ export async function scoreContext({
     };
   });
 
-  const rulesPromise = ruleInputsPromise.then(({ merged, baseScoredRules }) => {
+  const rulesPromise = withSectionTimeout(ruleInputsPromise.then(({ merged, baseScoredRules }) => {
     if (!allowEmbeddings) {
       return {
         rules: baseScoredRules,
@@ -50,9 +52,17 @@ export async function scoreContext({
       timeoutMs: embeddingTimeoutMs,
       allowRemote: false
     });
-  });
+  }), sectionTimeoutMs, "rules_timeout", async () => {
+    const { baseScoredRules } = await ruleInputsPromise;
+    return {
+      rules: baseScoredRules,
+      status: "rules_timeout",
+      model: null,
+      cachePath: dataDir
+    };
+  }, warnings);
 
-  const filesPromise = ruleInputsPromise.then(({ baseScoredRules }) => {
+  const filesPromise = withSectionTimeout(ruleInputsPromise.then(({ baseScoredRules }) => {
     return findRelevantFiles({
       cwd,
       task: prompt,
@@ -65,9 +75,9 @@ export async function scoreContext({
         allowRemote: false
       }
     });
-  });
+  }), sectionTimeoutMs, "files_timeout", () => [], warnings);
 
-  const skillsPromise = Promise.resolve().then(async () => {
+  const skillsPromise = withSectionTimeout(Promise.resolve().then(async () => {
     const catalog = Array.isArray(skills) ? skills : scanSkills({ cwd });
     return {
       catalog,
@@ -82,15 +92,21 @@ export async function scoreContext({
         ...skillSearchOptions
       })
     };
-  });
+  }), sectionTimeoutMs, "skills_timeout", () => ({
+    catalog: Array.isArray(skills) ? skills : [],
+    suggestions: []
+  }), warnings);
 
-  const workflowsPromise = Promise.resolve().then(async () => {
+  const workflowsPromise = withSectionTimeout(Promise.resolve().then(async () => {
     const catalog = Array.isArray(workflows) ? workflows : scanWorkflows({ cwd });
     return {
       catalog,
       suggestions: await suggestWorkflows({ prompt, workflows: catalog, dataDir, limit: maxWorkflows, embeddingsEnabled: allowEmbeddings })
     };
-  });
+  }), sectionTimeoutMs, "workflows_timeout", () => ({
+    catalog: Array.isArray(workflows) ? workflows : [],
+    suggestions: []
+  }), warnings);
 
   const [ruleInputs, embedding, suggestedFiles, skillResult, workflowResult] = await Promise.all([
     ruleInputsPromise,
@@ -126,7 +142,23 @@ export async function scoreContext({
       skillsSuggested: suggestedSkills.length,
       workflowsScanned: workflowCatalog.length,
       workflowsSuggested: suggestedWorkflows.length,
+      warnings,
+      partial: warnings.length > 0,
       sources: merged.sources.map((source) => path.relative(cwd, source))
     }
   };
+}
+
+function withSectionTimeout(promise, timeoutMs, warning, fallback, warnings) {
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return promise;
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((resolve) => {
+      timer = setTimeout(async () => {
+        warnings.push(warning);
+        resolve(typeof fallback === "function" ? await fallback() : fallback);
+      }, timeoutMs);
+    })
+  ]).finally(() => clearTimeout(timer));
 }

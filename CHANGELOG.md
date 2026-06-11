@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.11
+
+- **ctx-mcp concurrency hardening:** Added a bounded scoring queue, duplicate in-flight request coalescing, short-lived prompt result cache, queue/cache telemetry, and per-section scoring timeouts so multiple agent windows can share the hot `ctx-mcp` scorer without all hooks timing out.
+- **Explicit file priority:** File suggestions now hard-pin explicit prompt paths and filenames, expand module-local neighbors for `src/modules/<module>` layouts, boost controller/module files for HTTP route prompts, and include Prisma schema files when status/time fields are mentioned.
+- **Rule retrieval debugging:** `ctx debug` now prints rule retrieval state with parsed rule count, selected count, config-disabled status, and empty reason so rule visibility issues are easier to diagnose.
+
 ## 0.6.10
 
 - **Adaptive prompt budgets:** `ctx --config` now defaults files, skills, and workflows to `auto` instead of fixed counts. ContextOS uses task complexity, confidence drop-off, and file path diversity to keep small fixes compact while giving larger feature prompts more relevant files and skills. Manual fixed limits still work for advanced users.

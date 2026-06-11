@@ -287,6 +287,7 @@ export async function findRelevantFiles({
 
   const retrievalTask = expandFileRetrievalTask(task);
   const explicitFiles = findExplicitPromptFiles({ cwd, task, limit: Math.max(limit * 2, 6) });
+  const promptContextFiles = findPromptContextFiles({ cwd, task, explicitFiles, limit: Math.max(limit * 3, 9) });
   const manifestFiles = findProjectManifestFiles({ cwd, task, limit: Math.max(limit * 2, 6) });
   const embeddingFiles = await embeddingFileFinder({
     cwd,
@@ -306,11 +307,11 @@ export async function findRelevantFiles({
     : [];
   const importGraphFiles = expandImportGraph({
     cwd,
-    seedFiles: [...explicitFiles, ...manifestFiles, ...embeddingFiles, ...indexedTextFiles].slice(0, limit),
+    seedFiles: [...explicitFiles, ...promptContextFiles, ...manifestFiles, ...embeddingFiles, ...indexedTextFiles].slice(0, limit),
     dataDir,
     limit: Math.max(limit * 2, 6)
   });
-  const seedFiles = mergeLocalFileCandidates([...explicitFiles, ...manifestFiles, ...embeddingFiles, ...indexedTextFiles, ...importGraphFiles])
+  const seedFiles = mergeLocalFileCandidates([...explicitFiles, ...promptContextFiles, ...manifestFiles, ...embeddingFiles, ...indexedTextFiles, ...importGraphFiles])
     .slice(0, Math.max(limit * 3, 9));
 
   const graphFiles = findGraphRelevantFiles({
@@ -454,10 +455,91 @@ export function findExplicitPromptFiles({ cwd = process.cwd(), task = "", limit 
   }
   return [...candidates].map((filePath, index) => ({
     path: filePath,
-    score: 12 - index * 0.01,
+    score: 1000 - index * 0.01,
     source: "prompt-path",
-    reasons: ["prompt-path"]
+    reasons: ["explicit-path-mentioned"]
   }));
+}
+
+export function findPromptContextFiles({ cwd = process.cwd(), task = "", explicitFiles = [], limit = 9 } = {}) {
+  const files = [];
+  files.push(...findPromptBasenameFiles({ cwd, task, limit }));
+  files.push(...findModuleNeighborFiles({ cwd, task, seeds: [...explicitFiles, ...files], limit }));
+  files.push(...findSchemaHintFiles({ cwd, task }));
+  return mergeLocalFileCandidates(files).slice(0, limit);
+}
+
+function findPromptBasenameFiles({ cwd, task, limit }) {
+  const basenames = extractPromptBasenames(task);
+  if (!basenames.length) return [];
+  const files = [];
+  for (const basename of basenames) {
+    for (const filePath of findFilesByBasename({ cwd, basename, limit: Math.max(limit, 12) })) {
+      files.push({
+        path: filePath,
+        score: routeControllerScore(filePath, task) + 900,
+        source: "prompt-filename",
+        reasons: ["explicit-filename-mentioned"]
+      });
+      if (files.length >= limit) return files;
+    }
+  }
+  return files;
+}
+
+function findModuleNeighborFiles({ cwd, task, seeds = [], limit }) {
+  const moduleRoots = [...new Set(seeds.map((file) => moduleRootFromPath(file.path)).filter(Boolean))];
+  const files = [];
+  for (const moduleRoot of moduleRoots) {
+    const absoluteRoot = path.join(cwd, moduleRoot);
+    for (const filePath of findModuleFiles({ cwd, root: absoluteRoot, task, limit: Math.max(limit, 12) })) {
+      files.push({
+        path: filePath,
+        score: moduleNeighborScore(filePath, task),
+        source: "module-neighbor",
+        reasons: ["same-module"]
+      });
+      if (files.length >= limit) return files;
+    }
+  }
+  return files;
+}
+
+function findSchemaHintFiles({ cwd, task }) {
+  if (!/\b(status|startTime|endTime|proposedStartTime|proposedEndTime|schema|prisma|enum)\b/i.test(task)) return [];
+  const files = [];
+  for (const schemaPath of ["prisma/schema.prisma", "schema.prisma"]) {
+    const absolute = path.join(cwd, schemaPath);
+    if (isSourceFile(absolute)) {
+      files.push({
+        path: schemaPath,
+        score: 820,
+        source: "schema-hint",
+        reasons: ["status-time-fields-mentioned"]
+      });
+    }
+  }
+  for (const packagePath of workspacePackagePaths(cwd).slice(1)) {
+    const packageDir = path.dirname(packagePath);
+    const absolute = path.join(packageDir, "prisma", "schema.prisma");
+    if (isSourceFile(absolute)) {
+      files.push({
+        path: path.relative(cwd, absolute),
+        score: 820,
+        source: "schema-hint",
+        reasons: ["status-time-fields-mentioned"]
+      });
+    }
+  }
+  for (const filePath of findFilesByBasename({ cwd, basename: "schema.prisma", limit: 6 })) {
+    files.push({
+      path: filePath,
+      score: 820,
+      source: "schema-hint",
+      reasons: ["status-time-fields-mentioned"]
+    });
+  }
+  return files;
 }
 
 function cleanPromptFilePath(value) {
@@ -495,6 +577,130 @@ function resolvePromptPathCandidates({ cwd, promptPath }) {
     }
   }
   return resolved;
+}
+
+function extractPromptBasenames(task = "") {
+  const matches = String(task || "").match(/\b[A-Za-z0-9_.-]+\.(?:tsx?|jsx?|mjs|cjs|json|md|sql|py|prisma)\b/g) || [];
+  return [...new Set(matches.map((match) => path.basename(cleanPromptFilePath(match))))];
+}
+
+function findFilesByBasename({ cwd, basename, limit }) {
+  const results = [];
+  boundedWalk(cwd, {
+    maxDepth: 9,
+    maxEntries: 6000,
+    onFile: (filePath) => {
+      if (path.basename(filePath) !== basename) return;
+      results.push(path.relative(cwd, filePath));
+      return results.length >= limit;
+    }
+  });
+  return results.sort((a, b) => filePathPriority(b) - filePathPriority(a) || a.localeCompare(b)).slice(0, limit);
+}
+
+function moduleRootFromPath(filePath = "") {
+  const normalized = String(filePath || "").replace(/\\/g, "/");
+  const match = normalized.match(/^(.*?src\/modules\/[^/]+)/);
+  if (match) return match[1];
+  const nestMatch = normalized.match(/^(.*?modules\/[^/]+)/);
+  return nestMatch?.[1] || null;
+}
+
+function findModuleFiles({ cwd, root, task, limit }) {
+  const results = [];
+  boundedWalk(root, {
+    maxDepth: 8,
+    maxEntries: 1000,
+    onFile: (filePath) => {
+      const relative = path.relative(cwd, filePath);
+      if (!isRelevantModuleNeighbor(relative, task)) return;
+      results.push(relative);
+      return results.length >= limit;
+    }
+  });
+  return results.sort((a, b) => moduleNeighborScore(b, task) - moduleNeighborScore(a, task) || a.localeCompare(b)).slice(0, limit);
+}
+
+function isRelevantModuleNeighbor(filePath, task) {
+  const value = String(filePath || "").toLowerCase();
+  if (/\.(spec|test)\./.test(value)) return true;
+  if (/(controller|service|module|repository|resolver|handler|guard|dto|schema|mapper|presenter)\.(tsx?|jsx?)$/.test(value)) return true;
+  if (/\/dto\/.*\.(tsx?|jsx?)$/.test(value)) return true;
+  if (promptHasHttpRoute(task) && /\.(controller|module)\.(tsx?|jsx?)$/.test(value)) return true;
+  return false;
+}
+
+function moduleNeighborScore(filePath, task) {
+  const value = String(filePath || "").toLowerCase();
+  let score = 580;
+  if (/\.controller\.(tsx?|jsx?)$/.test(value)) score += 80;
+  if (/\.service\.(tsx?|jsx?)$/.test(value)) score += 70;
+  if (/\.module\.(tsx?|jsx?)$/.test(value)) score += 60;
+  if (/\/dto\/|\.dto\./.test(value)) score += 45;
+  if (/\.repository\./.test(value)) score += 35;
+  if (/\.spec\.|\.test\./.test(value)) score += 20;
+  score += routeControllerScore(filePath, task);
+  return score;
+}
+
+function routeControllerScore(filePath, task) {
+  const value = String(filePath || "").toLowerCase();
+  let score = 0;
+  if (promptHasHttpRoute(task) && /\.controller\.(tsx?|jsx?)$/.test(value)) score += 120;
+  if (promptHasHttpRoute(task) && /\.module\.(tsx?|jsx?)$/.test(value)) score += 40;
+  return score;
+}
+
+function promptHasHttpRoute(task = "") {
+  return /\b(GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD)\s+\/[^\s`'")]+/i.test(task);
+}
+
+function filePathPriority(filePath = "") {
+  const value = String(filePath || "").toLowerCase();
+  let priority = 0;
+  if (/\/src\//.test(value)) priority += 20;
+  if (/\/modules\//.test(value)) priority += 20;
+  if (/\.controller\./.test(value)) priority += 15;
+  if (/\.service\./.test(value)) priority += 10;
+  if (/\.module\./.test(value)) priority += 8;
+  if (/\/node_modules\/|\/dist\/|\/build\/|\/coverage\/|\/\.next\//.test(value)) priority -= 100;
+  return priority;
+}
+
+function boundedWalk(directory, { maxDepth, maxEntries, onFile }, depth = 0, state = { entries: 0, done: false }) {
+  if (state.done || depth > maxDepth || state.entries >= maxEntries) return;
+  let entries = [];
+  try {
+    entries = fs.readdirSync(directory, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    if (state.done || state.entries >= maxEntries) return;
+    if (shouldSkipSearchEntry(entry.name)) continue;
+    const fullPath = path.join(directory, entry.name);
+    state.entries += 1;
+    if (entry.isDirectory()) {
+      boundedWalk(fullPath, { maxDepth, maxEntries, onFile }, depth + 1, state);
+    } else if (entry.isFile()) {
+      state.done = Boolean(onFile(fullPath));
+    }
+  }
+}
+
+function shouldSkipSearchEntry(name) {
+  return new Set([
+    ".git",
+    "node_modules",
+    "dist",
+    "build",
+    "coverage",
+    ".next",
+    ".turbo",
+    ".cache",
+    ".code-review-graph",
+    ".contextos"
+  ]).has(name);
 }
 
 function isInsidePath(filePath, parentPath) {

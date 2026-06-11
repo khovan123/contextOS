@@ -257,6 +257,53 @@ Plain paragraph with enough content to become a standalone rule.
     ]);
   });
 
+  it("pins explicit controller paths and expands booking module neighbors", async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-booking-endpoint-files-"));
+    const bookingRoot = path.join(tmp, "edura-api", "src", "modules", "booking");
+    fs.mkdirSync(path.join(bookingRoot, "presentation", "controllers"), { recursive: true });
+    fs.mkdirSync(path.join(bookingRoot, "application", "services"), { recursive: true });
+    fs.mkdirSync(path.join(bookingRoot, "presentation", "dto"), { recursive: true });
+    fs.mkdirSync(path.join(tmp, "edura-api", "src", "modules", "grade", "presentation", "controllers"), { recursive: true });
+    fs.mkdirSync(path.join(tmp, "edura-api", "prisma"), { recursive: true });
+    fs.writeFileSync(path.join(bookingRoot, "presentation", "controllers", "booking.controller.ts"), "");
+    fs.writeFileSync(path.join(bookingRoot, "application", "services", "booking.service.ts"), "");
+    fs.writeFileSync(path.join(bookingRoot, "booking.module.ts"), "");
+    fs.writeFileSync(path.join(bookingRoot, "presentation", "dto", "reschedule-approve.dto.ts"), "");
+    fs.writeFileSync(path.join(tmp, "edura-api", "src", "modules", "grade", "presentation", "controllers", "grade.controller.ts"), "");
+    fs.writeFileSync(path.join(tmp, "edura-api", "prisma", "schema.prisma"), "");
+
+    const task = [
+      "Implement PATCH /api/sessions/:sessionId/reschedule/approve in",
+      "edura-api/src/modules/booking/presentation/controllers/booking.controller.ts",
+      "Set proposedStartTime => startTime, proposedEndTime => endTime, status SCHEDULED."
+    ].join(" ");
+    const files = await findRelevantFiles({
+      cwd: tmp,
+      task,
+      limit: 5,
+      embeddingFileFinder: async () => [
+        {
+          path: path.join("edura-api", "src", "modules", "grade", "presentation", "controllers", "grade.controller.ts"),
+          score: 90,
+          source: "embedding",
+          reasons: ["file-embedding:0.99"]
+        }
+      ]
+    });
+
+    expect(files[0]).toMatchObject({
+      path: path.join("edura-api", "src", "modules", "booking", "presentation", "controllers", "booking.controller.ts")
+    });
+    expect(files[0].reasons).toContain("explicit-path-mentioned");
+    expect(files.map((file) => file.path)).toEqual(expect.arrayContaining([
+      path.join("edura-api", "src", "modules", "booking", "application", "services", "booking.service.ts"),
+      path.join("edura-api", "src", "modules", "booking", "booking.module.ts"),
+      path.join("edura-api", "prisma", "schema.prisma")
+    ]));
+    const gradeIndex = files.findIndex((file) => file.path.endsWith("grade.controller.ts"));
+    expect(gradeIndex === -1 || files.findIndex((file) => file.path.endsWith("booking.controller.ts")) < gradeIndex).toBe(true);
+  });
+
   it("suggests package manifests for monorepo run and connect prompts", async () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-manifest-files-"));
     fs.mkdirSync(path.join(tmp, "webapp"), { recursive: true });

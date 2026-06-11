@@ -714,6 +714,17 @@ If a prompt has no usable context candidates, the hook fails open without emitti
 
 If hooks fall back because `ctx-mcp` is unavailable or not hot yet, ContextOS still uses indexed text matches for files and lightweight evidence scoring for skills. It does not cold-load embeddings inside the prompt hook. Run `ctx debug -- "task"` to inspect retrieval mode, including bridge status, embedding status, file fallback, and skill fallback.
 
+`ctx-mcp` is a shared hot scorer for multiple agent windows. Bridge scoring uses a bounded queue, coalesces duplicate in-flight requests for the same repo/prompt/git head, and keeps a short-lived in-memory result cache so simultaneous context windows do not all run full scoring. Slow sections degrade independently: a file/skill/workflow timeout returns partial context with telemetry warnings instead of forcing the entire hook into fallback. Useful knobs:
+
+```bash
+CONTEXTOS_SCORE_CONCURRENCY=1
+CONTEXTOS_SCORE_CACHE_TTL_MS=60000
+CONTEXTOS_SCORE_REQUEST_TIMEOUT_MS=2500
+CONTEXTOS_SECTION_TIMEOUT_MS=800
+CONTEXTOS_MCP_BRIDGE_TIMEOUT_MS=5000
+CONTEXTOS_MCP_CONNECT_TIMEOUT_MS=500
+```
+
 Use `ctx --config` to choose which prompt sections ContextOS injects and how many suggestions each section may show. Interactive `ctx setup` includes the same section picker and limit prompts, while `ctx setup --yes` keeps the current saved config for automation. The panel supports multiple selection with `Space` and persists the global choice in `~/.ctx/contextos/output-config.json`. Defaults use adaptive `auto` budgets: up to 15 files, 8 skills, and 3 workflows, with confidence drop-off and task complexity deciding the final count. Advanced users can still set fixed counts; hard caps are 20 files, 10 skills, and 5 workflows. Disabling rules hides both critical and additional relevant rule sections; compliance metadata remains available for reports.
 
 Adaptive budgets keep small fixes compact and give larger feature prompts more context. Files are selected by task complexity plus path diversity, so a feature task can include route, component, service, test, and config candidates instead of five files from the same folder. Skills and workflows use confidence drop-off, so ContextOS may show only two strong skills or seven relevant skills instead of filling a fixed quota.

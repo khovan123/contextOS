@@ -8,7 +8,7 @@ import { scheduleContext } from "../lib/scheduler.js";
 
 const CTX_BIN = fileURLToPath(new URL("../../../bin/ctx.js", import.meta.url));
 
-export function createContextOSMcpServer({ dataDir, getHealth = defaultHealth, runCommand = runCliCommand } = {}) {
+export function createContextOSMcpServer({ dataDir, getHealth = defaultHealth, runCommand = runCliCommand, scoreContextRunner = scoreContext } = {}) {
   const server = new McpServer({
     name: "ctx-mcp",
     version: "0.1.0"
@@ -24,7 +24,14 @@ export function createContextOSMcpServer({ dataDir, getHealth = defaultHealth, r
       bridge_ready: z.boolean(),
       preload_status: z.string().optional(),
       loaded_at: z.number().optional(),
-      error: z.string().optional()
+      error: z.string().optional(),
+      score_queue_depth: z.number().optional(),
+      score_active: z.number().optional(),
+      score_cache_entries: z.number().optional(),
+      score_inflight: z.number().optional(),
+      score_concurrency: z.number().optional(),
+      score_cache_ttl_ms: z.number().optional(),
+      score_request_timeout_ms: z.number().optional()
     }
   }, async () => {
     const health = getHealth();
@@ -65,7 +72,7 @@ export function createContextOSMcpServer({ dataDir, getHealth = defaultHealth, r
       telemetry: z.record(z.string(), z.any())
     }
   }, async (args) => {
-    const result = await scoreContext({
+    const result = await scoreContextRunner({
       cwd: args.cwd || process.cwd(),
       prompt: args.prompt || "",
       openFiles: args.openFiles || [],

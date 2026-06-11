@@ -110,4 +110,40 @@ describe("score context", () => {
     expect(result.telemetry.workflowsScanned).toBeGreaterThanOrEqual(1);
     expect(result.telemetry.workflowsSuggested).toBeGreaterThanOrEqual(1);
   });
+
+  it("returns partial context when a section times out", async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-score-partial-"));
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "ctx-score-partial-data-"));
+    fs.writeFileSync(path.join(tmp, "AGENTS.md"), "- Always keep prompt hooks responsive.\n");
+    const skillDir = path.join(tmp, ".codex", "skills", "slow-skill");
+    fs.mkdirSync(skillDir, { recursive: true });
+    fs.writeFileSync(path.join(skillDir, "SKILL.md"), [
+      "---",
+      "name: slow-skill",
+      "description: Use for slow skill scoring.",
+      "---"
+    ].join("\n"));
+
+    const result = await scoreContext({
+      cwd: tmp,
+      prompt: "slow skill scoring",
+      dataDir,
+      skills: scanSkills({ cwd: tmp, roots: [path.join(tmp, ".codex", "skills")] }),
+      workflows: [],
+      embeddingTimeoutMs: 1,
+      fileEmbeddingTimeoutMs: 1,
+      sectionTimeoutMs: 10,
+      skillSearchOptions: {
+        indexedSearcher: async () => {
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          return { status: "enabled", items: [] };
+        }
+      }
+    });
+
+    expect(result.scoredRules).toHaveLength(1);
+    expect(result.suggestedSkills).toEqual([]);
+    expect(result.telemetry.partial).toBe(true);
+    expect(result.telemetry.warnings).toContain("skills_timeout");
+  });
 });
